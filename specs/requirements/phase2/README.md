@@ -20,9 +20,9 @@
 
 | Sprint | 主题 | 涉及模块 | 文档 |
 |--------|------|---------|------|
-| Sprint 4 | 语义搜索与上下文增强 | 模块7（语义搜索）、模块4（上下文 v2） | [`sprint4-semantic-search.md`](sprint4-semantic-search.md) |
+| Sprint 4 | 语义搜索与上下文增强 | 模块7（语义搜索）、模块4（上下文 v2）、模块15（精选记忆） | [`sprint4-semantic-search.md`](sprint4-semantic-search.md) |
 | Sprint 5 | 通知、评论、审核 | 模块8、模块9、模块3（审核） | [`sprint5-collaboration.md`](sprint5-collaboration.md) |
-| Sprint 6 | 任务管理与日报 | 模块10（基础版）、模块12（完整版） | [`sprint6-task-management.md`](sprint6-task-management.md) |
+| Sprint 6 | 任务管理与日报 | 模块10（基础版）、模块12（完整版）、模块15（归档与决策） | [`sprint6-task-management.md`](sprint6-task-management.md) |
 
 ## 前置依赖
 

@@ -22,7 +22,7 @@
 |--------|------|---------|------|
 | Sprint 1 | 编辑器与文件系统 | 模块1、模块2、模块14（基础） | [`sprint1-editor-filesystem.md`](sprint1-editor-filesystem.md) |
 | Sprint 2 | Git 抽象层与同步 | 模块3、模块12（基础） | [`sprint2-git-sync.md`](sprint2-git-sync.md) |
-| Sprint 3 | AI 系统 MVP | 模块4、模块5、模块6、模块7 | [`sprint3-ai-mvp.md`](sprint3-ai-mvp.md) |
+| Sprint 3 | AI 系统 MVP | 模块4、模块5、模块6、模块7、模块15（基础） | [`sprint3-ai-mvp.md`](sprint3-ai-mvp.md) |
 
 ## 前置依赖
 

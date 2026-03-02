@@ -12,6 +12,7 @@
 - 模块5：Skill 系统（v1）
 - 模块6：Spec 工作流
 - 模块7：搜索系统（本地全文搜索）
+- 模块15：记忆系统（基础架构）
 
 ### 1.3 里程碑定义
 
@@ -507,6 +508,65 @@ P1 - 应该完成
 
 ---
 
+### 需求 2.8 - 记忆系统基础架构
+
+**用户故事：** 作为系统，我需要记录用户与 AI 的交互历史，以便 AI 能够学习和演化。
+
+#### 功能描述
+
+实现记忆系统的基础架构，包括日志记录、MEMORY.md 读写和文件锁机制。参考 [`memory-system-design.md`](../../design/memory-system-design.md)。
+
+#### 验收标准
+
+1. When user interacts with AI, the system shall append log entry to `.sibylla/memory/daily/YYYY-MM-DD.md`
+2. When log entry is written, the system shall use append-only mode to prevent modification
+3. When workspace is opened, the system shall load `MEMORY.md` into AI context
+4. When MEMORY.md is updated, the system shall use file lock to prevent concurrent write conflicts
+5. When multiple processes write logs, the system shall ensure data integrity
+6. When AI modifies file, the system shall log file operation with change summary
+7. When error occurs during AI interaction, the system shall log error type and context
+
+#### 技术规格
+
+```typescript
+// src/main/services/memory-manager.ts
+export class MemoryManager {
+  async appendLog(entry: LogEntry): Promise<void>
+  async getMemory(): Promise<Memory>
+  async updateMemory(updates: MemoryUpdate[]): Promise<void>
+}
+
+// src/main/services/file-lock.ts
+export class FileLock {
+  async acquireExclusive(path: string, timeout: number): Promise<LockHandle>
+  async release(handle: LockHandle): Promise<void>
+}
+```
+
+#### 优先级
+
+P0 - 必须完成
+
+---
+
+### 需求 2.9 - AI 交互日志自动记录
+
+**用户故事：** 作为用户，我希望系统自动记录我与 AI 的交互，无需手动操作。
+
+#### 验收标准
+
+1. When user sends message to AI, the system shall automatically log user input summary
+2. When AI responds, the system shall log response summary and referenced files
+3. When command is executed via AI, the system shall log command and result
+4. When log is written, the system shall not block user interaction (async)
+5. When daily log file is queried, the system shall return structured log entries
+
+#### 优先级
+
+P0 - 必须完成
+
+---
+
 ## 三、非功能需求
 
 ### 3.1 性能要求
@@ -557,6 +617,10 @@ P1 - 应该完成
 - [ ] Skill 系统可用
 - [ ] Spec 文件自动加载
 - [ ] 本地搜索可用
+- [ ] 记忆系统基础架构可用
+- [ ] AI 交互日志自动记录
+- [ ] MEMORY.md 读写正常
+- [ ] 文件锁机制工作正常
 - [ ] 性能指标达标
 
 ---

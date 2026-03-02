@@ -21,7 +21,7 @@
 
 | Sprint | 主题 | 涉及模块 | 文档 |
 |--------|------|---------|------|
-| Sprint 7 | AI 项目管理完整版 | 模块10（完整版） | [`sprint7-ai-pm-full.md`](sprint7-ai-pm-full.md) |
+| Sprint 7 | AI 项目管理完整版 | 模块10（完整版）、模块15（自愈与可视化） | [`sprint7-ai-pm-full.md`](sprint7-ai-pm-full.md) |
 | Sprint 8 | 积分系统 | 模块11 | [`sprint8-points-system.md`](sprint8-points-system.md) |
 | Sprint 9 | MCP 与导入增强 | 模块13、模块14（增强版） | [`sprint9-mcp-import.md`](sprint9-mcp-import.md) |
 
