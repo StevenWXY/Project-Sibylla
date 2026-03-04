@@ -6,27 +6,52 @@ export default defineConfig({
   build: {
     outDir: path.join(__dirname, 'dist/main'),
     emptyOutDir: true,
+    
+    // Library mode
     lib: {
       entry: path.join(__dirname, 'src/main/index.ts'),
       formats: ['cjs'],
       fileName: () => 'index.js'
     },
+    
+    // Rollup options
     rollupOptions: {
       external: [
+        // Node.js built-in modules
         'electron',
         'path',
         'fs',
+        'fs/promises',
         'os',
         'crypto',
         'events',
         'stream',
         'util',
-        'buffer'
+        'buffer',
+        'child_process',
+        'net',
+        'http',
+        'https',
+        'url',
+        'querystring',
+        
+        // Native modules (to be added in future phases)
+        // 'better-sqlite3',
+        // 'isomorphic-git'
       ]
     },
-    target: 'node18', // 匹配 Electron 28 的 Node.js 版本
-    minify: process.env.NODE_ENV === 'production'
+    
+    // Target environment
+    target: 'node18', // Match Electron 28 Node.js version
+    
+    // Compression configuration
+    minify: process.env.NODE_ENV === 'production',
+    
+    // Environment-specific sourcemap
+    sourcemap: process.env.NODE_ENV === 'development'
   },
+  
+  // Path aliases
   resolve: {
     alias: {
       '@main': path.join(__dirname, 'src/main'),
