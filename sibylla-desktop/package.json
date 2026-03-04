@@ -7,7 +7,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev": "npm run build:main && npm run build:preload && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && sleep 1 && cross-env NODE_ENV=development npx electron .",
     "build": "npm run build:renderer && npm run build:main && npm run build:preload",

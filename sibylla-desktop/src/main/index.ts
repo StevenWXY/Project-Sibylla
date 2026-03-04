@@ -1,29 +1,67 @@
 import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './window'
+import { registerAllIPCHandlers, cleanupIPCHandlers } from './ipc'
 
-// 保持对主窗口的引用，防止被垃圾回收
+// Keep reference to main window to prevent garbage collection
 let mainWindow: BrowserWindow | null = null
 
-// 应用准备就绪
-app.whenReady().then(() => {
-  mainWindow = createMainWindow()
-  
-  // 监听窗口关闭事件
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
+// Enable single instance lock to prevent multiple app instances
+const gotTheLock = app.requestSingleInstanceLock()
 
-  // macOS 特性：点击 Dock 图标时重新创建窗口
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = createMainWindow()
+if (!gotTheLock) {
+  // Another instance is already running, quit this one
+  app.quit()
+} else {
+  // Handle second instance attempt
+  app.on('second-instance', () => {
+    // Focus the existing window when user tries to open another instance
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore()
+      }
+      mainWindow.focus()
     }
   })
-})
 
-// 所有窗口关闭时退出应用（macOS 除外）
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
+  // Initialize app when ready
+  app.whenReady().then(() => {
+    try {
+      // Register IPC handlers before creating window
+      registerAllIPCHandlers()
+      
+      // Create main window
+      mainWindow = createMainWindow()
+      
+      // Handle window closed event
+      mainWindow.on('closed', () => {
+        mainWindow = null
+      })
+
+      // macOS: Re-create window when dock icon is clicked
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          mainWindow = createMainWindow()
+        }
+      })
+      
+      console.log('[Main] Application started successfully')
+    } catch (error) {
+      console.error('[Main] Failed to start application:', error)
+      app.quit()
+    }
+  })
+
+  // Quit when all windows are closed (except on macOS)
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit()
+    }
+  })
+
+  // Handle app quit
+  app.on('will-quit', () => {
+    console.log('[Main] Application is quitting')
+    // Cleanup IPC handlers
+    cleanupIPCHandlers()
+  })
+}
