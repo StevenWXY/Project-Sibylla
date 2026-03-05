@@ -1,0 +1,56 @@
+{
+  "name": "sibylla-cloud",
+  "version": "0.0.1",
+  "description": "Sibylla Cloud Service - Backend API for team knowledge collaboration",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up --build",
+    "docker:build": "docker build -t sibylla-cloud -f docker/Dockerfile .",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "migrate:up": "node-pg-migrate up -m migrations",
+    "migrate:down": "node-pg-migrate down -m migrations",
+    "migrate:create": "node-pg-migrate create --migration-file-language sql -m migrations",
+    "db:seed": "tsx seeds/dev.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/jwt": "^8.0.1",
+    "@node-rs/argon2": "^2.0.2",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.26.2",
+    "nanoid": "^5.1.6",
+    "node-pg-migrate": "^8.0.4",
+    "pino": "^8.19.0",
+    "pino-pretty": "^10.3.1",
+    "postgres": "^3.4.8",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.25",
+    "@typescript-eslint/eslint-plugin": "^7.1.1",
+    "@typescript-eslint/parser": "^7.1.1",
+    "@vitest/coverage-v8": "^1.3.1",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "prettier": "^3.2.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.2",
+    "vitest": "^1.3.1"
+  }
+}

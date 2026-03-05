@@ -1,0 +1,22 @@
+# Sibylla Cloud Service - Development Dockerfile
+# Uses tsx for hot reloading
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE 3000
+
+# Set environment
+ENV NODE_ENV=development
+
+# Start with hot reloading
+CMD ["npm", "run", "dev"]

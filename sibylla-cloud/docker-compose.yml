@@ -1,0 +1,156 @@
+# Sibylla Cloud Service - Docker Compose Configuration
+# Production-ready setup with all services
+
+version: '3.8'
+
+services:
+  # ============================================
+  # API Service
+  # ============================================
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: sibylla-api
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - LOG_LEVEL=info
+      - DATABASE_URL=postgresql://sibylla:sibylla@postgres:5432/sibylla
+      - REDIS_URL=redis://redis:6379
+      - CORS_ORIGIN=*
+      - GITEA_URL=http://gitea:3001
+      - GITEA_ADMIN_TOKEN=${GITEA_ADMIN_TOKEN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      gitea:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sibylla-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================
+  # PostgreSQL with pgvector
+  # ============================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sibylla-postgres
+    environment:
+      POSTGRES_USER: sibylla
+      POSTGRES_PASSWORD: sibylla
+      POSTGRES_DB: sibylla
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sibylla -d sibylla"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - sibylla-network
+
+  # ============================================
+  # Redis
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: sibylla-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - sibylla-network
+
+  # ============================================
+  # Gitea - Git Hosting Service
+  # ============================================
+  gitea:
+    image: gitea/gitea:1.21
+    container_name: sibylla-gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      # Database configuration
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=sibylla
+      - GITEA__database__PASSWD=sibylla
+      # Server configuration
+      - GITEA__server__ROOT_URL=${GITEA_ROOT_URL:-http://localhost:3001/}
+      - GITEA__server__HTTP_PORT=3001
+      - GITEA__server__DISABLE_SSH=true
+      - GITEA__server__LFS_START_SERVER=false
+      # Security
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__security__SECRET_KEY=${GITEA_SECRET_KEY:-sibylla-gitea-secret-key}
+      # Service settings
+      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__service__REQUIRE_SIGNIN_VIEW=true
+      - GITEA__service__DEFAULT_ORG_VISIBILITY=private
+      # API settings
+      - GITEA__api__ENABLE_SWAGGER=false
+      # Admin user (created on first startup)
+      - GITEA__admin__ADMIN_NAME=${GITEA_ADMIN_USERNAME:-sibylla-admin}
+      - GITEA__admin__ADMIN_PASSWORD=${GITEA_ADMIN_PASSWORD:-sibylla-admin-password}
+      - GITEA__admin__ADMIN_EMAIL=admin@sibylla.local
+    volumes:
+      - gitea_data:/data
+      - gitea_config:/etc/gitea
+    ports:
+      - "${GITEA_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - sibylla-network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  gitea_data:
+    driver: local
+  gitea_config:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  sibylla-network:
+    driver: bridge
