@@ -49,7 +49,7 @@ npm install
 cp .env.example .env
 
 # 2. 启动数据库服务
-docker-compose up postgres redis -d
+docker compose up postgres redis -d
 
 # 3. 运行数据库迁移
 npm run migrate:up
@@ -96,6 +96,8 @@ curl http://localhost:3000/api/v1/health
 | `npm run test` | 运行测试 |
 | `npm run test:watch` | 监听模式运行测试 |
 | `npm run test:coverage` | 运行测试并生成覆盖率报告 |
+| `npm run test:prepare` | 启动依赖并执行迁移 |
+| `npm run test:full` | 一键准备环境并执行测试 |
 | `npm run docker:dev` | Docker Compose 开发环境 |
 | `npm run docker:build` | 构建 Docker 镜像 |
 | `npm run docker:up` | 启动生产环境容器 |
@@ -275,7 +277,7 @@ npm run docker:build
 npm run docker:up
 
 # 查看日志
-docker-compose logs -f api
+docker compose logs -f api
 
 # 停止服务
 npm run docker:down
@@ -348,6 +350,12 @@ npm run migrate:create -- my_migration_name
 
 # 填充开发测试数据
 npm run db:seed
+```
+
+测试环境可直接使用 `.env.test.example`：
+
+```bash
+cp .env.test.example .env
 ```
 
 ### 测试账号（开发环境）
