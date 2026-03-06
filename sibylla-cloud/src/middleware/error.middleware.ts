@@ -6,6 +6,28 @@ import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify'
 import { logger } from '../utils/logger.js'
 import type { ApiError } from '../types/index.js'
 
+type RequestHeaderValue = string | string[] | undefined
+type SafeHeaders = Record<string, RequestHeaderValue>
+
+const SENSITIVE_HEADERS = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'proxy-authorization',
+])
+
+export function sanitizeHeaders(
+  headers: Record<string, RequestHeaderValue>
+): SafeHeaders {
+  const sanitized: SafeHeaders = {}
+  for (const [key, value] of Object.entries(headers)) {
+    const normalizedKey = key.toLowerCase()
+    sanitized[key] = SENSITIVE_HEADERS.has(normalizedKey) ? '[REDACTED]' : value
+  }
+  return sanitized
+}
+
 /**
  * Global error handler for Fastify
  */
@@ -20,7 +42,7 @@ export function errorMiddleware(
       request: {
         method: request.method,
         url: request.url,
-        headers: request.headers,
+        headers: sanitizeHeaders(request.headers as Record<string, RequestHeaderValue>),
       },
     },
     'Request error'
