@@ -6,6 +6,30 @@
 import { env } from './env.js'
 export { databaseConfig } from './database.js'
 
+const INSECURE_JWT_SECRETS = new Set([
+  '',
+  'dev-secret-change-in-production',
+  'your-super-secret-jwt-key-change-in-production',
+])
+
+export function isSecureJwtSecret(secret: string): boolean {
+  return !INSECURE_JWT_SECRETS.has(secret) && secret.length >= 32
+}
+
+function assertProductionSecurity(): void {
+  if (env.NODE_ENV !== 'production') {
+    return
+  }
+
+  if (!isSecureJwtSecret(env.JWT_SECRET)) {
+    throw new Error(
+      'JWT_SECRET is insecure in production. Provide a strong secret with at least 32 characters.'
+    )
+  }
+}
+
+assertProductionSecurity()
+
 export const config = {
   // Environment
   isDevelopment: env.NODE_ENV === 'development',
