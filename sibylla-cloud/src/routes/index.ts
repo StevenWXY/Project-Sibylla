@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify'
 import { healthRoutes } from './health.js'
 import { authRoutes } from './auth.js'
 import { gitRoutes } from './git.js'
+import { workspaceRoutes } from './workspace.js'
 
 /**
  * Register all routes
@@ -20,4 +21,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // Git routes
   await app.register(gitRoutes, { prefix: '/api/v1/git' })
+
+  // Workspace routes
+  await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' })
 }
