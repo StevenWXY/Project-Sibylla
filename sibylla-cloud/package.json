@@ -18,14 +18,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "docker:dev": "docker-compose -f docker-compose.dev.yml up --build",
+    "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
     "docker:build": "docker build -t sibylla-cloud -f docker/Dockerfile .",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
     "migrate:up": "node-pg-migrate up -m migrations",
     "migrate:down": "node-pg-migrate down -m migrations",
     "migrate:create": "node-pg-migrate create --migration-file-language sql -m migrations",
-    "db:seed": "tsx seeds/dev.ts"
+    "db:seed": "tsx seeds/dev.ts",
+    "test:prepare": "npm run docker:up && npm run migrate:up",
+    "test:full": "npm run test:prepare && npm run test && npm run docker:down"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
