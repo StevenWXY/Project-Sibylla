@@ -6,3 +6,4 @@
 export { AuthService, AuthError } from './auth.service.js'
 export { GitService } from './git.service.js'
 export { GiteaClient, giteaClient } from './gitea.client.js'
+export { WorkspaceService, WorkspaceError, createWorkspaceService } from './workspace.service.js'
