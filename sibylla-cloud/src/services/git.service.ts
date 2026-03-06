@@ -26,6 +26,18 @@ function mapToGitRepoInfo(row: Record<string, unknown>): GitRepoInfo {
   }
 }
 
+export function mapRoleToPermission(
+  role: WorkspaceMemberRole
+): 'read' | 'write' | 'admin' {
+  if (role === 'admin') {
+    return 'admin'
+  }
+  if (role === 'editor') {
+    return 'write'
+  }
+  return 'read'
+}
+
 export const GitService = {
   /**
    * Create Git repository for a workspace
@@ -38,6 +50,11 @@ export const GitService = {
     const repoName = `ws-${workspaceId.slice(0, 8)}`
     const ownerName = 'sibylla' // All repos under sibylla organization
 
+    const existing = await this.getRepoByWorkspace(workspaceId)
+    if (existing) {
+      return existing
+    }
+
     // Ensure owner user exists in Gitea
     await this.ensureGiteaUser(ownerUserId, ownerEmail)
 
@@ -49,19 +66,35 @@ export const GitService = {
       isPrivate: true,
     })
 
-    // Store repo info in database
-    const result = await sql`
-      INSERT INTO git_repos (
-        workspace_id, gitea_repo_id, gitea_owner_name, gitea_repo_name,
-        clone_url_http, clone_url_ssh, default_branch
+    let result
+    try {
+      result = await sql`
+        INSERT INTO git_repos (
+          workspace_id, gitea_repo_id, gitea_owner_name, gitea_repo_name,
+          clone_url_http, clone_url_ssh, default_branch
+        )
+        VALUES (
+          ${workspaceId}, ${giteaRepo.id}, ${ownerName}, ${repoName},
+          ${giteaRepo.clone_url}, ${giteaRepo.ssh_url || null}, ${giteaRepo.default_branch}
+        )
+        RETURNING id, workspace_id, clone_url_http, clone_url_ssh,
+                  default_branch, size_bytes, last_push_at
+      `
+    } catch (error) {
+      logger.error(
+        { error, workspaceId, giteaRepoId: giteaRepo.id },
+        'Failed to persist repository metadata, attempting compensation'
       )
-      VALUES (
-        ${workspaceId}, ${giteaRepo.id}, ${ownerName}, ${repoName},
-        ${giteaRepo.clone_url}, ${giteaRepo.ssh_url || null}, ${giteaRepo.default_branch}
-      )
-      RETURNING id, workspace_id, clone_url_http, clone_url_ssh,
-                default_branch, size_bytes, last_push_at
-    `
+      try {
+        await giteaClient.deleteRepo(ownerName, repoName)
+      } catch (compensationError) {
+        logger.error(
+          { compensationError, workspaceId, giteaRepoId: giteaRepo.id },
+          'Compensation failed while deleting orphan Gitea repository'
+        )
+      }
+      throw error
+    }
 
     logger.info({ workspaceId, repoName }, 'Created workspace Git repository')
 
@@ -147,8 +180,7 @@ export const GitService = {
     const giteaUsername = await this.ensureGiteaUser(userId, email)
 
     // Map Sibylla role to Gitea permission
-    const permission =
-      role === 'admin' ? 'admin' : role === 'editor' ? 'write' : 'read'
+    const permission = mapRoleToPermission(role)
 
     // Add collaborator in Gitea
     await giteaClient.addCollaborator(
