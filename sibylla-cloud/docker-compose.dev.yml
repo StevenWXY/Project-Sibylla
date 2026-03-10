@@ -1,0 +1,117 @@
+# Sibylla Cloud Service - Development Docker Compose
+# Includes hot reloading and development settings
+
+version: '3.8'
+
+services:
+  # ============================================
+  # API Service (Development)
+  # ============================================
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: sibylla-api-dev
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - HOST=0.0.0.0
+      - LOG_LEVEL=debug
+      - DATABASE_URL=postgresql://sibylla:sibylla@postgres:5432/sibylla
+      - REDIS_URL=redis://redis:6379
+      - CORS_ORIGIN=*
+    volumes:
+      # Mount source code for hot reloading
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - sibylla-network-dev
+
+  # ============================================
+  # PostgreSQL with pgvector (Development)
+  # ============================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sibylla-postgres-dev
+    environment:
+      POSTGRES_USER: sibylla
+      POSTGRES_PASSWORD: sibylla
+      POSTGRES_DB: sibylla
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sibylla -d sibylla"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sibylla-network-dev
+
+  # ============================================
+  # Redis (Development)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: sibylla-redis-dev
+    ports:
+      - "6379:6379"
+    networks:
+      - sibylla-network-dev
+
+  # ============================================
+  # Gitea - Git Hosting Service (Development)
+  # ============================================
+  gitea:
+    image: gitea/gitea:1.21
+    container_name: sibylla-gitea-dev
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=sibylla
+      - GITEA__database__PASSWD=sibylla
+      - GITEA__server__ROOT_URL=http://localhost:3001/
+      - GITEA__server__HTTP_PORT=3001
+      - GITEA__server__DISABLE_SSH=true
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__security__SECRET_KEY=dev-gitea-secret-key
+      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__service__REQUIRE_SIGNIN_VIEW=true
+      - GITEA__api__ENABLE_SWAGGER=true
+    volumes:
+      - gitea_data_dev:/data
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sibylla-network-dev
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data_dev:
+    driver: local
+  gitea_data_dev:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  sibylla-network-dev:
+    driver: bridge
