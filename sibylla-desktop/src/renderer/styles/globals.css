@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-notion-border-default dark:border-gray-700;
+  }
+  
+  html {
+    @apply antialiased;
+  }
+  
+  body {
+    @apply bg-notion-bg-primary text-notion-text-primary dark:bg-gray-950 dark:text-gray-100;
+  }
+  
+  /* 自定义滚动条 - Notion 风格 */
+  /* WebKit browsers (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-notion-border-default dark:bg-gray-600 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-notion-text-placeholder dark:bg-gray-500;
+  }
+  
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(211, 210, 206) transparent;
+  }
+  
+  .dark * {
+    scrollbar-color: rgb(75, 85, 99) transparent;
+  }
+}
+
+@layer components {
+  /* 玻璃拟态效果 */
+  .glass {
+    @apply bg-white/70 dark:bg-gray-800/70 backdrop-blur-xl;
+    @apply border border-white/30 dark:border-white/10 shadow-lg;
+  }
+  
+  /* Notion 风格卡片 */
+  .card {
+    @apply rounded-lg border border-notion-border-light bg-white p-6 shadow-sm;
+    @apply dark:bg-gray-800 dark:border-gray-700;
+  }
+  
+  /* 输入框基础样式 */
+  .input-base {
+    @apply w-full rounded-lg border border-notion-border-default bg-white px-3 py-2 text-sm;
+    @apply placeholder:text-notion-text-placeholder;
+    @apply focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+    @apply dark:border-gray-600 dark:bg-gray-800 dark:placeholder:text-gray-500;
+  }
+  
+  /* Notion 风格按钮 */
+  .btn-notion {
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium;
+    @apply transition-colors duration-200;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    @apply disabled:pointer-events-none disabled:opacity-50;
+  }
+  
+  .btn-notion-primary {
+    @apply btn-notion bg-notion-accent text-white hover:bg-notion-accent/90;
+    @apply focus-visible:ring-notion-accent;
+  }
+  
+  .btn-notion-secondary {
+    @apply btn-notion bg-notion-bg-tertiary text-notion-text-primary hover:bg-notion-border-light;
+    @apply dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600;
+  }
+  
+  .btn-notion-ghost {
+    @apply btn-notion hover:bg-notion-bg-secondary dark:hover:bg-gray-800;
+  }
+}
+
+@layer utilities {
+  /* 文本平衡 */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* 隐藏滚动条但保持可滚动 */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* 玻璃拟态变体 */
+  .glass-light {
+    @apply bg-white/50 backdrop-blur-md border border-white/20;
+  }
+  
+  .glass-dark {
+    @apply bg-gray-900/50 backdrop-blur-md border border-gray-700/50;
+  }
+  
+  /* Notion 风格阴影 */
+  .shadow-notion {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  
+  .shadow-notion-lg {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+}

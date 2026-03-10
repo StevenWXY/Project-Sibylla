@@ -41,8 +41,8 @@
 
 | 任务 ID | 任务标题 | 优先级 | 复杂度 | 预估工时 | 状态 | 负责人 |
 |---------|---------|--------|--------|----------|------|--------|
-| [PHASE0-TASK001](phase0-task001_electron-scaffold.md) | Electron 应用脚手架搭建 | P0 | 中等 | 2-3 天 | 待开始 | 待分配 |
-| [PHASE0-TASK002](phase0-task002_ipc-framework.md) | IPC 通信框架实现 | P0 | 中等 | 1-2 天 | 待开始 | 待分配 |
+| [PHASE0-TASK001](phase0-task001_electron-scaffold.md) | Electron 应用脚手架搭建 | P0 | 中等 | 2-3 天 | ✅ 已完成 | AI |
+| [PHASE0-TASK002](phase0-task002_ipc-framework.md) | IPC 通信框架实现 | P0 | 中等 | 1-2 天 | ✅ 已完成 | AI |
 | [PHASE0-TASK003](phase0-task003_ui-framework.md) | 基础 UI 框架集成 | P0 | 简单 | 1-2 天 | 待开始 | 待分配 |
 
 **依赖关系：** TASK001 → TASK002 → TASK003
@@ -214,6 +214,6 @@ TASK001 → TASK002 → TASK003 → TASK008 → TASK009 → TASK010 → TASK011 
 
 ---
 
-**创建时间：** 2026-03-01  
-**最后更新：** 2026-03-01  
+**创建时间：** 2026-03-01
+**最后更新：** 2026-03-10
 **阶段负责人：** 待分配

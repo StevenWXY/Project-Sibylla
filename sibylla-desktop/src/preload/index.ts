@@ -5,7 +5,7 @@ import type {
   EchoRequest,
   IPCChannel 
 } from '../shared/types'
-import { IPC_CHANNELS } from '../shared/types'
+import { IPC_CHANNELS, ErrorType } from '../shared/types'
 
 /**
  * Preload Script
@@ -54,89 +54,161 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
 ]
 
 /**
+ * Check if running in development mode
+ */
+const isDev = process.env.NODE_ENV === 'development'
+
+/**
  * Validate if a channel is allowed
+ *
+ * This function checks if a given channel is in the whitelist
+ * to prevent unauthorized IPC communication.
+ *
+ * @param channel - The channel name to validate
+ * @returns true if the channel is allowed, false otherwise
  */
 function isChannelAllowed(channel: string): boolean {
-  return ALLOWED_CHANNELS.includes(channel as IPCChannel)
+  const isAllowed = ALLOWED_CHANNELS.includes(channel as IPCChannel)
+  
+  if (!isAllowed) {
+    console.warn(`[Preload] Attempted to use unauthorized channel: ${channel}`)
+  }
+  
+  return isAllowed
+}
+
+/**
+ * Create a safe IPC invoke wrapper with logging, error handling, and timeout protection
+ *
+ * This function handles both business logic errors (from main process handlers)
+ * and IPC communication errors (network failures, process crashes, etc.)
+ *
+ * @param channel - The IPC channel to invoke
+ * @param args - Arguments to pass to the handler (last arg can be timeout config)
+ * @returns Promise resolving to the IPC response
+ */
+async function safeInvoke<T>(
+  channel: IPCChannel,
+  ...args: unknown[]
+): Promise<IPCResponse<T>> {
+  // Default timeout: 30 seconds
+  const DEFAULT_TIMEOUT = 30000
+  const timeout = DEFAULT_TIMEOUT
+  
+  if (isDev) {
+    console.debug(`[Preload] Invoking channel: ${channel}`, args.length > 0 ? args : '')
+  }
+  
+  try {
+    // Create timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`IPC timeout after ${timeout}ms`))
+      }, timeout)
+    })
+    
+    // Race between actual IPC call and timeout
+    const response = await Promise.race([
+      ipcRenderer.invoke(channel, ...args),
+      timeoutPromise
+    ])
+    
+    if (isDev) {
+      console.debug(`[Preload] Response from ${channel}:`, response.success ? 'success' : 'error')
+    }
+    
+    return response
+  } catch (error) {
+    // Catch IPC communication layer errors (not business logic errors)
+    const isTimeout = error instanceof Error && error.message.includes('timeout')
+    console.error(
+      `[Preload] IPC ${isTimeout ? 'timeout' : 'communication error'} on channel ${channel}:`,
+      error
+    )
+    return {
+      success: false,
+      error: {
+        type: ErrorType.IPC_ERROR,
+        message: error instanceof Error ? error.message : 'IPC communication failed',
+      },
+      timestamp: Date.now(),
+    }
+  }
 }
 
 // Implement the API
 const api: ElectronAPI = {
   // Test ping
   ping: async () => {
-    try {
-      return await ipcRenderer.invoke(IPC_CHANNELS.TEST_PING)
-    } catch (error) {
-      console.error('[Preload] Ping failed:', error)
-      throw error
-    }
+    return await safeInvoke<string>(IPC_CHANNELS.TEST_PING)
   },
   
   // Test echo
   echo: async (message: string, delay?: number) => {
-    try {
-      const request: EchoRequest = { message, delay }
-      return await ipcRenderer.invoke(IPC_CHANNELS.TEST_ECHO, request)
-    } catch (error) {
-      console.error('[Preload] Echo failed:', error)
-      throw error
-    }
+    const request: EchoRequest = { message, delay }
+    return await safeInvoke<string>(IPC_CHANNELS.TEST_ECHO, request)
   },
   
   // Get system information
   getSystemInfo: async () => {
-    try {
-      return await ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_INFO)
-    } catch (error) {
-      console.error('[Preload] Get system info failed:', error)
-      throw error
-    }
+    return await safeInvoke<SystemInfo>(IPC_CHANNELS.SYSTEM_INFO)
   },
   
   // Get platform
   getPlatform: async () => {
-    try {
-      return await ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_PLATFORM)
-    } catch (error) {
-      console.error('[Preload] Get platform failed:', error)
-      throw error
-    }
+    return await safeInvoke<NodeJS.Platform>(IPC_CHANNELS.SYSTEM_PLATFORM)
   },
   
   // Get app version
   getVersion: async () => {
-    try {
-      return await ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_VERSION)
-    } catch (error) {
-      console.error('[Preload] Get version failed:', error)
-      throw error
-    }
+    return await safeInvoke<string>(IPC_CHANNELS.SYSTEM_VERSION)
   },
   
   // Event listener registration
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => {
     if (!isChannelAllowed(channel)) {
-      throw new Error(`Channel ${channel} is not allowed`)
+      const error = new Error(`Channel ${channel} is not allowed`)
+      console.error('[Preload] Event listener registration failed:', error)
+      throw error
     }
     
     const subscription = (_event: IpcRendererEvent, ...args: unknown[]) => {
-      callback(...args)
+      try {
+        if (isDev) {
+          console.debug(`[Preload] Event received on channel: ${channel}`)
+        }
+        callback(...args)
+      } catch (error) {
+        console.error(`[Preload] Error in event callback for ${channel}:`, error)
+      }
     }
     
     ipcRenderer.on(channel, subscription)
+    if (isDev) {
+      console.debug(`[Preload] Event listener registered for channel: ${channel}`)
+    }
     
     // Return unsubscribe function
     return () => {
       ipcRenderer.off(channel, subscription)
+      if (isDev) {
+        console.debug(`[Preload] Event listener unregistered for channel: ${channel}`)
+      }
     }
   },
   
   // Event listener removal
   off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => {
     if (!isChannelAllowed(channel)) {
-      throw new Error(`Channel ${channel} is not allowed`)
+      const error = new Error(`Channel ${channel} is not allowed`)
+      console.error('[Preload] Event listener removal failed:', error)
+      throw error
     }
+    
     ipcRenderer.off(channel, callback as never)
+    if (isDev) {
+      console.debug(`[Preload] Event listener removed for channel: ${channel}`)
+    }
   },
 }
 
@@ -145,4 +217,5 @@ contextBridge.exposeInMainWorld('electronAPI', api)
 
 console.log('[Preload] Enhanced API exposed to renderer process')
 
+// Export type for use in other modules
 export type { ElectronAPI }

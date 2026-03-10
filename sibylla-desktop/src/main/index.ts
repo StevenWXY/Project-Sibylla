@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './window'
-import { registerAllIPCHandlers, cleanupIPCHandlers } from './ipc'
+import { ipcManager } from './ipc'
+import { TestHandler } from './ipc/handlers/test.handler'
+import { SystemHandler } from './ipc/handlers/system.handler'
 
 // Keep reference to main window to prevent garbage collection
 let mainWindow: BrowserWindow | null = null
@@ -26,8 +28,18 @@ if (!gotTheLock) {
   // Initialize app when ready
   app.whenReady().then(() => {
     try {
-      // Register IPC handlers before creating window
-      registerAllIPCHandlers()
+      // Initialize IPC manager
+      ipcManager.initialize()
+      
+      // Register all handlers
+      const handlers = [
+        new SystemHandler(),
+        new TestHandler(),
+      ]
+      
+      for (const handler of handlers) {
+        ipcManager.registerHandler(handler)
+      }
       
       // Create main window
       mainWindow = createMainWindow()
@@ -62,6 +74,6 @@ if (!gotTheLock) {
   app.on('will-quit', () => {
     console.log('[Main] Application is quitting')
     // Cleanup IPC handlers
-    cleanupIPCHandlers()
+    ipcManager.cleanup()
   })
 }

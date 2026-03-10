@@ -30,6 +30,19 @@ export interface WindowState {
 
 /**
  * IPC channel names (for type safety and consistency)
+ * 
+ * This constant object defines all available IPC channels in the application.
+ * Using constants instead of string literals prevents typos and enables
+ * better IDE autocomplete support.
+ * 
+ * @example
+ * ```typescript
+ * // In main process
+ * ipcMain.handle(IPC_CHANNELS.TEST_PING, async () => 'pong')
+ * 
+ * // In renderer process (via preload)
+ * const response = await window.electronAPI.ping()
+ * ```
  */
 export const IPC_CHANNELS = {
   // Test channels
@@ -75,36 +88,107 @@ export const IPC_CHANNELS = {
 
 /**
  * Type for IPC channel names
+ * 
+ * This type extracts all possible channel names from IPC_CHANNELS,
+ * providing compile-time type safety for channel validation.
+ * 
+ * @example
+ * ```typescript
+ * function isValidChannel(channel: string): channel is IPCChannel {
+ *   return Object.values(IPC_CHANNELS).includes(channel as IPCChannel)
+ * }
+ * ```
  */
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
 
 /**
  * Generic IPC response wrapper
+ * 
+ * This interface wraps all IPC responses to provide consistent
+ * error handling and request tracking across the application.
+ * 
+ * @template T - The type of the response data
+ * 
+ * @example
+ * ```typescript
+ * // Success response
+ * const response: IPCResponse<string> = {
+ *   success: true,
+ *   data: 'Hello World',
+ *   timestamp: Date.now()
+ * }
+ * 
+ * // Error response
+ * const errorResponse: IPCResponse = {
+ *   success: false,
+ *   error: {
+ *     type: ErrorType.IPC_ERROR,
+ *     message: 'Operation failed'
+ *   },
+ *   timestamp: Date.now()
+ * }
+ * ```
  */
 export interface IPCResponse<T = unknown> {
+  /** Whether the operation succeeded */
   success: boolean
+  /** Response data (only present when success is true) */
   data?: T
+  /** Error information (only present when success is false) */
   error?: AppError
+  /** Timestamp when the response was created (milliseconds since epoch) */
   timestamp?: number
+  /** Optional request ID for tracking and debugging */
+  requestId?: string
 }
 
 /**
  * System information
+ * 
+ * Contains detailed information about the system and runtime environment.
+ * This is useful for debugging, analytics, and platform-specific features.
+ * 
+ * @example
+ * ```typescript
+ * const info = await window.electronAPI.getSystemInfo()
+ * if (info.success && info.data) {
+ *   console.log(`Running on ${info.data.platform} ${info.data.arch}`)
+ * }
+ * ```
  */
 export interface SystemInfo {
+  /** Operating system platform (darwin, win32, linux, etc.) */
   platform: NodeJS.Platform
+  /** CPU architecture (x64, arm64, etc.) */
   arch: string
+  /** Application version */
   version: string
+  /** Electron framework version */
   electronVersion: string
+  /** Chrome browser version */
   chromeVersion: string
+  /** Node.js runtime version */
   nodeVersion: string
 }
 
 /**
  * Test echo request
+ * 
+ * Used for testing IPC communication with optional delay simulation.
+ * 
+ * @example
+ * ```typescript
+ * // Simple echo
+ * const response = await window.electronAPI.echo('Hello')
+ * 
+ * // Echo with 1 second delay
+ * const delayedResponse = await window.electronAPI.echo('Hello', 1000)
+ * ```
  */
 export interface EchoRequest {
+  /** Message to echo back */
   message: string
+  /** Optional delay in milliseconds before responding */
   delay?: number
 }
 
@@ -121,10 +205,16 @@ export enum ErrorType {
 
 /**
  * Application error structure
+ * 
+ * Provides detailed error information for better debugging
+ * and user-friendly error messages.
  */
 export interface AppError {
+  /** Error type classification */
   type: ErrorType
+  /** Human-readable error message */
   message: string
+  /** Additional error details (stack trace, context, etc.) */
   details?: unknown
 }
 
