@@ -3,7 +3,13 @@ import type {
   IPCResponse, 
   SystemInfo, 
   EchoRequest,
-  IPCChannel 
+  IPCChannel,
+  FileContent,
+  FileReadOptions,
+  FileWriteOptions,
+  ListFilesOptions,
+  FileInfo,
+  FileWatchEvent,
 } from '../shared/types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
 
@@ -35,6 +41,27 @@ interface ElectronAPI {
   getPlatform: () => Promise<IPCResponse<NodeJS.Platform>>
   getVersion: () => Promise<IPCResponse<string>>
   
+  // File operations
+  file: {
+    read: (path: string, options?: FileReadOptions) => Promise<IPCResponse<FileContent>>
+    write: (path: string, content: string, options?: FileWriteOptions) => Promise<IPCResponse<void>>
+    delete: (path: string) => Promise<IPCResponse<void>>
+    copy: (sourcePath: string, destPath: string) => Promise<IPCResponse<void>>
+    move: (sourcePath: string, destPath: string) => Promise<IPCResponse<void>>
+    list: (path: string, options?: ListFilesOptions) => Promise<IPCResponse<FileInfo[]>>
+    getInfo: (path: string) => Promise<IPCResponse<FileInfo>>
+    exists: (path: string) => Promise<IPCResponse<boolean>>
+    
+    // Directory operations
+    createDir: (path: string, recursive?: boolean) => Promise<IPCResponse<void>>
+    deleteDir: (path: string, recursive?: boolean) => Promise<IPCResponse<void>>
+    
+    // File watching
+    startWatching: () => Promise<IPCResponse<void>>
+    stopWatching: () => Promise<IPCResponse<void>>
+    onFileChange: (callback: (event: FileWatchEvent) => void) => () => void
+  }
+  
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
   off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => void
@@ -51,6 +78,22 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.LOG_MESSAGE,
   IPC_CHANNELS.FILE_CHANGED,
   IPC_CHANNELS.GIT_STATUS_CHANGED,
+  // File operations
+  IPC_CHANNELS.FILE_READ,
+  IPC_CHANNELS.FILE_WRITE,
+  IPC_CHANNELS.FILE_DELETE,
+  IPC_CHANNELS.FILE_COPY,
+  IPC_CHANNELS.FILE_MOVE,
+  IPC_CHANNELS.FILE_LIST,
+  IPC_CHANNELS.FILE_INFO,
+  IPC_CHANNELS.FILE_EXISTS,
+  // Directory operations
+  IPC_CHANNELS.DIR_CREATE,
+  IPC_CHANNELS.DIR_DELETE,
+  // File watching
+  IPC_CHANNELS.FILE_WATCH_START,
+  IPC_CHANNELS.FILE_WATCH_STOP,
+  IPC_CHANNELS.FILE_WATCH_EVENT,
 ]
 
 /**
@@ -162,6 +205,61 @@ const api: ElectronAPI = {
   // Get app version
   getVersion: async () => {
     return await safeInvoke<string>(IPC_CHANNELS.SYSTEM_VERSION)
+  },
+  
+  // File operations
+  file: {
+    read: async (path: string, options?: FileReadOptions) => {
+      return await safeInvoke<FileContent>(IPC_CHANNELS.FILE_READ, path, options)
+    },
+    
+    write: async (path: string, content: string, options?: FileWriteOptions) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_WRITE, path, content, options)
+    },
+    
+    delete: async (path: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_DELETE, path)
+    },
+    
+    copy: async (sourcePath: string, destPath: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_COPY, sourcePath, destPath)
+    },
+    
+    move: async (sourcePath: string, destPath: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_MOVE, sourcePath, destPath)
+    },
+    
+    list: async (path: string, options?: ListFilesOptions) => {
+      return await safeInvoke<FileInfo[]>(IPC_CHANNELS.FILE_LIST, path, options)
+    },
+    
+    getInfo: async (path: string) => {
+      return await safeInvoke<FileInfo>(IPC_CHANNELS.FILE_INFO, path)
+    },
+    
+    exists: async (path: string) => {
+      return await safeInvoke<boolean>(IPC_CHANNELS.FILE_EXISTS, path)
+    },
+    
+    createDir: async (path: string, recursive?: boolean) => {
+      return await safeInvoke<void>(IPC_CHANNELS.DIR_CREATE, path, recursive)
+    },
+    
+    deleteDir: async (path: string, recursive?: boolean) => {
+      return await safeInvoke<void>(IPC_CHANNELS.DIR_DELETE, path, recursive)
+    },
+    
+    startWatching: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_WATCH_START)
+    },
+    
+    stopWatching: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_WATCH_STOP)
+    },
+    
+    onFileChange: (callback: (event: FileWatchEvent) => void) => {
+      return api.on(IPC_CHANNELS.FILE_WATCH_EVENT, callback as (...args: unknown[]) => void)
+    },
   },
   
   // Event listener registration

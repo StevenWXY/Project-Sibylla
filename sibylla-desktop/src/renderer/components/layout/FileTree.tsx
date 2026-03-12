@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback } from 'react'
 import { Folder, FolderOpen, File, ChevronRight, ChevronDown } from 'lucide-react'
 import { cn } from '../../utils/cn'
 
@@ -26,8 +26,7 @@ export interface FileTreeNode {
  * 性能优化：
  * - 使用 Set 存储展开状态，O(1) 查找
  * - useCallback 缓存事件处理器
- * - React.memo 优化子组件
- * - 虚拟化滚动（大型文件树）
+ * - React.memo 优化子组件渲染
  * 
  * @example
  * <FileTree

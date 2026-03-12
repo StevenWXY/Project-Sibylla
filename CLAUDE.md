@@ -30,7 +30,7 @@ Sibylla 是一个以 AI 共享上下文为核心的团队知识协作平台。
   - 归档存储在 `.sibylla/memory/archives/`，支持向量检索
   - 心跳检查点：每 2 小时或 50 条交互触发记忆更新
   - 预压缩冲洗：会话 token 达到 75% 时自动持久化关键信息
-  - 详细设计见 `specs/design/memory-system-design.md`
+  - 详细设计见第十一章"详细设计文档索引"
 
 ## 四、代码规范
 
@@ -102,3 +102,20 @@ Sibylla 是一个以 AI 共享上下文为核心的团队知识协作平台。
 ## 十、当前阶段
 
 Phase 0 — 基础设施搭建。目标：跑通 Electron + 本地文件 + Git + 云端认证最小链路。
+
+## 十一、详细设计文档索引
+
+> 以下文档提供各领域的详细设计规范，AI 可根据任务需要按需查阅。
+
+### 架构与技术
+- [系统架构与技术选型](specs/design/architecture.md) - 整体架构、技术栈、模块划分、部署架构
+- [数据模型与 API 设计](specs/design/data-and-api.md) - Workspace 结构、数据库设计、RESTful API、IPC 接口
+
+### 核心系统
+- [团队记忆系统设计](specs/design/memory-system-design.md) - 三层存储、动态维护、检索引擎
+- [常用 Skill 列表](specs/design/skills-list.md) - Skill 结构规范、预置技能包、使用方式
+
+### 规范与标准
+- [文档规范与工作流](specs/design/documentation-standards.md) - 命名规范、Markdown 规范、Spec 工作流、Changelog 维护
+- [UI/UX 设计规范](specs/design/ui-ux-design.md) - 布局结构、色彩体系、交互规范、组件规范
+- [测试与安全策略](specs/design/testing-and-security.md) - 测试金字塔、质量保障、安全设计、隐私保护

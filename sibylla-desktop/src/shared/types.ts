@@ -60,12 +60,24 @@ export const IPC_CHANNELS = {
   WINDOW_CLOSE: 'window:close',
   WINDOW_TOGGLE_FULLSCREEN: 'window:toggle-fullscreen',
   
-  // File operations (reserved for future implementation)
+  // File operations
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
   FILE_DELETE: 'file:delete',
+  FILE_COPY: 'file:copy',
+  FILE_MOVE: 'file:move',
   FILE_LIST: 'file:list',
-  FILE_WATCH: 'file:watch',
+  FILE_INFO: 'file:info',
+  FILE_EXISTS: 'file:exists',
+  
+  // Directory operations
+  DIR_CREATE: 'dir:create',
+  DIR_DELETE: 'dir:delete',
+  
+  // File watching
+  FILE_WATCH_START: 'file:watch:start',
+  FILE_WATCH_STOP: 'file:watch:stop',
+  FILE_WATCH_EVENT: 'file:watch:event',
   
   // Git operations (reserved for future implementation)
   GIT_STATUS: 'git:status',
@@ -216,5 +228,115 @@ export interface AppError {
   message: string
   /** Additional error details (stack trace, context, etc.) */
   details?: unknown
+}
+
+/**
+ * File operation types
+ */
+
+/**
+ * File read options
+ * 
+ * @remarks
+ * Constraints:
+ * - maxSize: Must be between 1 byte and 100MB (104,857,600 bytes)
+ * - Default maxSize is 10MB (10,485,760 bytes)
+ * - Paths must not exceed 4096 characters (cross-platform limit)
+ */
+export interface FileReadOptions {
+  /** File encoding (default: 'utf-8') */
+  encoding?: BufferEncoding
+  /** 
+   * Maximum file size in bytes (default: 10MB, max: 100MB)
+   * @minimum 1
+   * @maximum 104857600
+   */
+  maxSize?: number
+}
+
+/**
+ * File content response
+ */
+export interface FileContent {
+  /** File path */
+  path: string
+  /** File content */
+  content: string
+  /** Encoding used */
+  encoding: string
+  /** File size in bytes */
+  size: number
+}
+
+/**
+ * File write options
+ * 
+ * @remarks
+ * Constraints:
+ * - Content size should not exceed 100MB for performance reasons
+ * - Paths must not exceed 4096 characters (cross-platform limit)
+ * - atomic write is recommended for critical files
+ */
+export interface FileWriteOptions {
+  /** File encoding (default: 'utf-8') */
+  encoding?: BufferEncoding
+  /** Use atomic write (write to temp file then rename, default: true) */
+  atomic?: boolean
+  /** Create parent directories if they don't exist (default: true) */
+  createDirs?: boolean
+}
+
+/**
+ * List files options
+ * 
+ * @remarks
+ * Constraints:
+ * - Recursive depth is limited to 100 levels to prevent infinite recursion
+ * - Large directories (>10,000 files) may impact performance
+ * - Hidden files are excluded by default for security
+ */
+export interface ListFilesOptions {
+  /** 
+   * List files recursively (default: false)
+   * @remarks Maximum depth: 100 levels
+   */
+  recursive?: boolean
+  /** 
+   * Include hidden files starting with . (default: false)
+   * @remarks Excludes .git, .env, and other sensitive files by default
+   */
+  includeHidden?: boolean
+}
+
+/**
+ * File information
+ */
+export interface FileInfo {
+  /** File name */
+  name: string
+  /** Full file path */
+  path: string
+  /** Whether this is a directory */
+  isDirectory: boolean
+  /** File size in bytes */
+  size: number
+  /** Last modified time (ISO 8601 format) */
+  modifiedTime: string
+  /** Creation time (ISO 8601 format) */
+  createdTime: string
+  /** File extension (without dot) */
+  extension?: string
+}
+
+/**
+ * File watch event
+ */
+export interface FileWatchEvent {
+  /** Event type */
+  type: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir'
+  /** File path */
+  path: string
+  /** File stats (only for add/change/addDir events) */
+  stats?: FileInfo
 }
 

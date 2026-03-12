@@ -1,8 +1,12 @@
 import { app, BrowserWindow } from 'electron'
+import * as path from 'path'
+import { promises as fs } from 'fs'
 import { createMainWindow } from './window'
 import { ipcManager } from './ipc'
 import { TestHandler } from './ipc/handlers/test.handler'
 import { SystemHandler } from './ipc/handlers/system.handler'
+import { FileHandler } from './ipc/handlers/file.handler'
+import { FileManager } from './services/file-manager'
 
 // Keep reference to main window to prevent garbage collection
 let mainWindow: BrowserWindow | null = null
@@ -26,15 +30,20 @@ if (!gotTheLock) {
   })
 
   // Initialize app when ready
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     try {
       // Initialize IPC manager
       ipcManager.initialize()
+      
+      // Create FileHandler without FileManager
+      // FileManager will be initialized later when user opens/creates a workspace
+      const fileHandler = new FileHandler()
       
       // Register all handlers
       const handlers = [
         new SystemHandler(),
         new TestHandler(),
+        fileHandler,
       ]
       
       for (const handler of handlers) {
