@@ -365,7 +365,14 @@ describe('FileManager - Core Operations', () => {
     })
 
     it('should handle very long filename (< 255 chars)', async () => {
-      const longName = 'a'.repeat(200) + '.txt'
+      // Calculate safe filename length considering testDir path and Windows MAX_PATH
+      // Windows MAX_PATH = 260, need to account for testDir path length
+      const testDirPath = path.join(testDir, 'dummy.txt')
+      const availableLength = process.platform === 'win32'
+        ? Math.max(50, 260 - testDirPath.length + 9) // +9 for 'dummy.txt' length
+        : 200
+      
+      const longName = 'a'.repeat(Math.min(availableLength, 200)) + '.txt'
       const content = 'Long name content'
       await fs.writeFile(path.join(testDir, longName), content)
 

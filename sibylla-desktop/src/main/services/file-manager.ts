@@ -408,32 +408,55 @@ export class FileManager {
         
         const tempPath = `${fullPath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`
         
-        try {
-          // Write to temp file
-          await fs.writeFile(tempPath, content, opts.encoding as BufferEncoding)
-          
-          // Atomic rename - this is atomic on most file systems
-          await fs.rename(tempPath, fullPath)
-          
-          // Log success
-          const duration = Date.now() - startTime
-          logger.info(
-            `[FileManager] File written successfully (atomic): ${relativePath} ` +
-            `(${content.length} chars, ${duration}ms)`
-          )
-        } catch (error) {
-          // Clean up temp file on error
+        // Retry logic for concurrent writes (especially on Windows)
+        const maxRetries = 3
+        let lastError: Error | null = null
+        
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
           try {
-            await fs.unlink(tempPath)
-            logger.info(`[FileManager] Cleaned up temp file: ${tempPath}`)
-          } catch (cleanupError) {
-            // Log cleanup failure but don't throw - original error is more important
-            logger.warn(
-              `[FileManager] Failed to clean up temp file: ${tempPath}`,
-              cleanupError
+            // Write to temp file
+            await fs.writeFile(tempPath, content, opts.encoding as BufferEncoding)
+            
+            // Atomic rename - this is atomic on most file systems
+            // On Windows, concurrent renames may fail with EACCES/EPERM
+            await fs.rename(tempPath, fullPath)
+            
+            // Log success
+            const duration = Date.now() - startTime
+            logger.info(
+              `[FileManager] File written successfully (atomic): ${relativePath} ` +
+              `(${content.length} chars, ${duration}ms${attempt > 0 ? `, retry: ${attempt}` : ''})`
             )
+            
+            // Success - exit retry loop
+            lastError = null
+            break
+          } catch (error) {
+            lastError = error as Error
+            const code = (error as NodeJS.ErrnoException).code
+            
+            // Clean up temp file
+            try {
+              await fs.unlink(tempPath)
+            } catch (cleanupError) {
+              // Ignore cleanup errors
+            }
+            
+            // Retry on permission errors (common in concurrent writes on Windows)
+            if ((code === 'EACCES' || code === 'EPERM') && attempt < maxRetries - 1) {
+              // Wait a bit before retrying (exponential backoff)
+              await new Promise(resolve => setTimeout(resolve, 10 * Math.pow(2, attempt)))
+              continue
+            }
+            
+            // For other errors or final attempt, throw
+            throw error
           }
-          throw error
+        }
+        
+        // If we exhausted retries, throw the last error
+        if (lastError) {
+          throw lastError
         }
       } else {
         // Direct write (non-atomic)
