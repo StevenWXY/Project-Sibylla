@@ -24,6 +24,8 @@ import {
   FileWatchEvent,
   FileManagerError,
   FILE_ERROR_CODES,
+  FileOperationContext,
+  FileOperationOptions,
 } from './types/file-manager.types'
 import { FileWatcher } from './file-watcher'
 
@@ -154,17 +156,21 @@ export class FileManager {
   
   /**
    * Validate a path for security
-   * 
+   *
    * Checks:
    * 1. Path must be within workspace root (prevent path traversal)
-   * 2. Path must not access forbidden system directories
+   * 2. Path must not access forbidden system directories (context-dependent)
    * 3. Path length must not exceed OS limits (Windows MAX_PATH)
-   * 
+   *
    * @param fullPath - Absolute path to validate
+   * @param context - Operation context (default: USER)
    * @throws {FileManagerError} If path is invalid or forbidden
    */
-  validatePath(fullPath: string): void {
-    // 1. Prevent path traversal attacks
+  validatePath(
+    fullPath: string,
+    context: FileOperationContext = FileOperationContext.USER
+  ): void {
+    // 1. Always check path traversal attacks
     const normalized = path.normalize(fullPath)
     if (!normalized.startsWith(this.workspaceRoot)) {
       throw new FileManagerError(
@@ -174,23 +180,53 @@ export class FileManager {
       )
     }
     
-    // 2. Forbid access to system directories
-    const relativePath = path.relative(this.workspaceRoot, normalized)
+    // 2. Check forbidden paths based on context
+    if (context === FileOperationContext.USER) {
+      // User operations: check all forbidden paths
+      this.checkForbiddenPaths(fullPath)
+    } else if (context === FileOperationContext.WORKSPACE_INIT) {
+      // Workspace initialization: only allow .sibylla access
+      this.checkWorkspaceInitPaths(fullPath)
+    }
+    // SYSTEM context: skip forbidden path checks
     
-    // Split path into segments and check each forbidden pattern
+    // 3. Check path length (Windows MAX_PATH = 260)
+    if (process.platform === 'win32' && fullPath.length > 260) {
+      throw new FileManagerError(
+        FILE_ERROR_CODES.PATH_TOO_LONG,
+        'Path exceeds Windows MAX_PATH limit (260 characters)',
+        { fullPath, length: fullPath.length }
+      )
+    }
+    
+    // 4. Log system-level operations for audit
+    if (context !== FileOperationContext.USER) {
+      logger.warn('[FileManager] System-level operation', {
+        context,
+        path: fullPath,
+        stack: new Error().stack
+      })
+    }
+  }
+  
+  /**
+   * Check if path accesses forbidden directories (for USER context)
+   *
+   * @param fullPath - Absolute path to check
+   * @throws {FileManagerError} If path accesses forbidden directory
+   */
+  private checkForbiddenPaths(fullPath: string): void {
+    const relativePath = path.relative(this.workspaceRoot, fullPath)
     const segments = relativePath.split(path.sep)
     
-    // Combine core and custom forbidden paths
     const allForbiddenPaths = [
       ...FileManager.CORE_FORBIDDEN_PATHS,
       ...this.customForbiddenPaths
     ]
     
     for (const forbiddenPattern of allForbiddenPaths) {
-      // Handle multi-level patterns like '.sibylla/index'
       const forbiddenSegments = forbiddenPattern.split('/')
       
-      // Check if forbidden pattern appears as a complete path segment sequence
       for (let i = 0; i <= segments.length - forbiddenSegments.length; i++) {
         let match = true
         for (let j = 0; j < forbiddenSegments.length; j++) {
@@ -209,15 +245,26 @@ export class FileManager {
         }
       }
     }
+  }
+  
+  /**
+   * Check if path is valid for WORKSPACE_INIT context
+   *
+   * WORKSPACE_INIT can only access .sibylla directory.
+   * For non-.sibylla paths, apply normal forbidden path checks.
+   *
+   * @param fullPath - Absolute path to check
+   * @throws {FileManagerError} If path is not allowed for WORKSPACE_INIT
+   */
+  private checkWorkspaceInitPaths(fullPath: string): void {
+    const relativePath = path.relative(this.workspaceRoot, fullPath)
     
-    // 3. Check path length (Windows MAX_PATH = 260)
-    if (process.platform === 'win32' && fullPath.length > 260) {
-      throw new FileManagerError(
-        FILE_ERROR_CODES.PATH_TOO_LONG,
-        'Path exceeds Windows MAX_PATH limit (260 characters)',
-        { fullPath, length: fullPath.length }
-      )
+    // WORKSPACE_INIT can only access .sibylla directory
+    if (!relativePath.startsWith('.sibylla')) {
+      // For non-.sibylla paths, apply normal forbidden path checks
+      this.checkForbiddenPaths(fullPath)
     }
+    // .sibylla paths are allowed
   }
   
   /**
@@ -253,7 +300,7 @@ export class FileManager {
   async readFile(relativePath: string, options?: ReadFileOptions): Promise<FileContent> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
-    this.validatePath(fullPath)
+    this.validatePath(fullPath, options?.context)
     
     const opts = {
       encoding: options?.encoding || 'utf-8',
@@ -367,7 +414,7 @@ export class FileManager {
   async writeFile(relativePath: string, content: string, options?: WriteFileOptions): Promise<void> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
-    this.validatePath(fullPath)
+    this.validatePath(fullPath, options?.context)
     
     const opts = {
       encoding: options?.encoding || 'utf-8',
@@ -540,10 +587,10 @@ export class FileManager {
    * await fileManager.deleteFile('docs/old-file.md')
    * ```
    */
-  async deleteFile(relativePath: string): Promise<void> {
+  async deleteFile(relativePath: string, options?: FileOperationOptions): Promise<void> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
-    this.validatePath(fullPath)
+    this.validatePath(fullPath, options?.context)
     
     logger.info(`[FileManager] Deleting file: ${relativePath}`)
     
@@ -639,13 +686,13 @@ export class FileManager {
    * await fileManager.copyFile('docs/file.md', 'backup/file.md')
    * ```
    */
-  async copyFile(sourcePath: string, destPath: string): Promise<void> {
+  async copyFile(sourcePath: string, destPath: string, options?: FileOperationOptions): Promise<void> {
     const startTime = Date.now()
     const sourceFullPath = this.resolvePath(sourcePath)
     const destFullPath = this.resolvePath(destPath)
     
-    this.validatePath(sourceFullPath)
-    this.validatePath(destFullPath)
+    this.validatePath(sourceFullPath, options?.context)
+    this.validatePath(destFullPath, options?.context)
     
     logger.info(`[FileManager] Copying file: ${sourcePath} -> ${destPath}`)
     
@@ -747,13 +794,13 @@ export class FileManager {
    * await fileManager.moveFile('docs/file.md', 'archive/file.md')
    * ```
    */
-  async moveFile(sourcePath: string, destPath: string): Promise<void> {
+  async moveFile(sourcePath: string, destPath: string, options?: FileOperationOptions): Promise<void> {
     const startTime = Date.now()
     const sourceFullPath = this.resolvePath(sourcePath)
     const destFullPath = this.resolvePath(destPath)
     
-    this.validatePath(sourceFullPath)
-    this.validatePath(destFullPath)
+    this.validatePath(sourceFullPath, options?.context)
+    this.validatePath(destFullPath, options?.context)
     
     logger.info(`[FileManager] Moving file: ${sourcePath} -> ${destPath}`)
     
@@ -902,10 +949,12 @@ export class FileManager {
    * await fileManager.createDirectory('existing-dir')
    * ```
    */
-  async createDirectory(relativePath: string, recursive: boolean = true): Promise<void> {
+  async createDirectory(relativePath: string, options?: FileOperationOptions & { recursive?: boolean }): Promise<void> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
-    this.validatePath(fullPath)
+    this.validatePath(fullPath, options?.context)
+    
+    const recursive = options?.recursive !== false // Default true
     
     logger.info(
       `[FileManager] Creating directory: ${relativePath} (recursive: ${recursive})`
@@ -1019,10 +1068,12 @@ export class FileManager {
    * await fileManager.deleteDirectory('dir-with-files', true)
    * ```
    */
-  async deleteDirectory(relativePath: string, recursive: boolean = false): Promise<void> {
+  async deleteDirectory(relativePath: string, options?: FileOperationOptions & { recursive?: boolean }): Promise<void> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
-    this.validatePath(fullPath)
+    this.validatePath(fullPath, options?.context)
+    
+    const recursive = options?.recursive || false // Default false
     
     logger.info(
       `[FileManager] Deleting directory: ${relativePath} (recursive: ${recursive})`
@@ -1138,7 +1189,7 @@ export class FileManager {
   async listFiles(relativePath: string, options?: ListFilesOptions): Promise<FileInfo[]> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
-    this.validatePath(fullPath)
+    this.validatePath(fullPath, options?.context)
     
     // Default options
     const opts = {

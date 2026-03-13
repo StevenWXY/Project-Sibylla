@@ -6,7 +6,9 @@ import { ipcManager } from './ipc'
 import { TestHandler } from './ipc/handlers/test.handler'
 import { SystemHandler } from './ipc/handlers/system.handler'
 import { FileHandler } from './ipc/handlers/file.handler'
+import { WorkspaceHandler } from './ipc/handlers/workspace.handler'
 import { FileManager } from './services/file-manager'
+import { WorkspaceManager } from './services/workspace-manager'
 
 // Keep reference to main window to prevent garbage collection
 let mainWindow: BrowserWindow | null = null
@@ -35,15 +37,27 @@ if (!gotTheLock) {
       // Initialize IPC manager
       ipcManager.initialize()
       
-      // Create FileHandler without FileManager
-      // FileManager will be initialized later when user opens/creates a workspace
+      // Create FileManager with a temporary root (will be updated when workspace is opened)
+      // Using app.getPath('temp') as a safe default
+      const tempRoot = app.getPath('temp')
+      const fileManager = new FileManager(tempRoot)
+      
+      // Create WorkspaceManager instance
+      const workspaceManager = new WorkspaceManager(fileManager)
+      
+      // Create FileHandler
       const fileHandler = new FileHandler()
+      
+      // Create WorkspaceHandler and set WorkspaceManager
+      const workspaceHandler = new WorkspaceHandler()
+      workspaceHandler.setWorkspaceManager(workspaceManager)
       
       // Register all handlers
       const handlers = [
         new SystemHandler(),
         new TestHandler(),
         fileHandler,
+        workspaceHandler,
       ]
       
       for (const handler of handlers) {

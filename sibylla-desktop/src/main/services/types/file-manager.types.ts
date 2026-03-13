@@ -48,7 +48,7 @@ export interface FileContent {
 /**
  * Options for writing files
  */
-export interface WriteFileOptions {
+export interface WriteFileOptions extends FileOperationOptions {
   /** Text encoding (default: 'utf-8') */
   encoding?: BufferEncoding
   /** Use atomic write (temp file + rename) (default: true) */
@@ -60,7 +60,7 @@ export interface WriteFileOptions {
 /**
  * Options for reading files
  */
-export interface ReadFileOptions {
+export interface ReadFileOptions extends FileOperationOptions {
   /** Text encoding (default: 'utf-8') */
   encoding?: BufferEncoding
   /** Maximum file size in bytes (default: 10MB) */
@@ -70,13 +70,52 @@ export interface ReadFileOptions {
 /**
  * Options for listing files
  */
-export interface ListFilesOptions {
+export interface ListFilesOptions extends FileOperationOptions {
   /** Recursively list subdirectories (default: false) */
   recursive?: boolean
   /** Include hidden files (starting with '.') (default: false) */
   includeHidden?: boolean
   /** Custom filter function */
   filter?: (file: FileInfo) => boolean
+}
+
+/**
+ * File operation context
+ *
+ * Determines the security level and restrictions for file operations
+ */
+export enum FileOperationContext {
+  /**
+   * User-initiated operations (default)
+   * - Subject to all security restrictions
+   * - Cannot access forbidden system directories
+   */
+  USER = 'user',
+  
+  /**
+   * System-level operations
+   * - Can access all directories including forbidden ones
+   * - Used by core system components like WorkspaceManager
+   * - Should be used with caution and proper logging
+   */
+  SYSTEM = 'system',
+  
+  /**
+   * Workspace initialization operations
+   * - Can access .sibylla directory for workspace setup
+   * - More restricted than SYSTEM but less than USER
+   */
+  WORKSPACE_INIT = 'workspace_init',
+}
+
+/**
+ * Extended options for file operations with context
+ */
+export interface FileOperationOptions {
+  /**
+   * Operation context (default: USER)
+   */
+  context?: FileOperationContext
 }
 
 /**

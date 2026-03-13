@@ -1,20 +1,11 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
+import type { WorkspaceInfo } from '../../shared/types'
 
 /**
  * Theme type definition
  */
 export type Theme = 'light' | 'dark' | 'system'
-
-/**
- * Workspace information
- */
-export interface WorkspaceInfo {
-  id: string
-  name: string
-  path: string
-  lastOpened: number
-}
 
 /**
  * File information
@@ -149,11 +140,7 @@ export const useAppStore = create<AppState>()(
           
           // Update recent workspaces as a side effect
           if (workspace) {
-            const workspaceWithTimestamp: WorkspaceInfo = {
-              ...workspace,
-              lastOpened: Date.now(),
-            }
-            get().addRecentWorkspace(workspaceWithTimestamp)
+            get().addRecentWorkspace(workspace)
           }
         },
         
@@ -167,7 +154,7 @@ export const useAppStore = create<AppState>()(
          */
         addRecentWorkspace: (workspace) => set(
           (state) => {
-            const filtered = state.recentWorkspaces.filter(w => w.id !== workspace.id)
+            const filtered = state.recentWorkspaces.filter(w => w.config.workspaceId !== workspace.config.workspaceId)
             const updated = [workspace, ...filtered].slice(0, 10) // Keep max 10
             return { recentWorkspaces: updated }
           },
@@ -177,7 +164,7 @@ export const useAppStore = create<AppState>()(
         
         removeRecentWorkspace: (id) => set(
           (state) => ({
-            recentWorkspaces: state.recentWorkspaces.filter(w => w.id !== id)
+            recentWorkspaces: state.recentWorkspaces.filter(w => w.config.workspaceId !== id)
           }),
           false,
           'removeRecentWorkspace'

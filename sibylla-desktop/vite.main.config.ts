@@ -35,7 +35,10 @@ export default defineConfig({
         'url',
         'querystring',
         
-        // Native modules (to be added in future phases)
+        // Native modules
+        'chokidar', // File watcher with native dependencies
+        
+        // To be added in future phases
         // 'better-sqlite3',
         // 'isomorphic-git'
       ]

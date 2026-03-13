@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
-import type { 
-  IPCResponse, 
-  SystemInfo, 
+import type {
+  IPCResponse,
+  SystemInfo,
   EchoRequest,
   IPCChannel,
   FileContent,
@@ -10,6 +10,10 @@ import type {
   ListFilesOptions,
   FileInfo,
   FileWatchEvent,
+  CreateWorkspaceOptions,
+  WorkspaceInfo,
+  WorkspaceConfig,
+  WorkspaceMetadata,
 } from '../shared/types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
 
@@ -62,6 +66,19 @@ interface ElectronAPI {
     onFileChange: (callback: (event: FileWatchEvent) => void) => () => void
   }
   
+  // Workspace operations
+  workspace: {
+    create: (options: CreateWorkspaceOptions) => Promise<IPCResponse<WorkspaceInfo>>
+    open: (path: string) => Promise<IPCResponse<WorkspaceInfo>>
+    close: () => Promise<IPCResponse<void>>
+    getCurrent: () => Promise<IPCResponse<WorkspaceInfo | null>>
+    validate: (path: string) => Promise<IPCResponse<boolean>>
+    selectFolder: () => Promise<IPCResponse<string | null>>
+    getConfig: () => Promise<IPCResponse<WorkspaceConfig>>
+    updateConfig: (updates: Partial<WorkspaceConfig>) => Promise<IPCResponse<void>>
+    getMetadata: () => Promise<IPCResponse<WorkspaceMetadata>>
+  }
+  
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
   off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => void
@@ -94,6 +111,16 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.FILE_WATCH_START,
   IPC_CHANNELS.FILE_WATCH_STOP,
   IPC_CHANNELS.FILE_WATCH_EVENT,
+  // Workspace operations
+  IPC_CHANNELS.WORKSPACE_CREATE,
+  IPC_CHANNELS.WORKSPACE_OPEN,
+  IPC_CHANNELS.WORKSPACE_CLOSE,
+  IPC_CHANNELS.WORKSPACE_GET_CURRENT,
+  IPC_CHANNELS.WORKSPACE_VALIDATE,
+  IPC_CHANNELS.WORKSPACE_SELECT_FOLDER,
+  IPC_CHANNELS.WORKSPACE_GET_CONFIG,
+  IPC_CHANNELS.WORKSPACE_UPDATE_CONFIG,
+  IPC_CHANNELS.WORKSPACE_GET_METADATA,
 ]
 
 /**
@@ -259,6 +286,45 @@ const api: ElectronAPI = {
     
     onFileChange: (callback: (event: FileWatchEvent) => void) => {
       return api.on(IPC_CHANNELS.FILE_WATCH_EVENT, callback as (...args: unknown[]) => void)
+    },
+  },
+  
+  // Workspace operations
+  workspace: {
+    create: async (options: CreateWorkspaceOptions) => {
+      return await safeInvoke<WorkspaceInfo>(IPC_CHANNELS.WORKSPACE_CREATE, options)
+    },
+    
+    open: async (path: string) => {
+      return await safeInvoke<WorkspaceInfo>(IPC_CHANNELS.WORKSPACE_OPEN, path)
+    },
+    
+    close: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.WORKSPACE_CLOSE)
+    },
+    
+    getCurrent: async () => {
+      return await safeInvoke<WorkspaceInfo | null>(IPC_CHANNELS.WORKSPACE_GET_CURRENT)
+    },
+    
+    validate: async (path: string) => {
+      return await safeInvoke<boolean>(IPC_CHANNELS.WORKSPACE_VALIDATE, path)
+    },
+    
+    selectFolder: async () => {
+      return await safeInvoke<string | null>(IPC_CHANNELS.WORKSPACE_SELECT_FOLDER)
+    },
+    
+    getConfig: async () => {
+      return await safeInvoke<WorkspaceConfig>(IPC_CHANNELS.WORKSPACE_GET_CONFIG)
+    },
+    
+    updateConfig: async (updates: Partial<WorkspaceConfig>) => {
+      return await safeInvoke<void>(IPC_CHANNELS.WORKSPACE_UPDATE_CONFIG, updates)
+    },
+    
+    getMetadata: async () => {
+      return await safeInvoke<WorkspaceMetadata>(IPC_CHANNELS.WORKSPACE_GET_METADATA)
     },
   },
   

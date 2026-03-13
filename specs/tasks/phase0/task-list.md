@@ -44,12 +44,12 @@
 | 状态 | 任务 ID | 任务标题 | 负责人 | 开始日期 | 完成日期 | 实际工时 | 备注 |
 |------|---------|---------|--------|----------|----------|----------|------|
 | ✅ | [PHASE0-TASK008](phase0-task008_file-manager.md) | 文件管理器实现 | AI | 2026-03-11 | 2026-03-12 | 14小时 | 已完成全部6步：类型定义、文件读写操作、目录操作、文件监控、IPC集成、测试和文档（单元测试36个、性能测试10个、集成测试11个、CI配置） |
-| ⬜ | [PHASE0-TASK009](phase0-task009_workspace-initialization.md) | Workspace 创建与初始化 | 待分配 | - | - | - | 依赖 TASK008 |
+| ✅ | [PHASE0-TASK009](phase0-task009_workspace-initialization.md) | Workspace 创建与初始化 | AI | 2026-03-13 | 2026-03-13 | 6小时 | 已完成全部步骤：类型定义、模板生成系统、WorkspaceManager（创建/打开/验证/配置管理）、IPC处理器、Preload API、UI组件（CreateWorkspaceWizard/OpenWorkspaceDialog）、主应用集成、基础测试 |
 | ⬜ | [PHASE0-TASK010](phase0-task010_git-abstraction-basic.md) | Git 抽象层基础实现 | 待分配 | - | - | - | 依赖 TASK009，高风险 |
 | ⬜ | [PHASE0-TASK011](phase0-task011_git-remote-sync.md) | Git 远程同步实现 | 待分配 | - | - | - | 依赖 TASK010 |
 | ⬜ | [PHASE0-TASK012](phase0-task012_auto-save.md) | 自动保存机制实现 | 待分配 | - | - | - | 依赖 TASK011 |
 
-**小组进度：** 1/5 (20%)
+**小组进度：** 2/5 (40%)
 
 ---
 
@@ -67,10 +67,10 @@
 
 ## 总体进度
 
-**Phase 0 总进度：** 9/15 (60%)
+**Phase 0 总进度：** 10/15 (67%)
 
 **预估总工时：** 28-40 工作日
-**实际总工时：** 49 小时
+**实际总工时：** 55 小时
 **进度偏差：** 进度领先
 
 ---
@@ -200,6 +200,16 @@
 | 2026-03-12 | 完成 | TASK008 步骤6.3完成：编写集成测试（file-system-integration.test.ts，11个测试用例全部通过） | TASK008 | AI |
 | 2026-03-12 | 完成 | TASK008 步骤6.4完成：配置跨平台CI测试（GitHub Actions，支持macOS/Windows/Linux + Node 18/20） | TASK008 | AI |
 | 2026-03-12 | 完成 | TASK008 全部完成：文件管理器实现（类型定义、文件读写、目录操作、文件监控、IPC集成、测试和文档，总计79个测试用例） | TASK008 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤1完成：分析现有代码结构和依赖关系（FileManager、IpcHandler、shared types、Preload API） | TASK009 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤2完成：创建 Workspace 类型定义文件（workspace.types.ts，包含WorkspaceConfig、WorkspaceMetadata、CreateWorkspaceOptions等完整类型定义） | TASK009 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤3完成：实现文档模板生成系统（workspace-templates.ts，包含CLAUDE.md、MEMORY.md、requirements.md等所有初始文档模板） | TASK009 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤4完成：实现 WorkspaceManager 核心类（创建功能）- createWorkspace、路径验证、目录结构创建、配置文件生成、初始文档生成 | TASK009 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤5完成：实现 WorkspaceManager 核心类（打开/验证功能）- openWorkspace、closeWorkspace、validateWorkspace、getConfig、updateConfig、getMetadata | TASK009 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤6完成：实现 IPC 处理器和通道定义 - 扩展 IPC_CHANNELS、创建 WorkspaceHandler、实现所有 workspace IPC 方法 | TASK009 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤7完成：实现 Preload API 暴露 - 在 preload/index.ts 中添加 workspace API（create、open、close、getCurrent、validate、selectFolder、getConfig、updateConfig、getMetadata） | TASK009 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤8完成：创建 Workspace 创建向导 UI 组件 - CreateWorkspaceWizard.tsx（三步向导、表单验证、错误处理、Loading状态、步骤指示器） | TASK009 | AI |
+| 2026-03-13 | 进度更新 | TASK009 步骤9完成：创建 Workspace 打开对话框 UI 组件 - OpenWorkspaceDialog.tsx（文件夹选择、Workspace验证、错误处理、Loading状态） | TASK009 | AI |
+| 2026-03-13 | 完成 | TASK009 全部完成：Workspace 创建与初始化（类型定义、模板生成、WorkspaceManager、IPC处理器、Preload API、UI组件、主应用集成、基础测试） | TASK009 | AI |
 
 **变更类型说明：**
 - 新增 - 新增任务
