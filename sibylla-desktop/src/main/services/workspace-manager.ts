@@ -278,14 +278,19 @@ export class WorkspaceManager {
       )
     }
 
-    // Check if path exists
-    const exists = await this.fileManager.exists(workspacePath)
+    // SECURITY NOTE: We intentionally bypass FileManager here because:
+    // 1. The workspace root may not be set yet when this is called
+    // 2. We need to verify the path exists and is empty before creating workspace
+    // 3. This is a one-time validation during workspace creation, not a regular file operation
+    // 4. The path is already validated to be absolute (line 273)
+    const fs = await import('fs')
     
-    if (exists) {
-      // Path exists - check if it's a directory
-      const info = await this.fileManager.getFileInfo(workspacePath)
+    try {
+      // Check if path exists
+      const stats = await fs.promises.stat(workspacePath)
       
-      if (!info.isDirectory) {
+      // Path exists - check if it's a directory
+      if (!stats.isDirectory()) {
         throw new WorkspaceError(
           WorkspaceErrorCode.PATH_NOT_DIRECTORY,
           'Workspace path exists but is not a directory',
@@ -294,7 +299,7 @@ export class WorkspaceManager {
       }
 
       // Check if directory is empty
-      const files = await this.fileManager.listFiles(workspacePath, { recursive: false })
+      const files = await fs.promises.readdir(workspacePath)
       if (files.length > 0) {
         throw new WorkspaceError(
           WorkspaceErrorCode.PATH_NOT_EMPTY,
@@ -302,60 +307,55 @@ export class WorkspaceManager {
           { path: workspacePath, fileCount: files.length }
         )
       }
-    } else {
-      // Path doesn't exist - check if parent directory exists and is writable
-      const parentDir = path.dirname(workspacePath)
-      
-      // SECURITY NOTE: We intentionally bypass FileManager here because:
-      // 1. The parent directory is outside the workspace root (which doesn't exist yet)
-      // 2. We need to verify the parent directory exists and is writable before creating workspace
-      // 3. This is a one-time validation during workspace creation, not a regular file operation
-      // 4. The path is already validated to be absolute (line 273)
-      try {
-        const fs = await import('fs')
-        const parentStats = await fs.promises.stat(parentDir)
-        if (!parentStats.isDirectory()) {
-          throw new WorkspaceError(
-            WorkspaceErrorCode.PATH_NOT_DIRECTORY,
-            'Parent path exists but is not a directory',
-            { path: workspacePath, parentDir }
-          )
-        }
-        
-        // Verify parent directory is writable by attempting to access it
-        await fs.promises.access(parentDir, fs.constants.W_OK)
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        
-        if (code === 'ENOENT') {
-          throw new WorkspaceError(
-            WorkspaceErrorCode.PATH_NOT_FOUND,
-            'Parent directory does not exist',
-            { path: workspacePath, parentDir }
-          )
-        }
-        
-        if (code === 'EACCES' || code === 'EPERM') {
-          throw new WorkspaceError(
-            WorkspaceErrorCode.PATH_NO_PERMISSION,
-            'No permission to write to parent directory',
-            { path: workspacePath, parentDir }
-          )
-        }
-        
-        // Re-throw other errors
+    } catch (error) {
+      // If it's already a WorkspaceError, re-throw it
+      if (error instanceof WorkspaceError) {
         throw error
       }
-
-      // Try to create the directory to check permissions
-      try {
-        await this.fileManager.createDirectory(workspacePath)
-      } catch (error) {
-        throw new WorkspaceError(
-          WorkspaceErrorCode.PATH_NO_PERMISSION,
-          'No permission to create workspace directory',
-          { path: workspacePath, error: error instanceof Error ? error.message : String(error) }
-        )
+      
+      // Handle ENOENT - path doesn't exist, which is fine
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        // Path doesn't exist - check if parent directory exists and is writable
+        const parentDir = path.dirname(workspacePath)
+        
+        try {
+          const parentStats = await fs.promises.stat(parentDir)
+          if (!parentStats.isDirectory()) {
+            throw new WorkspaceError(
+              WorkspaceErrorCode.PATH_NOT_DIRECTORY,
+              'Parent path exists but is not a directory',
+              { path: workspacePath, parentDir }
+            )
+          }
+          
+          // Verify parent directory is writable by attempting to access it
+          await fs.promises.access(parentDir, fs.constants.W_OK)
+        } catch (parentError) {
+          const parentCode = (parentError as NodeJS.ErrnoException).code
+          
+          if (parentCode === 'ENOENT') {
+            throw new WorkspaceError(
+              WorkspaceErrorCode.PATH_NOT_FOUND,
+              'Parent directory does not exist',
+              { path: workspacePath, parentDir }
+            )
+          }
+          
+          if (parentCode === 'EACCES' || parentCode === 'EPERM') {
+            throw new WorkspaceError(
+              WorkspaceErrorCode.PATH_NO_PERMISSION,
+              'No permission to write to parent directory',
+              { path: workspacePath, parentDir }
+            )
+          }
+          
+          // Re-throw other errors
+          throw parentError
+        }
+      } else {
+        // Other errors should be thrown
+        throw error
       }
     }
   }
@@ -704,40 +704,67 @@ export class WorkspaceManager {
         return false
       }
 
+      // SECURITY NOTE: We intentionally bypass FileManager here because:
+      // 1. We're validating a workspace that may not be the current workspace
+      // 2. FileManager's workspace root may be set to a different path
+      // 3. This is a read-only validation operation
+      // 4. The path is already validated to be absolute
+      const fs = await import('fs')
+
       // Check if directory exists
-      const exists = await this.fileManager.exists(workspacePath)
-      if (!exists) {
-        logger.warn('Workspace validation failed: directory does not exist', { path: workspacePath })
-        return false
+      let stats
+      try {
+        stats = await fs.promises.stat(workspacePath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          logger.warn('Workspace validation failed: directory does not exist', { path: workspacePath })
+          return false
+        }
+        throw error
       }
 
       // Check if it's a directory
-      const info = await this.fileManager.getFileInfo(workspacePath)
-      if (!info.isDirectory) {
+      if (!stats.isDirectory()) {
         logger.warn('Workspace validation failed: path is not a directory', { path: workspacePath })
         return false
       }
 
       // Check for required system directory
       const systemDir = path.join(workspacePath, WORKSPACE_STRUCTURE.SYSTEM_DIR)
-      const systemDirExists = await this.fileManager.exists(systemDir)
-      if (!systemDirExists) {
-        logger.warn('Workspace validation failed: .sibylla directory not found', { path: workspacePath })
-        return false
+      try {
+        const systemStats = await fs.promises.stat(systemDir)
+        if (!systemStats.isDirectory()) {
+          logger.warn('Workspace validation failed: .sibylla is not a directory', { path: workspacePath })
+          return false
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          logger.warn('Workspace validation failed: .sibylla directory not found', { path: workspacePath })
+          return false
+        }
+        throw error
       }
 
       // Check for required config file
       const configPath = path.join(workspacePath, WORKSPACE_STRUCTURE.SYSTEM_CONFIG)
-      const configExists = await this.fileManager.exists(configPath)
-      if (!configExists) {
-        logger.warn('Workspace validation failed: config.json not found', { path: workspacePath })
-        return false
+      try {
+        const configStats = await fs.promises.stat(configPath)
+        if (!configStats.isFile()) {
+          logger.warn('Workspace validation failed: config.json is not a file', { path: workspacePath })
+          return false
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          logger.warn('Workspace validation failed: config.json not found', { path: workspacePath })
+          return false
+        }
+        throw error
       }
 
       // Try to parse config file
       try {
-        const fileContent = await this.fileManager.readFile(configPath, { encoding: 'utf-8' })
-        const config = JSON.parse(fileContent.content) as WorkspaceConfig
+        const fileContent = await fs.promises.readFile(configPath, 'utf-8')
+        const config = JSON.parse(fileContent) as WorkspaceConfig
         
         // Validate required config fields
         if (!config.workspaceId || !config.name || !config.createdAt) {

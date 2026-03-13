@@ -949,12 +949,15 @@ export class FileManager {
    * await fileManager.createDirectory('existing-dir')
    * ```
    */
-  async createDirectory(relativePath: string, options?: FileOperationOptions & { recursive?: boolean }): Promise<void> {
+  async createDirectory(relativePath: string, options?: FileOperationOptions & { recursive?: boolean } | boolean): Promise<void> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
-    this.validatePath(fullPath, options?.context)
     
-    const recursive = options?.recursive !== false // Default true
+    // Handle both boolean and options object
+    const recursive = typeof options === 'boolean' ? options : (options?.recursive !== false)
+    const context = typeof options === 'object' ? options?.context : undefined
+    
+    this.validatePath(fullPath, context)
     
     logger.info(
       `[FileManager] Creating directory: ${relativePath} (recursive: ${recursive})`
@@ -982,6 +985,23 @@ export class FileManager {
       } catch (error) {
         // If ENOENT, directory doesn't exist - continue to create
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error
+        }
+      }
+      
+      // If not recursive, check parent directory exists
+      if (!recursive) {
+        const parentDir = path.dirname(fullPath)
+        try {
+          await fs.access(parentDir)
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            throw new FileManagerError(
+              FILE_ERROR_CODES.FILE_NOT_FOUND,
+              `Parent directory does not exist: ${path.dirname(relativePath)}`,
+              { relativePath, fullPath }
+            )
+          }
           throw error
         }
       }
@@ -1068,12 +1088,15 @@ export class FileManager {
    * await fileManager.deleteDirectory('dir-with-files', true)
    * ```
    */
-  async deleteDirectory(relativePath: string, options?: FileOperationOptions & { recursive?: boolean }): Promise<void> {
+  async deleteDirectory(relativePath: string, options?: FileOperationOptions & { recursive?: boolean } | boolean): Promise<void> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
-    this.validatePath(fullPath, options?.context)
     
-    const recursive = options?.recursive || false // Default false
+    // Handle both boolean and options object
+    const recursive = typeof options === 'boolean' ? options : (options?.recursive || false)
+    const context = typeof options === 'object' ? options?.context : undefined
+    
+    this.validatePath(fullPath, context)
     
     logger.info(
       `[FileManager] Deleting directory: ${relativePath} (recursive: ${recursive})`
@@ -1134,12 +1157,21 @@ export class FileManager {
         )
       }
       
-      if (code === 'ENOTEMPTY') {
-        throw new FileManagerError(
-          FILE_ERROR_CODES.DIRECTORY_NOT_EMPTY,
-          `Directory not empty (use recursive=true to force delete): ${relativePath}`,
-          { relativePath, fullPath }
+      if (code === 'ENOTEMPTY' || code === 'EEXIST') {
+        // Only throw if not in recursive mode
+        if (!recursive) {
+          throw new FileManagerError(
+            FILE_ERROR_CODES.DIRECTORY_NOT_EMPTY,
+            `Directory not empty (use recursive=true to force delete): ${relativePath}`,
+            { relativePath, fullPath }
+          )
+        }
+        // In recursive mode, this shouldn't happen with fs.rm, but if it does, re-throw
+        logger.error(
+          `[FileManager] deleteDirectory failed: Unexpected ENOTEMPTY in recursive mode (${duration}ms)`,
+          error
         )
+        throw error
       }
       
       // Unexpected error
