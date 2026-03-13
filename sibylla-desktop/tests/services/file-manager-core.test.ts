@@ -368,9 +368,18 @@ describe('FileManager - Core Operations', () => {
       // Calculate safe filename length considering testDir path and Windows MAX_PATH
       // Windows MAX_PATH = 260, need to account for testDir path length
       const testDirPath = path.join(testDir, 'dummy.txt')
+      
+      // On Windows, ensure we stay well under MAX_PATH (260)
+      // Reserve 30 chars for safety margin and .txt extension
       const availableLength = process.platform === 'win32'
-        ? Math.max(50, 260 - testDirPath.length + 9) // +9 for 'dummy.txt' length
+        ? Math.max(30, 260 - testDirPath.length + 9 - 30) // +9 for 'dummy.txt', -30 for safety
         : 200
+      
+      // Skip test if path is too long even for minimal filename
+      if (availableLength < 30) {
+        console.log(`Skipping test: testDir path too long (${testDirPath.length} chars)`)
+        return
+      }
       
       const longName = 'a'.repeat(Math.min(availableLength, 200)) + '.txt'
       const content = 'Long name content'
