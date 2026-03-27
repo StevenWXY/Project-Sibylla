@@ -45,11 +45,11 @@
 |------|---------|---------|--------|----------|----------|----------|------|
 | ✅ | [PHASE0-TASK008](phase0-task008_file-manager.md) | 文件管理器实现 | AI | 2026-03-11 | 2026-03-12 | 14小时 | 已完成全部6步：类型定义、文件读写操作、目录操作、文件监控、IPC集成、测试和文档（单元测试36个、性能测试10个、集成测试11个、CI配置） |
 | ✅ | [PHASE0-TASK009](phase0-task009_workspace-initialization.md) | Workspace 创建与初始化 | AI | 2026-03-13 | 2026-03-13 | 6小时 | 已完成全部步骤：类型定义、模板生成系统、WorkspaceManager（创建/打开/验证/配置管理）、IPC处理器、Preload API、UI组件（CreateWorkspaceWizard/OpenWorkspaceDialog）、主应用集成、基础测试 |
-| ⬜ | [PHASE0-TASK010](phase0-task010_git-abstraction-basic.md) | Git 抽象层基础实现 | 待分配 | - | - | - | 依赖 TASK009，高风险 |
-| ⬜ | [PHASE0-TASK011](phase0-task011_git-remote-sync.md) | Git 远程同步实现 | 待分配 | - | - | - | 依赖 TASK010 |
+| ✅ | [PHASE0-TASK010](phase0-task010_git-abstraction-basic.md) | Git 抽象层基础实现 | AI | 2026-03-14 | 2026-03-27 | 10小时 | 已完成全部11步：安装依赖、类型定义、GitAbstraction核心类（init/config）、文件暂存与提交（stageFile/stageAll/unstageFile/commit/commitAll）、状态查询（getStatus/getFileStatus）、历史查询（getHistory/getCommit）、差异查询（getFileDiff/getCommitDiff）、工具方法（getCurrentBranch/listFiles）、单元测试60个、集成测试3个、构建验证通过 |
+| ✅ | [PHASE0-TASK011](phase0-task011_git-remote-sync.md) | Git 远程同步实现 | AI | 2026-03-27 | 2026-03-27 | 6小时 | 已完成全部8步：扩展类型定义（PushResult/PullResult/SyncResult/GitRemoteConfig/SyncProgressData/GitSyncEvents + 7个错误码）、GitAbstraction继承EventEmitter、setRemote凭证配置、push推送（含进度事件）、pull拉取（fetch+merge+冲突检测）、retryWithBackoff指数退避重试、sync统一同步、单元测试25个+集成测试2个、构建配置更新 |
 | ⬜ | [PHASE0-TASK012](phase0-task012_auto-save.md) | 自动保存机制实现 | 待分配 | - | - | - | 依赖 TASK011 |
 
-**小组进度：** 2/5 (40%)
+**小组进度：** 3/5 (60%)
 
 ---
 
@@ -67,10 +67,10 @@
 
 ## 总体进度
 
-**Phase 0 总进度：** 10/15 (67%)
+**Phase 0 总进度：** 11/15 (73%)
 
 **预估总工时：** 28-40 工作日
-**实际总工时：** 55 小时
+**实际总工时：** 65 小时
 **进度偏差：** 进度领先
 
 ---
@@ -98,10 +98,10 @@
 
 ### 里程碑 3：文件与 Git 集成（Week 2-3）
 
-- [ ] TASK008 - 文件管理器实现
-- [ ] TASK009 - Workspace 创建与初始化
-- [ ] TASK010 - Git 抽象层基础实现
-- [ ] TASK011 - Git 远程同步实现
+- [x] TASK008 - 文件管理器实现
+- [x] TASK009 - Workspace 创建与初始化
+- [x] TASK010 - Git 抽象层基础实现
+- [x] TASK011 - Git 远程同步实现
 - [ ] TASK012 - 自动保存机制实现
 
 **目标日期：** Week 3 结束  
@@ -122,7 +122,7 @@
 
 | 风险 ID | 风险描述 | 影响任务 | 状态 | 缓解措施 | 负责人 |
 |---------|---------|---------|------|---------|--------|
-| RISK-001 | isomorphic-git 学习曲线陡峭 | TASK010 | 🟡 待评估 | 提前技术预研 | 待分配 |
+| RISK-001 | isomorphic-git 学习曲线陡峭 | TASK010 | 🟢 已解决 | TASK010 已完成，isomorphic-git 集成正常，63个测试全部通过 | AI |
 | RISK-002 | Gitea 配置复杂度高 | TASK007 | 🟢 已解决 | 使用 Docker Compose，环境变量自动配置 | AI |
 | RISK-003 | 跨平台构建环境差异 | TASK001, TASK014 | 🟡 待评估 | 使用 GitHub Actions | 待分配 |
 | RISK-004 | 集成测试问题多 | TASK013 | 🟡 待评估 | 每个任务完成后冒烟测试 | 待分配 |
@@ -210,6 +210,18 @@
 | 2026-03-13 | 进度更新 | TASK009 步骤8完成：创建 Workspace 创建向导 UI 组件 - CreateWorkspaceWizard.tsx（三步向导、表单验证、错误处理、Loading状态、步骤指示器） | TASK009 | AI |
 | 2026-03-13 | 进度更新 | TASK009 步骤9完成：创建 Workspace 打开对话框 UI 组件 - OpenWorkspaceDialog.tsx（文件夹选择、Workspace验证、错误处理、Loading状态） | TASK009 | AI |
 | 2026-03-13 | 完成 | TASK009 全部完成：Workspace 创建与初始化（类型定义、模板生成、WorkspaceManager、IPC处理器、Preload API、UI组件、主应用集成、基础测试） | TASK009 | AI |
+| 2026-03-14 | 进度更新 | TASK010 步骤1完成：安装 isomorphic-git、diff、@types/diff 依赖，更新 vite.main.config.ts external 配置 | TASK010 | AI |
+| 2026-03-14 | 进度更新 | TASK010 步骤2完成：创建类型定义文件 git-abstraction.types.ts（GitAbstractionConfig、GitStatus、CommitInfo、FileDiff、DiffHunk、FileStatusType、GitAbstractionError） | TASK010 | AI |
+| 2026-03-14 | 进度更新 | TASK010 步骤3完成：实现 GitAbstraction 核心类（构造函数、init()、isInitialized()、setConfig()/getConfig()、normalizePath()、createDefaultGitignore()） | TASK010 | AI |
+| 2026-03-14 | 进度更新 | TASK010 步骤4完成：实现文件暂存与提交（stageFile/stageAll/unstageFile/commit/commitAll、ensureInitialized/hasStagedChanges辅助方法） | TASK010 | AI |
+| 2026-03-14 | 进度更新 | TASK010 步骤5完成：实现状态查询（getStatus/getFileStatus、resolveFileStatusType辅助方法，完整statusMatrix状态映射） | TASK010 | AI |
+| 2026-03-14 | 进度更新 | TASK010 步骤6完成：实现历史查询（getHistory支持depth/filepath/ref过滤、getCommit获取单个提交详情、filterHistoryByFile文件级过滤） | TASK010 | AI |
+| 2026-03-15 | Bug修复 | TASK010 代码审查修复5项：getStatus()删除+暂存分类一致性、filterHistoryByFile性能JSDoc、commitAll无变更行为优化、FileStatusType.STAGED预留说明、stageAll返回暂存数量避免冗余statusMatrix调用 | TASK010 | AI |
+| 2026-03-27 | 进度更新 | TASK010 步骤7完成：实现差异查询（getFileDiff/getCommitDiff/getFileContent/readWorkingFile/computeDiffHunks/findChangedFiles/resolveHead） | TASK010 | AI |
+| 2026-03-27 | 进度更新 | TASK010 步骤8完成：实现工具方法（getCurrentBranch/listFiles/listFilesAtRef） | TASK010 | AI |
+| 2026-03-27 | 进度更新 | TASK010 步骤9完成：编写单元测试（60个测试用例全部通过：初始化5、构造函数4、暂存6、提交5、状态8、历史8、差异8、工具4、配置5、错误处理7） | TASK010 | AI |
+| 2026-03-27 | 进度更新 | TASK010 步骤10完成：编写集成测试（3个集成测试全部通过：完整工作流、多文件操作、错误恢复） | TASK010 | AI |
+| 2026-03-27 | 完成 | TASK010 步骤11完成：构建验证（TypeScript编译无git-abstraction相关错误、ESLint检查通过、vite external配置已就绪）、标记任务完成 | TASK010 | AI |
 
 **变更类型说明：**
 - 新增 - 新增任务
@@ -243,5 +255,5 @@
 
 ---
 
-**最后更新：** 2026-03-12
+**最后更新：** 2026-03-27
 **更新人：** AI

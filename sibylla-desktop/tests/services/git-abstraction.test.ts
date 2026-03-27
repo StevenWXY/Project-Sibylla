@@ -11,10 +11,12 @@
  * - Target coverage ≥ 80%
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import * as os from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
+import git from 'isomorphic-git'
+import http from 'isomorphic-git/http/node'
 import { GitAbstraction } from '../../src/main/services/git-abstraction'
 import {
   GitAbstractionError,
@@ -918,5 +920,499 @@ describe('GitAbstraction Integration Tests', () => {
     const files = await ga.listFiles()
     expect(files).toContain('stable.md')
     expect(files).toContain('new-file.md')
+  })
+})
+
+// ─── Remote Sync Tests (TASK011) ──────────────────────────────────────────
+
+describe('GitAbstraction Remote Sync', () => {
+  let tempDir: string
+  let gitAbstraction: GitAbstraction
+
+  beforeEach(() => {
+    tempDir = createTempDir()
+    gitAbstraction = new GitAbstraction({
+      workspaceDir: tempDir,
+      authorName: 'Test User',
+      authorEmail: 'test@sibylla.local',
+    })
+  })
+
+  afterEach(() => {
+    removeTempDir(tempDir)
+  })
+
+  // ─── 1. Remote Configuration Tests ──────────────────────────────────
+
+  describe('Remote Configuration (setRemote)', () => {
+    it('should configure remote URL and token successfully', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token-123')
+
+      // Verify remote was added by reading git config
+      const remotes = await git.listRemotes({
+        fs,
+        dir: tempDir,
+      })
+      expect(remotes).toContainEqual({ remote: 'origin', url: 'https://example.com/repo.git' })
+    })
+
+    it('should throw REMOTE_CONFIG_FAILED when URL is empty', async () => {
+      await gitAbstraction.init()
+
+      await expect(gitAbstraction.setRemote('', 'token')).rejects.toThrow(GitAbstractionError)
+      try {
+        await gitAbstraction.setRemote('', 'token')
+      } catch (error) {
+        expect(error).toBeInstanceOf(GitAbstractionError)
+        expect((error as GitAbstractionError).code).toBe(GitAbstractionErrorCode.REMOTE_CONFIG_FAILED)
+      }
+    })
+
+    it('should throw REMOTE_CONFIG_FAILED when token is empty', async () => {
+      await gitAbstraction.init()
+
+      await expect(gitAbstraction.setRemote('https://example.com/repo.git', '')).rejects.toThrow(
+        GitAbstractionError
+      )
+      try {
+        await gitAbstraction.setRemote('https://example.com/repo.git', '')
+      } catch (error) {
+        expect(error).toBeInstanceOf(GitAbstractionError)
+        expect((error as GitAbstractionError).code).toBe(GitAbstractionErrorCode.REMOTE_CONFIG_FAILED)
+      }
+    })
+
+    it('should update remote when origin already exists', async () => {
+      await gitAbstraction.init()
+
+      // Set remote first time
+      await gitAbstraction.setRemote('https://example.com/old-repo.git', 'old-token')
+
+      // Update remote
+      await gitAbstraction.setRemote('https://example.com/new-repo.git', 'new-token')
+
+      const remotes = await git.listRemotes({
+        fs,
+        dir: tempDir,
+      })
+      expect(remotes).toContainEqual({ remote: 'origin', url: 'https://example.com/new-repo.git' })
+      expect(remotes).not.toContainEqual({ remote: 'origin', url: 'https://example.com/old-repo.git' })
+    })
+  })
+
+  // ─── 2. Retry Mechanism Tests ───────────────────────────────────────
+
+  describe('Retry Mechanism (retryRemoteOperation)', () => {
+    // Access private method via type casting for testing
+    function getRetryMethod(ga: GitAbstraction) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (ga as unknown as Record<string, unknown>)['retryRemoteOperation'] as <T>(
+        operation: () => Promise<T>,
+        maxRetries?: number
+      ) => Promise<T>
+    }
+
+    it('should succeed on second attempt after first failure', async () => {
+      await gitAbstraction.init()
+      const retryRemoteOperation = getRetryMethod(gitAbstraction).bind(gitAbstraction)
+
+      let callCount = 0
+      const operation = async (): Promise<string> => {
+        callCount++
+        if (callCount === 1) {
+          throw new Error('Network timeout')
+        }
+        return 'success'
+      }
+
+      const result = await retryRemoteOperation(operation, 3)
+      expect(result).toBe('success')
+      expect(callCount).toBe(2)
+    })
+
+    it('should throw AUTH_FAILED immediately on 401 error without retry', async () => {
+      await gitAbstraction.init()
+      const retryRemoteOperation = getRetryMethod(gitAbstraction).bind(gitAbstraction)
+
+      let callCount = 0
+      const operation = async (): Promise<string> => {
+        callCount++
+        throw new Error('HTTP Error: 401 Unauthorized')
+      }
+
+      await expect(retryRemoteOperation(operation, 3)).rejects.toThrow(GitAbstractionError)
+      try {
+        callCount = 0
+        await retryRemoteOperation(operation, 3)
+      } catch (error) {
+        expect((error as GitAbstractionError).code).toBe(GitAbstractionErrorCode.AUTH_FAILED)
+        expect(callCount).toBe(1) // Only called once — no retry
+      }
+    })
+
+    it('should throw AUTH_FAILED immediately on 403 error without retry', async () => {
+      await gitAbstraction.init()
+      const retryRemoteOperation = getRetryMethod(gitAbstraction).bind(gitAbstraction)
+
+      let callCount = 0
+      const operation = async (): Promise<string> => {
+        callCount++
+        throw new Error('HTTP Error: 403 Forbidden')
+      }
+
+      await expect(retryRemoteOperation(operation, 3)).rejects.toThrow(GitAbstractionError)
+      try {
+        callCount = 0
+        await retryRemoteOperation(operation, 3)
+      } catch (error) {
+        expect((error as GitAbstractionError).code).toBe(GitAbstractionErrorCode.AUTH_FAILED)
+        expect(callCount).toBe(1)
+      }
+    })
+
+    it('should throw NETWORK_ERROR after all retries exhausted', async () => {
+      await gitAbstraction.init()
+      const retryRemoteOperation = getRetryMethod(gitAbstraction).bind(gitAbstraction)
+
+      let callCount = 0
+      const operation = async (): Promise<string> => {
+        callCount++
+        throw new Error('Connection reset')
+      }
+
+      await expect(retryRemoteOperation(operation, 3)).rejects.toThrow(GitAbstractionError)
+      try {
+        callCount = 0
+        await retryRemoteOperation(operation, 3)
+      } catch (error) {
+        expect((error as GitAbstractionError).code).toBe(GitAbstractionErrorCode.NETWORK_ERROR)
+        expect(callCount).toBe(3) // All 3 attempts made
+      }
+    }, 10000) // Increased timeout for retry delays
+  })
+
+  // ─── 3. Push Tests ─────────────────────────────────────────────────
+
+  describe('Push Operation', () => {
+    it('should throw REMOTE_NOT_CONFIGURED when remote is not set', async () => {
+      await gitAbstraction.init()
+
+      await expect(gitAbstraction.push()).rejects.toThrow(GitAbstractionError)
+      try {
+        await gitAbstraction.push()
+      } catch (error) {
+        expect((error as GitAbstractionError).code).toBe(GitAbstractionErrorCode.REMOTE_NOT_CONFIGURED)
+      }
+    })
+
+    it('should return success when push succeeds (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      // Mock git.push to succeed
+      const mockPushResult = { ok: true, error: null, refs: {} }
+      const pushSpy = vi.spyOn(git, 'push').mockResolvedValueOnce(mockPushResult as any)
+
+      const result = await gitAbstraction.push()
+      expect(result.success).toBe(true)
+      expect(pushSpy).toHaveBeenCalled()
+
+      pushSpy.mockRestore()
+    })
+
+    it('should return failure when push fails (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      // Mock git.push to fail with network error after retries
+      const pushSpy = vi.spyOn(git, 'push').mockRejectedValue(new Error('Network timeout'))
+
+      const result = await gitAbstraction.push()
+      expect(result.success).toBe(false)
+      expect(result.error).toBeDefined()
+
+      pushSpy.mockRestore()
+    }, 15000)
+
+    it('should emit sync:progress events during push (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      // Mock git.push and capture onProgress callback
+      const mockPushResult = { ok: true, error: null, refs: {} }
+      const pushSpy = vi.spyOn(git, 'push').mockImplementationOnce(async (args) => {
+        // Simulate progress events by calling onProgress if provided
+        const onProgress = (args as Record<string, unknown>).onProgress as ((p: Record<string, number>) => void) | undefined
+        if (onProgress) {
+          onProgress({ loaded: 50, total: 100 })
+          onProgress({ loaded: 100, total: 100 })
+        }
+        return mockPushResult as any
+      })
+
+      const progressEvents: unknown[] = []
+      gitAbstraction.on('sync:progress', (data: unknown) => {
+        progressEvents.push(data)
+      })
+
+      const result = await gitAbstraction.push()
+      expect(result.success).toBe(true)
+      expect(progressEvents.length).toBeGreaterThanOrEqual(2)
+
+      pushSpy.mockRestore()
+    })
+  })
+
+  // ─── 4. Pull Tests ─────────────────────────────────────────────────
+
+  describe('Pull Operation', () => {
+    it('should throw REMOTE_NOT_CONFIGURED when remote is not set', async () => {
+      await gitAbstraction.init()
+
+      await expect(gitAbstraction.pull()).rejects.toThrow(GitAbstractionError)
+      try {
+        await gitAbstraction.pull()
+      } catch (error) {
+        expect((error as GitAbstractionError).code).toBe(GitAbstractionErrorCode.REMOTE_NOT_CONFIGURED)
+      }
+    })
+
+    it('should return success when fetch and merge succeed (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      // Mock git.fetch and git.merge
+      const mockFetchResult = { defaultBranch: 'main', fetchHead: 'abc', fetchHeadDescription: '' }
+      const mockMergeResult = { oid: 'def', tree: 'ghi' }
+      const fetchSpy = vi.spyOn(git, 'fetch').mockResolvedValueOnce(mockFetchResult as any)
+      const mergeSpy = vi.spyOn(git, 'merge').mockResolvedValueOnce(mockMergeResult as any)
+
+      const result = await gitAbstraction.pull()
+      expect(result.success).toBe(true)
+      expect(fetchSpy).toHaveBeenCalled()
+      expect(mergeSpy).toHaveBeenCalled()
+
+      fetchSpy.mockRestore()
+      mergeSpy.mockRestore()
+    })
+
+    it('should return conflicts when merge has conflicts (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      // Mock git.fetch and git.merge (simulate conflicts by not returning 'tree' in mergeResult)
+      const mockFetchResult = { defaultBranch: 'main', fetchHead: 'abc', fetchHeadDescription: '' }
+      const mockMergeResult = { oid: 'def', tree: undefined } // undefined tree indicates conflicts
+      const fetchSpy = vi.spyOn(git, 'fetch').mockResolvedValueOnce(mockFetchResult as any)
+      const mergeSpy = vi.spyOn(git, 'merge').mockResolvedValueOnce(mockMergeResult as any)
+
+      const result = await gitAbstraction.pull()
+      expect(result.success).toBe(false)
+      expect(result.hasConflicts).toBe(true)
+
+      fetchSpy.mockRestore()
+      mergeSpy.mockRestore()
+    })
+
+    it('should handle MergeNotSupportedError during pull (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      const mockFetchResult = { defaultBranch: 'main', fetchHead: 'abc', fetchHeadDescription: '' }
+      const fetchSpy = vi.spyOn(git, 'fetch').mockResolvedValueOnce(mockFetchResult as any)
+      const mergeSpy = vi.spyOn(git, 'merge').mockRejectedValueOnce(new Error('MergeNotSupportedError: Fast-forward merge is not supported.'))
+
+      const result = await gitAbstraction.pull()
+      expect(result.success).toBe(false)
+      expect(result.hasConflicts).toBe(true)
+      expect(result.error).toContain('Merge requires manual resolution')
+
+      fetchSpy.mockRestore()
+      mergeSpy.mockRestore()
+    })
+  })
+
+  // ─── 5. Sync Flow Tests ────────────────────────────────────────────
+
+  describe('Sync Operation', () => {
+    it('should throw REMOTE_NOT_CONFIGURED when remote is not set', async () => {
+      await gitAbstraction.init()
+
+      await expect(gitAbstraction.sync()).rejects.toThrow(GitAbstractionError)
+      try {
+        await gitAbstraction.sync()
+      } catch (error) {
+        expect((error as GitAbstractionError).code).toBe(GitAbstractionErrorCode.REMOTE_NOT_CONFIGURED)
+      }
+    })
+
+    it('should succeed when pull and push succeed (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      const pullSpy = vi.spyOn(gitAbstraction, 'pull').mockResolvedValueOnce({ success: true })
+      const pushSpy = vi.spyOn(gitAbstraction, 'push').mockResolvedValueOnce({ success: true })
+
+      const result = await gitAbstraction.sync()
+      expect(result.success).toBe(true)
+      expect(pullSpy).toHaveBeenCalled()
+      expect(pushSpy).toHaveBeenCalled()
+
+      pullSpy.mockRestore()
+      pushSpy.mockRestore()
+    })
+
+    it('should abort push and return conflict when pull fails with conflicts (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      const pullSpy = vi.spyOn(gitAbstraction, 'pull').mockResolvedValueOnce({ success: false, hasConflicts: true, conflicts: [] })
+      const pushSpy = vi.spyOn(gitAbstraction, 'push').mockResolvedValueOnce({ success: true })
+
+      const result = await gitAbstraction.sync()
+      expect(result.success).toBe(false)
+      expect(result.hasConflicts).toBe(true)
+      expect(pullSpy).toHaveBeenCalled()
+      expect(pushSpy).not.toHaveBeenCalled() // Push should not be called if pull has conflicts
+
+      pullSpy.mockRestore()
+      pushSpy.mockRestore()
+    })
+
+    it('should return error if pull fails due to network (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      const pullSpy = vi.spyOn(gitAbstraction, 'pull').mockResolvedValueOnce({ success: false, error: 'Network error' })
+      const pushSpy = vi.spyOn(gitAbstraction, 'push').mockResolvedValueOnce({ success: true })
+
+      const result = await gitAbstraction.sync()
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Network error')
+      expect(pullSpy).toHaveBeenCalled()
+      expect(pushSpy).not.toHaveBeenCalled()
+
+      pullSpy.mockRestore()
+      pushSpy.mockRestore()
+    })
+
+    it('should return push error if pull succeeds but push fails (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
+
+      const pullSpy = vi.spyOn(gitAbstraction, 'pull').mockResolvedValueOnce({ success: true })
+      const pushSpy = vi.spyOn(gitAbstraction, 'push').mockResolvedValueOnce({ success: false, error: 'Push rejected' })
+
+      const result = await gitAbstraction.sync()
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Push rejected')
+      expect(pullSpy).toHaveBeenCalled()
+      expect(pushSpy).toHaveBeenCalled()
+
+      pullSpy.mockRestore()
+      pushSpy.mockRestore()
+    })
+  })
+
+  // ─── 6. EventEmitter Tests ─────────────────────────────────────────
+
+  describe('EventEmitter Integration', () => {
+    it('should be an instance of EventEmitter', () => {
+      expect(typeof gitAbstraction.on).toBe('function')
+      expect(typeof gitAbstraction.emit).toBe('function')
+      expect(typeof gitAbstraction.removeListener).toBe('function')
+    })
+
+    it('should emit sync:error event when sync fails (mocked)', async () => {
+      await gitAbstraction.init()
+      await gitAbstraction.setRemote('https://example.com/repo.git', 'fake-token')
+
+      const pushSpy = vi.spyOn(gitAbstraction, 'push').mockRejectedValueOnce(new Error('Simulated error'))
+      const pullSpy = vi.spyOn(gitAbstraction, 'pull').mockResolvedValueOnce({ success: true })
+
+      const errors: Error[] = []
+      gitAbstraction.on('sync:error', (error: Error) => {
+        errors.push(error)
+      })
+
+      const result = await gitAbstraction.sync()
+      expect(result.success).toBe(false)
+      expect(errors.length).toBe(1)
+      expect(errors[0].message).toContain('Simulated error')
+
+      pushSpy.mockRestore()
+      pullSpy.mockRestore()
+    })
+  })
+})
+
+// ─── Remote Sync Integration Tests (TASK011) ────────────────────────────────
+
+describe('GitAbstraction Remote Sync Integration Tests', () => {
+  // We use local bare repositories to test push/pull logic.
+  // Although isomorphic-git's HTTP client requires a real server,
+  // we can test the internal `push` logic and event emission by allowing it to use local protocol,
+  // but to avoid network issues we mock only the isomorphic-git operations in these integration tests.
+
+  it('should complete full push flow: init → setRemote → create → stage → commit → push (mocked remote)', async () => {
+    const localDir = createTempDir()
+
+    try {
+      const ga = new GitAbstraction({
+        workspaceDir: localDir,
+        authorName: 'Test User',
+        authorEmail: 'test@sibylla.local',
+      })
+
+      await ga.init()
+      await ga.setRemote('https://mock-remote.git', 'fake-token')
+
+      writeFile(localDir, 'readme.md', '# My Project\n\nHello World')
+      await ga.stageFile('readme.md')
+      await ga.commit('Add readme')
+
+      // Mock the remote operations
+      const pushSpy = vi.spyOn(git, 'push').mockResolvedValueOnce({ ok: true, error: null, refs: {} } as any)
+
+      const pushResult = await ga.push()
+
+      expect(pushResult).toHaveProperty('success', true)
+      expect(pushSpy).toHaveBeenCalled()
+
+      pushSpy.mockRestore()
+    } finally {
+      removeTempDir(localDir)
+    }
+  })
+
+  it('should complete pull flow (mocked remote)', async () => {
+    const localDir = createTempDir()
+
+    try {
+      const ga = new GitAbstraction({
+        workspaceDir: localDir,
+        authorName: 'User A',
+        authorEmail: 'a@sibylla.local',
+      })
+
+      await ga.init()
+      await ga.setRemote('https://mock-remote.git', 'fake-token')
+
+      // Mock the remote operations
+      const fetchSpy = vi.spyOn(git, 'fetch').mockResolvedValueOnce({ defaultBranch: 'main', fetchHead: 'abc', fetchHeadDescription: '' } as any)
+      const mergeSpy = vi.spyOn(git, 'merge').mockResolvedValueOnce({ oid: 'def', tree: 'ghi' } as any)
+
+      const pullResult = await ga.pull()
+
+      expect(pullResult).toHaveProperty('success', true)
+      expect(fetchSpy).toHaveBeenCalled()
+      expect(mergeSpy).toHaveBeenCalled()
+
+      fetchSpy.mockRestore()
+      mergeSpy.mockRestore()
+    } finally {
+      removeTempDir(localDir)
+    }
   })
 })

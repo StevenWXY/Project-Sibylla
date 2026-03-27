@@ -38,9 +38,13 @@ export default defineConfig({
         // Native modules
         'chokidar', // File watcher with native dependencies
         
+        // Git abstraction layer dependencies
+        'isomorphic-git',
+        'isomorphic-git/http/node',
+        'diff',
+        
         // To be added in future phases
         // 'better-sqlite3',
-        // 'isomorphic-git'
       ]
     },
     
