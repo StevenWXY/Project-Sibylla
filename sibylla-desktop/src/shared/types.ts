@@ -102,6 +102,12 @@ export const IPC_CHANNELS = {
   AI_STREAM: 'ai:stream',
   AI_EMBED: 'ai:embed',
   
+  // Sync operations (SyncManager layer — distinct from git:sync which is direct Git sync)
+  /** Renderer → Main: Force trigger a sync operation */
+  SYNC_FORCE: 'sync:force',
+  /** Main → Renderer: Broadcast sync status changes */
+  SYNC_STATUS_CHANGED: 'sync:status-changed',
+
   // Event notifications (main process → renderer process)
   NOTIFICATION: 'notification',
   LOG_MESSAGE: 'log:message',
@@ -464,3 +470,59 @@ export interface WorkspaceInfo {
   metadata: WorkspaceMetadata
 }
 
+/**
+ * Sync Status Types
+ *
+ * These types are shared between main and renderer processes for sync operations.
+ */
+
+/**
+ * Sync status enumeration
+ *
+ * Represents the current synchronization state of the workspace.
+ */
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'conflict' | 'error' | 'offline'
+
+/**
+ * Sync status data pushed to the renderer process
+ */
+export interface SyncStatusData {
+  /** Current synchronization status */
+  readonly status: SyncStatus
+
+  /** Timestamp when the status was generated (milliseconds since epoch) */
+  readonly timestamp: number
+
+  /** Human-readable error message (only present when status is 'error') */
+  readonly message?: string
+
+  /** List of conflicting file paths (only present when status is 'conflict') */
+  readonly conflictFiles?: readonly string[]
+}
+
+
+/**
+ * Sync Result Types
+ *
+ * These types are shared between main and renderer processes for sync operations.
+ * Canonical definition — git-abstraction.types.ts re-exports from here.
+ */
+
+/**
+ * Result of a sync (pull + push) operation
+ *
+ * Used by SyncManager.forceSync() return value and SyncHandler IPC response.
+ */
+export interface SyncResult {
+  /** Whether the sync operation completed successfully */
+  readonly success: boolean
+
+  /** Whether there are file conflicts that need resolution */
+  readonly hasConflicts?: boolean
+
+  /** List of conflicting file paths */
+  readonly conflicts?: readonly string[]
+
+  /** Error message if the sync failed */
+  readonly error?: string
+}

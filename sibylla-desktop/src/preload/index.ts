@@ -14,6 +14,8 @@ import type {
   WorkspaceInfo,
   WorkspaceConfig,
   WorkspaceMetadata,
+  SyncStatusData,
+  SyncResult,
 } from '../shared/types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
 
@@ -79,6 +81,12 @@ interface ElectronAPI {
     getMetadata: () => Promise<IPCResponse<WorkspaceMetadata>>
   }
   
+  // Sync operations
+  sync: {
+    force: () => Promise<IPCResponse<SyncResult>>
+    onStatusChange: (callback: (data: SyncStatusData) => void) => () => void
+  }
+  
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
   off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => void
@@ -121,6 +129,9 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.WORKSPACE_GET_CONFIG,
   IPC_CHANNELS.WORKSPACE_UPDATE_CONFIG,
   IPC_CHANNELS.WORKSPACE_GET_METADATA,
+  // Sync operations
+  IPC_CHANNELS.SYNC_FORCE,
+  IPC_CHANNELS.SYNC_STATUS_CHANGED,
 ]
 
 /**
@@ -325,6 +336,17 @@ const api: ElectronAPI = {
     
     getMetadata: async () => {
       return await safeInvoke<WorkspaceMetadata>(IPC_CHANNELS.WORKSPACE_GET_METADATA)
+    },
+  },
+  
+  // Sync operations
+  sync: {
+    force: async () => {
+      return await safeInvoke<SyncResult>(IPC_CHANNELS.SYNC_FORCE)
+    },
+    
+    onStatusChange: (callback: (data: SyncStatusData) => void) => {
+      return api.on(IPC_CHANNELS.SYNC_STATUS_CHANGED, callback as (...args: unknown[]) => void)
     },
   },
   

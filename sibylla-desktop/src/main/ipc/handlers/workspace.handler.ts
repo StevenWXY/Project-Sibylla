@@ -19,6 +19,14 @@ import type {
 } from '../../../shared/types'
 
 /**
+ * Callback type for workspace lifecycle events
+ *
+ * Used by the main process to wire up services (e.g., SyncManager)
+ * when a workspace is opened or closed.
+ */
+export type WorkspaceLifecycleCallback = (workspaceInfo: WorkspaceInfo) => void | Promise<void>
+
+/**
  * WorkspaceHandler class
  * 
  * Handles all workspace-related IPC communications between main and renderer processes.
@@ -29,6 +37,16 @@ export class WorkspaceHandler extends IpcHandler {
   private workspaceManager: WorkspaceManager | null = null
   
   /**
+   * Lifecycle callbacks for workspace open/close events
+   *
+   * These are invoked by the handler after successful workspace open/close
+   * operations, allowing the main process to wire up dependent services
+   * (e.g., SyncManager, FileWatcher).
+   */
+  private onWorkspaceOpenedCallback: WorkspaceLifecycleCallback | null = null
+  private onWorkspaceClosedCallback: (() => void | Promise<void>) | null = null
+  
+  /**
    * Set WorkspaceManager instance
    * 
    * @param workspaceManager - WorkspaceManager instance to use for workspace operations
@@ -36,6 +54,30 @@ export class WorkspaceHandler extends IpcHandler {
   setWorkspaceManager(workspaceManager: WorkspaceManager): void {
     this.workspaceManager = workspaceManager
     logger.info('[WorkspaceHandler] WorkspaceManager instance set')
+  }
+  
+  /**
+   * Set callback for workspace opened events
+   *
+   * Called after a workspace is successfully opened (or created and set as current).
+   * The main process uses this to initialize SyncManager, GitAbstraction, etc.
+   *
+   * @param callback - Function receiving the WorkspaceInfo of the opened workspace
+   */
+  onWorkspaceOpened(callback: WorkspaceLifecycleCallback): void {
+    this.onWorkspaceOpenedCallback = callback
+  }
+  
+  /**
+   * Set callback for workspace closed events
+   *
+   * Called after a workspace is successfully closed.
+   * The main process uses this to tear down SyncManager, etc.
+   *
+   * @param callback - Function to call on workspace close
+   */
+  onWorkspaceClosed(callback: () => void | Promise<void>): void {
+    this.onWorkspaceClosedCallback = callback
   }
   
   /**
@@ -98,6 +140,10 @@ export class WorkspaceHandler extends IpcHandler {
     const workspaceInfo = await manager.createWorkspace(options)
     
     logger.info('[WorkspaceHandler] Workspace created', { workspaceId: workspaceInfo.config.workspaceId })
+    
+    // Notify lifecycle callback (workspace is set as current after creation)
+    await this.invokeOpenedCallback(workspaceInfo)
+    
     return workspaceInfo
   }
   
@@ -115,9 +161,19 @@ export class WorkspaceHandler extends IpcHandler {
     const manager = this.ensureWorkspaceManager()
     logger.info('[WorkspaceHandler] Opening workspace', { path })
     
+    // WorkspaceManager.openWorkspace auto-closes previous workspace if any
+    // We need to tear down SyncManager for the previous workspace first
+    if (manager.getCurrentWorkspace()) {
+      await this.invokeClosedCallback()
+    }
+    
     const workspaceInfo = await manager.openWorkspace(path)
     
     logger.info('[WorkspaceHandler] Workspace opened', { workspaceId: workspaceInfo.config.workspaceId })
+    
+    // Initialize SyncManager for the new workspace
+    await this.invokeOpenedCallback(workspaceInfo)
+    
     return workspaceInfo
   }
   
@@ -129,6 +185,9 @@ export class WorkspaceHandler extends IpcHandler {
   private async closeWorkspace(event: IpcMainInvokeEvent): Promise<void> {
     const manager = this.ensureWorkspaceManager()
     logger.info('[WorkspaceHandler] Closing workspace')
+    
+    // Tear down SyncManager before closing workspace
+    await this.invokeClosedCallback()
     
     await manager.closeWorkspace()
     
@@ -244,5 +303,37 @@ export class WorkspaceHandler extends IpcHandler {
     const selectedPath = result.filePaths[0] || null
     logger.info('[WorkspaceHandler] Folder selected', { path: selectedPath })
     return selectedPath
+  }
+  
+  // ─── Private Helpers ──────────────────────────────────────────────────
+  
+  /**
+   * Safely invoke the workspace opened callback
+   */
+  private async invokeOpenedCallback(workspaceInfo: WorkspaceInfo): Promise<void> {
+    if (this.onWorkspaceOpenedCallback) {
+      try {
+        await this.onWorkspaceOpenedCallback(workspaceInfo)
+      } catch (error) {
+        logger.error('[WorkspaceHandler] Error in onWorkspaceOpened callback', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  }
+  
+  /**
+   * Safely invoke the workspace closed callback
+   */
+  private async invokeClosedCallback(): Promise<void> {
+    if (this.onWorkspaceClosedCallback) {
+      try {
+        await this.onWorkspaceClosedCallback()
+      } catch (error) {
+        logger.error('[WorkspaceHandler] Error in onWorkspaceClosed callback', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
   }
 }

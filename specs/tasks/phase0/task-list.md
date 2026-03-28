@@ -47,9 +47,9 @@
 | ✅ | [PHASE0-TASK009](phase0-task009_workspace-initialization.md) | Workspace 创建与初始化 | AI | 2026-03-13 | 2026-03-13 | 6小时 | 已完成全部步骤：类型定义、模板生成系统、WorkspaceManager（创建/打开/验证/配置管理）、IPC处理器、Preload API、UI组件（CreateWorkspaceWizard/OpenWorkspaceDialog）、主应用集成、基础测试 |
 | ✅ | [PHASE0-TASK010](phase0-task010_git-abstraction-basic.md) | Git 抽象层基础实现 | AI | 2026-03-14 | 2026-03-27 | 10小时 | 已完成全部11步：安装依赖、类型定义、GitAbstraction核心类（init/config）、文件暂存与提交（stageFile/stageAll/unstageFile/commit/commitAll）、状态查询（getStatus/getFileStatus）、历史查询（getHistory/getCommit）、差异查询（getFileDiff/getCommitDiff）、工具方法（getCurrentBranch/listFiles）、单元测试60个、集成测试3个、构建验证通过 |
 | ✅ | [PHASE0-TASK011](phase0-task011_git-remote-sync.md) | Git 远程同步实现 | AI | 2026-03-27 | 2026-03-27 | 6小时 | 已完成全部8步：扩展类型定义（PushResult/PullResult/SyncResult/GitRemoteConfig/SyncProgressData/GitSyncEvents + 7个错误码）、GitAbstraction继承EventEmitter、setRemote凭证配置、push推送（含进度事件）、pull拉取（fetch+merge+冲突检测）、retryWithBackoff指数退避重试、sync统一同步、单元测试25个+集成测试2个、构建配置更新 |
-| ⬜ | [PHASE0-TASK012](phase0-task012_auto-save.md) | 自动保存机制实现 | 待分配 | - | - | - | 依赖 TASK011 |
+| ✅ | [PHASE0-TASK012](phase0-task012_auto-save.md) | 自动保存机制实现 | AI | 2026-03-28 | 2026-03-28 | 4小时 | 已完成全部10步：类型定义（SyncManagerConfig/SyncStatus/SyncStatusData/SyncManagerEvents）、IPC通道扩展（SYNC_FORCE/SYNC_STATUS_CHANGED）、SyncManager核心类（防抖auto-commit/定时sync/网络状态/生命周期管理）、SyncHandler IPC处理器、Preload sync API、主进程集成、单元测试31个、集成测试3个、TypeScript编译/Vite构建通过 |
 
-**小组进度：** 3/5 (60%)
+**小组进度：** 5/5 (100%) ✅
 
 ---
 
@@ -67,7 +67,7 @@
 
 ## 总体进度
 
-**Phase 0 总进度：** 11/15 (73%)
+**Phase 0 总进度：** 12/15 (80%)
 
 **预估总工时：** 28-40 工作日
 **实际总工时：** 65 小时
@@ -102,10 +102,10 @@
 - [x] TASK009 - Workspace 创建与初始化
 - [x] TASK010 - Git 抽象层基础实现
 - [x] TASK011 - Git 远程同步实现
-- [ ] TASK012 - 自动保存机制实现
+- [x] TASK012 - 自动保存机制实现 ✅
 
 **目标日期：** Week 3 结束  
-**实际完成：** -
+**实际完成：** 2026-03-28 ✅
 
 ### 里程碑 4：Phase 0 完成（Week 3）
 
@@ -222,6 +222,7 @@
 | 2026-03-27 | 进度更新 | TASK010 步骤9完成：编写单元测试（60个测试用例全部通过：初始化5、构造函数4、暂存6、提交5、状态8、历史8、差异8、工具4、配置5、错误处理7） | TASK010 | AI |
 | 2026-03-27 | 进度更新 | TASK010 步骤10完成：编写集成测试（3个集成测试全部通过：完整工作流、多文件操作、错误恢复） | TASK010 | AI |
 | 2026-03-27 | 完成 | TASK010 步骤11完成：构建验证（TypeScript编译无git-abstraction相关错误、ESLint检查通过、vite external配置已就绪）、标记任务完成 | TASK010 | AI |
+| 2026-03-28 | 完成 | TASK012 全部完成：自动保存机制实现（SyncManager核心类、SyncHandler IPC处理器、Preload sync API、主进程集成、单元测试31个+集成测试3个，TypeScript编译/Vite构建通过） | TASK012 | AI |
 
 **变更类型说明：**
 - 新增 - 新增任务
@@ -255,5 +256,5 @@
 
 ---
 
-**最后更新：** 2026-03-27
+**最后更新：** 2026-03-28
 **更新人：** AI

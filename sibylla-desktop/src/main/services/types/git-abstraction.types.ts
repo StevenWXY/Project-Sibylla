@@ -341,13 +341,8 @@ export interface PullResult {
   readonly error?: string
 }
 
-/** Sync operation result (combined pull + push result) */
-export interface SyncResult {
-  readonly success: boolean
-  readonly hasConflicts?: boolean
-  readonly conflicts?: readonly string[]
-  readonly error?: string
-}
+/** Sync operation result — re-exported from shared/types.ts (single source of truth) */
+export type { SyncResult } from '../../../shared/types'
 
 /** Remote repository configuration */
 export interface GitRemoteConfig {
