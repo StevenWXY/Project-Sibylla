@@ -1182,29 +1182,64 @@ describe('GitAbstraction Remote Sync', () => {
       await gitAbstraction.init()
       await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
 
-      // Mock git.fetch and git.merge
+      // Mock git.fetch, git.resolveRef, git.isDescendent, git.writeRef, and git.checkout
       const mockFetchResult = { defaultBranch: 'main', fetchHead: 'abc', fetchHeadDescription: '' }
-      const mockMergeResult = { oid: 'def', tree: 'ghi' }
       const fetchSpy = vi.spyOn(git, 'fetch').mockResolvedValueOnce(mockFetchResult as any)
-      const mergeSpy = vi.spyOn(git, 'merge').mockResolvedValueOnce(mockMergeResult as any)
+      const resolveRefSpy = vi.spyOn(git, 'resolveRef')
+      const originalResolveRef = resolveRefSpy.getMockImplementation() ?? git.resolveRef.bind(git)
+      resolveRefSpy.mockImplementation(async (args: any) => {
+        if (args.ref === 'main') return 'local-oid-abc'
+        if (args.ref === 'remotes/origin/main') return 'remote-oid-def'
+        // Fall through to real implementation for HEAD etc.
+        resolveRefSpy.mockRestore()
+        const result = await git.resolveRef(args)
+        resolveRefSpy.mockImplementation(async (a: any) => {
+          if (a.ref === 'main') return 'local-oid-abc'
+          if (a.ref === 'remotes/origin/main') return 'remote-oid-def'
+          return result
+        })
+        return result
+      })
+      const isDescSpy = vi.spyOn(git, 'isDescendent').mockResolvedValueOnce(true)
+      const writeRefSpy = vi.spyOn(git, 'writeRef').mockResolvedValueOnce(undefined)
+      const checkoutSpy = vi.spyOn(git, 'checkout').mockResolvedValueOnce(undefined)
 
       const result = await gitAbstraction.pull()
       expect(result.success).toBe(true)
       expect(fetchSpy).toHaveBeenCalled()
-      expect(mergeSpy).toHaveBeenCalled()
+      // Fast-forward path: uses isDescendent + writeRef instead of merge
+      expect(isDescSpy).toHaveBeenCalled()
 
       fetchSpy.mockRestore()
-      mergeSpy.mockRestore()
+      resolveRefSpy.mockRestore()
+      isDescSpy.mockRestore()
+      writeRefSpy.mockRestore()
+      checkoutSpy.mockRestore()
     })
 
     it('should return conflicts when merge has conflicts (mocked)', async () => {
       await gitAbstraction.init()
       await gitAbstraction.setRemote('https://example.com/repo.git', 'test-token')
 
-      // Mock git.fetch and git.merge (simulate conflicts by not returning 'tree' in mergeResult)
+      // Mock git.fetch, git.resolveRef, git.isDescendent, and git.merge
       const mockFetchResult = { defaultBranch: 'main', fetchHead: 'abc', fetchHeadDescription: '' }
       const mockMergeResult = { oid: 'def', tree: undefined } // undefined tree indicates conflicts
       const fetchSpy = vi.spyOn(git, 'fetch').mockResolvedValueOnce(mockFetchResult as any)
+      const resolveRefSpy = vi.spyOn(git, 'resolveRef')
+      resolveRefSpy.mockImplementation(async (args: any) => {
+        if (args.ref === 'main') return 'local-oid-abc'
+        if (args.ref === 'remotes/origin/main') return 'remote-oid-def'
+        resolveRefSpy.mockRestore()
+        const result = await git.resolveRef(args)
+        resolveRefSpy.mockImplementation(async (a: any) => {
+          if (a.ref === 'main') return 'local-oid-abc'
+          if (a.ref === 'remotes/origin/main') return 'remote-oid-def'
+          return result
+        })
+        return result
+      })
+      // Not a fast-forward (local has unique commits)
+      const isDescSpy = vi.spyOn(git, 'isDescendent').mockResolvedValueOnce(false)
       const mergeSpy = vi.spyOn(git, 'merge').mockResolvedValueOnce(mockMergeResult as any)
 
       const result = await gitAbstraction.pull()
@@ -1212,6 +1247,8 @@ describe('GitAbstraction Remote Sync', () => {
       expect(result.hasConflicts).toBe(true)
 
       fetchSpy.mockRestore()
+      resolveRefSpy.mockRestore()
+      isDescSpy.mockRestore()
       mergeSpy.mockRestore()
     })
 
@@ -1221,15 +1258,37 @@ describe('GitAbstraction Remote Sync', () => {
 
       const mockFetchResult = { defaultBranch: 'main', fetchHead: 'abc', fetchHeadDescription: '' }
       const fetchSpy = vi.spyOn(git, 'fetch').mockResolvedValueOnce(mockFetchResult as any)
+      const resolveRefSpy = vi.spyOn(git, 'resolveRef')
+      resolveRefSpy.mockImplementation(async (args: any) => {
+        if (args.ref === 'main') return 'local-oid-abc'
+        if (args.ref === 'remotes/origin/main') return 'remote-oid-def'
+        resolveRefSpy.mockRestore()
+        const result = await git.resolveRef(args)
+        resolveRefSpy.mockImplementation(async (a: any) => {
+          if (a.ref === 'main') return 'local-oid-abc'
+          if (a.ref === 'remotes/origin/main') return 'remote-oid-def'
+          return result
+        })
+        return result
+      })
+      // Not a fast-forward (unrelated histories)
+      const isDescSpy = vi.spyOn(git, 'isDescendent').mockResolvedValueOnce(false)
       const mergeSpy = vi.spyOn(git, 'merge').mockRejectedValueOnce(new Error('MergeNotSupportedError: Fast-forward merge is not supported.'))
+      // After merge fails, pull resets local branch to remote and checks out
+      const writeRefSpy = vi.spyOn(git, 'writeRef').mockResolvedValueOnce(undefined)
+      const checkoutSpy = vi.spyOn(git, 'checkout').mockResolvedValueOnce(undefined)
 
       const result = await gitAbstraction.pull()
-      expect(result.success).toBe(false)
-      expect(result.hasConflicts).toBe(true)
-      expect(result.error).toContain('Merge requires manual resolution')
+      // The new implementation resets to remote on MergeNotSupportedError (first-pull scenario)
+      expect(result.success).toBe(true)
+      expect(writeRefSpy).toHaveBeenCalled()
 
       fetchSpy.mockRestore()
+      resolveRefSpy.mockRestore()
+      isDescSpy.mockRestore()
       mergeSpy.mockRestore()
+      writeRefSpy.mockRestore()
+      checkoutSpy.mockRestore()
     })
   })
 
@@ -1399,18 +1458,36 @@ describe('GitAbstraction Remote Sync Integration Tests', () => {
       await ga.init()
       await ga.setRemote('https://mock-remote.git', 'fake-token')
 
-      // Mock the remote operations
+      // Mock the remote operations including the new pull flow
       const fetchSpy = vi.spyOn(git, 'fetch').mockResolvedValueOnce({ defaultBranch: 'main', fetchHead: 'abc', fetchHeadDescription: '' } as any)
-      const mergeSpy = vi.spyOn(git, 'merge').mockResolvedValueOnce({ oid: 'def', tree: 'ghi' } as any)
+      const resolveRefSpy = vi.spyOn(git, 'resolveRef')
+      resolveRefSpy.mockImplementation(async (args: any) => {
+        if (args.ref === 'main') return 'local-oid-abc'
+        if (args.ref === 'remotes/origin/main') return 'remote-oid-def'
+        resolveRefSpy.mockRestore()
+        const result = await git.resolveRef(args)
+        resolveRefSpy.mockImplementation(async (a: any) => {
+          if (a.ref === 'main') return 'local-oid-abc'
+          if (a.ref === 'remotes/origin/main') return 'remote-oid-def'
+          return result
+        })
+        return result
+      })
+      const isDescSpy = vi.spyOn(git, 'isDescendent').mockResolvedValueOnce(true)
+      const writeRefSpy = vi.spyOn(git, 'writeRef').mockResolvedValueOnce(undefined)
+      const checkoutSpy = vi.spyOn(git, 'checkout').mockResolvedValueOnce(undefined)
 
       const pullResult = await ga.pull()
 
       expect(pullResult).toHaveProperty('success', true)
       expect(fetchSpy).toHaveBeenCalled()
-      expect(mergeSpy).toHaveBeenCalled()
+      expect(isDescSpy).toHaveBeenCalled()
 
       fetchSpy.mockRestore()
-      mergeSpy.mockRestore()
+      resolveRefSpy.mockRestore()
+      isDescSpy.mockRestore()
+      writeRefSpy.mockRestore()
+      checkoutSpy.mockRestore()
     } finally {
       removeTempDir(localDir)
     }

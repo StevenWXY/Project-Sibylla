@@ -315,9 +315,12 @@ describe('Sync Workflow Integration', () => {
     })
 
     it('should verify commit exists on Gitea via API', async () => {
-      // Act — query the Gitea API for the repo's commits
-      const res = await fetch(
-        `${GITEA_BASE_URL}/api/v1/repos/${testUsername}/${testRepoName}/commits?limit=1`,
+      // Act — query the Gitea git refs API to verify the push was received.
+      // Note: Gitea does not update its internal "is_empty" flag when pushing
+      // to a repo created with auto_init:false, so the /repos/.../commits
+      // endpoint may return 409. Use git/refs + git/commits instead.
+      const refsRes = await fetch(
+        `${GITEA_BASE_URL}/api/v1/repos/${testUsername}/${testRepoName}/git/refs`,
         {
           headers: {
             Authorization: `token ${userToken}`,
@@ -325,15 +328,32 @@ describe('Sync Workflow Integration', () => {
         }
       )
 
-      // Assert
-      expect(res.ok).toBe(true)
-      const commits = (await res.json()) as Array<{
-        commit: { message: string }
+      // Assert — refs endpoint should return the pushed branch
+      expect(refsRes.ok).toBe(true)
+      const refs = (await refsRes.json()) as Array<{
+        ref: string
+        object: { sha: string }
       }>
-      expect(commits.length).toBeGreaterThan(0)
-      // Most recent commit should be our test commit
-      const messages = commits.map((c) => c.commit.message)
-      expect(messages.some((m) => m.includes('Add README for sync test'))).toBe(true)
+      expect(refs.length).toBeGreaterThan(0)
+
+      const mainRef = refs.find((r) => r.ref === 'refs/heads/main')
+      expect(mainRef).toBeDefined()
+
+      // Verify the commit message via the git/commits endpoint
+      const commitRes = await fetch(
+        `${GITEA_BASE_URL}/api/v1/repos/${testUsername}/${testRepoName}/git/commits/${mainRef!.object.sha}`,
+        {
+          headers: {
+            Authorization: `token ${userToken}`,
+          },
+        }
+      )
+
+      expect(commitRes.ok).toBe(true)
+      const commit = (await commitRes.json()) as {
+        commit: { message: string }
+      }
+      expect(commit.commit.message).toContain('Add README for sync test')
     })
   })
 

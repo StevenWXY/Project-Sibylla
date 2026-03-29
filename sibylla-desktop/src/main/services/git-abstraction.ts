@@ -1390,34 +1390,129 @@ export class GitAbstraction extends EventEmitter {
 
       logger.debug(`${LOG_PREFIX} Fetch completed, starting merge`)
 
-      // Phase 2: Merge
-      const mergeResult = await git.merge({
+      // Phase 2: Try fast-forward first, then fall back to merge
+      let mergeOid: string | undefined
+
+      // Resolve local and remote refs to check relationship
+      const localOid = await git.resolveRef({
         fs,
         dir: this.workspaceDir,
-        ours: this.defaultBranch,
-        theirs: `remotes/origin/${this.defaultBranch}`,
-        author: {
-          name: this.authorName,
-          email: this.authorEmail,
-        },
+        ref: this.defaultBranch,
       })
-
-      // Check for conflicts
-      if (mergeResult.tree === undefined) {
+      let remoteOid: string | undefined
+      try {
+        remoteOid = await git.resolveRef({
+          fs,
+          dir: this.workspaceDir,
+          ref: `remotes/origin/${this.defaultBranch}`,
+        })
+      } catch {
+        // Remote ref doesn't exist — nothing to pull
         const elapsed = Date.now() - startTime
-        logger.warn(`${LOG_PREFIX} Pull completed with conflicts`, {
+        logger.info(`${LOG_PREFIX} No remote branch found, nothing to pull`, {
           elapsedMs: elapsed,
         })
+        return { success: true }
+      }
 
-        return {
-          success: false,
-          hasConflicts: true,
-          conflicts: [],
+      // If already up-to-date, skip merge
+      if (localOid === remoteOid) {
+        const elapsed = Date.now() - startTime
+        logger.info(`${LOG_PREFIX} Already up-to-date`, { elapsedMs: elapsed })
+        return { success: true }
+      }
+
+      // Phase 2a: Check if local can be fast-forwarded to remote
+      // (remote is a descendant of local — local is simply behind)
+      let canFastForward = false
+      try {
+        canFastForward = await git.isDescendent({
+          fs,
+          dir: this.workspaceDir,
+          oid: remoteOid,
+          ancestor: localOid,
+          depth: -1,
+        })
+      } catch {
+        // isDescendent may fail on unrelated histories; treat as non-fast-forward
+        canFastForward = false
+      }
+
+      if (canFastForward) {
+        // Simple fast-forward: just update the local branch ref
+        await git.writeRef({
+          fs,
+          dir: this.workspaceDir,
+          ref: `refs/heads/${this.defaultBranch}`,
+          value: remoteOid,
+          force: true,
+        })
+
+        mergeOid = remoteOid
+        logger.debug(`${LOG_PREFIX} Fast-forward succeeded`, { oid: mergeOid })
+      } else {
+        // Phase 2b: Try merge (local has unique commits not in remote)
+        try {
+          const mergeResult = await git.merge({
+            fs,
+            dir: this.workspaceDir,
+            ours: this.defaultBranch,
+            theirs: `remotes/origin/${this.defaultBranch}`,
+            author: {
+              name: this.authorName,
+              email: this.authorEmail,
+            },
+          })
+
+          // Check for conflicts
+          if (mergeResult.tree === undefined) {
+            const elapsed = Date.now() - startTime
+            logger.warn(`${LOG_PREFIX} Pull completed with conflicts`, {
+              elapsedMs: elapsed,
+            })
+
+            return {
+              success: false,
+              hasConflicts: true,
+              conflicts: [],
+            }
+          }
+
+          mergeOid = mergeResult.oid
+        } catch (mergeError: unknown) {
+          const mergeMsg = mergeError instanceof Error ? mergeError.message : String(mergeError)
+
+          // Phase 2c: Merge not supported (unrelated histories / complex merge)
+          // This typically happens on first pull when local has auto-generated
+          // init commit that diverges from remote. Reset local branch to remote.
+          if (
+            mergeMsg.includes('Merges with conflicts are not supported') ||
+            mergeMsg.includes('MergeNotSupportedError') ||
+            mergeMsg.includes('merge not supported')
+          ) {
+            logger.info(
+              `${LOG_PREFIX} Merge not supported — resetting local branch to remote (first-pull scenario)`,
+              { error: mergeMsg }
+            )
+
+            // Point local branch directly to remote branch's HEAD
+            await git.writeRef({
+              fs,
+              dir: this.workspaceDir,
+              ref: `refs/heads/${this.defaultBranch}`,
+              value: remoteOid,
+              force: true,
+            })
+
+            mergeOid = remoteOid
+          } else {
+            throw mergeError
+          }
         }
       }
 
       // Phase 3: Checkout — update working directory to match merged HEAD
-      // git.merge() only updates the Git refs and object store, not the working tree.
+      // Merge/fast-forward only updates Git refs and object store, not the working tree.
       // Without this step, the working directory files would remain at their pre-pull state.
       await git.checkout({
         fs,
@@ -1429,7 +1524,7 @@ export class GitAbstraction extends EventEmitter {
       const elapsed = Date.now() - startTime
       logger.info(`${LOG_PREFIX} Pull completed successfully`, {
         elapsedMs: elapsed,
-        oid: mergeResult.oid,
+        oid: mergeOid,
       })
 
       return { success: true }
@@ -1444,21 +1539,6 @@ export class GitAbstraction extends EventEmitter {
       }
 
       const errorMessage = error instanceof Error ? error.message : String(error)
-
-      // Handle MergeNotSupportedError (non-fast-forward scenarios)
-      if (errorMessage.includes('MergeNotSupportedError') || errorMessage.includes('merge not supported')) {
-        logger.warn(`${LOG_PREFIX} Merge not supported — manual resolution required`, {
-          error: errorMessage,
-        })
-
-        return {
-          success: false,
-          hasConflicts: true,
-          conflicts: [],
-          error: 'Merge requires manual resolution',
-        }
-      }
-
       logger.error(`${LOG_PREFIX} Pull failed`, {
         error: errorMessage,
       })
