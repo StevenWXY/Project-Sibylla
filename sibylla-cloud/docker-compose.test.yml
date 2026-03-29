@@ -1,0 +1,100 @@
+# Sibylla Cloud Service - Integration Test Docker Configuration
+# Isolated environment with non-conflicting ports for testing
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   docker compose -f docker-compose.test.yml down -v
+
+version: '3.8'
+
+services:
+  # ============================================
+  # PostgreSQL with pgvector (Test)
+  # ============================================
+  postgres-test:
+    image: pgvector/pgvector:pg16
+    container_name: sibylla-postgres-test
+    environment:
+      POSTGRES_USER: sibylla_test
+      POSTGRES_PASSWORD: sibylla_test
+      POSTGRES_DB: sibylla_test
+    ports:
+      - "54321:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sibylla_test -d sibylla_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - sibylla-test-network
+
+  # ============================================
+  # Redis (Test)
+  # ============================================
+  redis-test:
+    image: redis:7-alpine
+    container_name: sibylla-redis-test
+    command: redis-server --appendonly no
+    ports:
+      - "63791:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    tmpfs:
+      - /data
+    networks:
+      - sibylla-test-network
+
+  # ============================================
+  # Gitea - Git Hosting Service (Test)
+  # ============================================
+  gitea-test:
+    image: gitea/gitea:1.21
+    container_name: sibylla-gitea-test
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      # Use SQLite for faster test startup (no Postgres dependency)
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__database__PATH=/data/gitea/gitea.db
+      # Server configuration
+      - GITEA__server__ROOT_URL=http://localhost:30011/
+      - GITEA__server__HTTP_PORT=3001
+      - GITEA__server__DISABLE_SSH=true
+      - GITEA__server__LFS_START_SERVER=false
+      # Security
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__security__SECRET_KEY=test-gitea-secret-key
+      # Service settings — enable registration for test user creation
+      - GITEA__service__DISABLE_REGISTRATION=false
+      - GITEA__service__REQUIRE_SIGNIN_VIEW=false
+      - GITEA__service__DEFAULT_ORG_VISIBILITY=private
+      # API settings
+      - GITEA__api__ENABLE_SWAGGER=false
+      # Admin user (created on first startup)
+      - GITEA__admin__ADMIN_NAME=sibylla-test-admin
+      - GITEA__admin__ADMIN_PASSWORD=test-admin-password-123
+      - GITEA__admin__ADMIN_EMAIL=admin@sibylla-test.local
+    ports:
+      - "30011:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/version"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    tmpfs:
+      - /data
+    networks:
+      - sibylla-test-network
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  sibylla-test-network:
+    driver: bridge

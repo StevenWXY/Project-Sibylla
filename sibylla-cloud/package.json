@@ -27,7 +27,11 @@
     "migrate:create": "node-pg-migrate create --migration-file-language sql -m migrations",
     "db:seed": "tsx seeds/dev.ts",
     "test:prepare": "npm run docker:up && npm run migrate:up",
-    "test:full": "npm run test:prepare && npm run test && npm run docker:down"
+    "test:full": "npm run test:prepare && npm run test && npm run docker:down",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:up": "docker compose -f docker-compose.test.yml up -d --wait",
+    "test:integration:down": "docker compose -f docker-compose.test.yml down -v",
+    "test:integration:full": "npm run test:integration:up && npm run test:integration; EXIT=$?; npm run test:integration:down; exit $EXIT"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
