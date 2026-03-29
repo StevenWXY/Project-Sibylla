@@ -17,9 +17,7 @@ const SENSITIVE_HEADERS = new Set([
   'proxy-authorization',
 ])
 
-export function sanitizeHeaders(
-  headers: Record<string, RequestHeaderValue>
-): SafeHeaders {
+export function sanitizeHeaders(headers: Record<string, RequestHeaderValue>): SafeHeaders {
   const sanitized: SafeHeaders = {}
   for (const [key, value] of Object.entries(headers)) {
     const normalizedKey = key.toLowerCase()

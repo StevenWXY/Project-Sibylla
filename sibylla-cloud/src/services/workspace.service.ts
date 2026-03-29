@@ -31,10 +31,7 @@ interface WorkspaceServiceDeps {
   }
   memberModel: {
     add: (input: AddWorkspaceMemberInput) => Promise<WorkspaceMember>
-    findByUserAndWorkspace: (
-      userId: string,
-      workspaceId: string
-    ) => Promise<WorkspaceMember | null>
+    findByUserAndWorkspace: (userId: string, workspaceId: string) => Promise<WorkspaceMember | null>
     updateRole: (
       userId: string,
       workspaceId: string,
@@ -93,12 +90,7 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps) {
             ownerUserId,
             ownerEmail: owner.email,
           })
-          await deps.gitService.addCollaborator(
-            workspace.id,
-            ownerUserId,
-            owner.email,
-            'admin'
-          )
+          await deps.gitService.addCollaborator(workspace.id, ownerUserId, owner.email, 'admin')
         }
 
         return workspace

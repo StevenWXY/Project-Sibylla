@@ -21,7 +21,10 @@ const envSchema = z.object({
   DB_NAME: z.string().default('sibylla'),
   DB_USER: z.string().default('sibylla'),
   DB_PASSWORD: z.string().default('sibylla'),
-  DB_SSL: z.string().transform((v) => v === 'true').default('false'),
+  DB_SSL: z
+    .string()
+    .transform((v) => v === 'true')
+    .default('false'),
 
   // JWT
   JWT_SECRET: z.string().default('dev-secret-change-in-production'),

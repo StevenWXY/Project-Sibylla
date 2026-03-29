@@ -304,10 +304,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
           })
         }
 
-        const removed = await WorkspaceService.removeMemberWithGitSync(
-          memberUserId,
-          workspaceId
-        )
+        const removed = await WorkspaceService.removeMemberWithGitSync(memberUserId, workspaceId)
         if (!removed) {
           return reply.status(404).send({
             error: {

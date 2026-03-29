@@ -8,10 +8,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify'
  * Require authentication middleware
  * Use as preHandler on protected routes
  */
-export async function requireAuth(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   try {
     await request.jwtVerify()
   } catch {
@@ -28,10 +25,7 @@ export async function requireAuth(
  * Optional authentication middleware
  * Verifies token if present, but doesn't require it
  */
-export async function optionalAuth(
-  request: FastifyRequest,
-  _reply: FastifyReply
-): Promise<void> {
+export async function optionalAuth(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   const auth = request.headers.authorization
   if (auth && auth.startsWith('Bearer ')) {
     try {

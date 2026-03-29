@@ -32,7 +32,7 @@ export class GiteaClient {
         'Content-Type': 'application/json',
       },
     }
-    
+
     if (body !== undefined) {
       init.body = JSON.stringify(body)
     }
@@ -102,18 +102,14 @@ export class GiteaClient {
     description?: string
     isPrivate?: boolean
   }): Promise<GiteaRepo> {
-    return await this.request<GiteaRepo>(
-      'POST',
-      `/admin/users/${params.owner}/repos`,
-      {
-        name: params.name,
-        description: params.description || '',
-        private: params.isPrivate ?? true,
-        auto_init: true,
-        default_branch: 'main',
-        readme: 'Default',
-      }
-    )
+    return await this.request<GiteaRepo>('POST', `/admin/users/${params.owner}/repos`, {
+      name: params.name,
+      description: params.description || '',
+      private: params.isPrivate ?? true,
+      auto_init: true,
+      default_branch: 'main',
+      readme: 'Default',
+    })
   }
 
   /**
@@ -145,25 +141,16 @@ export class GiteaClient {
     username: string,
     permission: 'read' | 'write' | 'admin'
   ): Promise<void> {
-    await this.request<void>(
-      'PUT',
-      `/repos/${owner}/${repo}/collaborators/${username}`,
-      { permission }
-    )
+    await this.request<void>('PUT', `/repos/${owner}/${repo}/collaborators/${username}`, {
+      permission,
+    })
   }
 
   /**
    * Remove collaborator from repository
    */
-  async removeCollaborator(
-    owner: string,
-    repo: string,
-    username: string
-  ): Promise<void> {
-    await this.request<void>(
-      'DELETE',
-      `/repos/${owner}/${repo}/collaborators/${username}`
-    )
+  async removeCollaborator(owner: string, repo: string, username: string): Promise<void> {
+    await this.request<void>('DELETE', `/repos/${owner}/${repo}/collaborators/${username}`)
   }
 
   // ========== Access Token Management ==========
@@ -171,18 +158,11 @@ export class GiteaClient {
   /**
    * Create access token for user
    */
-  async createAccessToken(
-    username: string,
-    tokenName: string
-  ): Promise<GiteaAccessToken> {
-    return await this.request<GiteaAccessToken>(
-      'POST',
-      `/users/${username}/tokens`,
-      {
-        name: tokenName,
-        scopes: ['write:repository'],
-      }
-    )
+  async createAccessToken(username: string, tokenName: string): Promise<GiteaAccessToken> {
+    return await this.request<GiteaAccessToken>('POST', `/users/${username}/tokens`, {
+      name: tokenName,
+      scopes: ['write:repository'],
+    })
   }
 
   /**

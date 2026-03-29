@@ -37,19 +37,16 @@ export async function jwtPlugin(app: FastifyInstance): Promise<void> {
   })
 
   // Decorate with authentication method
-  app.decorate(
-    'authenticate',
-    async function (request: FastifyRequest, reply: FastifyReply) {
-      try {
-        await request.jwtVerify()
-      } catch {
-        reply.status(401).send({
-          error: {
-            code: 'UNAUTHORIZED',
-            message: 'Invalid or expired token',
-          },
-        })
-      }
+  app.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
+    try {
+      await request.jwtVerify()
+    } catch {
+      reply.status(401).send({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid or expired token',
+        },
+      })
     }
-  )
+  })
 }

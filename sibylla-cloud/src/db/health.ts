@@ -47,10 +47,7 @@ export async function checkDatabaseHealth(): Promise<DatabaseHealth> {
  * Wait for database to be ready (for startup)
  * Retries connection until successful or max retries reached
  */
-export async function waitForDatabase(
-  maxRetries = 30,
-  retryIntervalMs = 1000
-): Promise<boolean> {
+export async function waitForDatabase(maxRetries = 30, retryIntervalMs = 1000): Promise<boolean> {
   for (let i = 0; i < maxRetries; i++) {
     const health = await checkDatabaseHealth()
 

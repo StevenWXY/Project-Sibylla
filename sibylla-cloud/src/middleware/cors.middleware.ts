@@ -15,10 +15,7 @@ interface CorsRuntimeOptions {
   maxAge: number
 }
 
-export function resolveCorsOptions(
-  corsOrigin: string,
-  isProduction: boolean
-): CorsRuntimeOptions {
+export function resolveCorsOptions(corsOrigin: string, isProduction: boolean): CorsRuntimeOptions {
   const origins = corsOrigin
     .split(',')
     .map((origin) => origin.trim())

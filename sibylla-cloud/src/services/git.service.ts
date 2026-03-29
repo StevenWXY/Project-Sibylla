@@ -26,9 +26,7 @@ function mapToGitRepoInfo(row: Record<string, unknown>): GitRepoInfo {
   }
 }
 
-export function mapRoleToPermission(
-  role: WorkspaceMemberRole
-): 'read' | 'write' | 'admin' {
+export function mapRoleToPermission(role: WorkspaceMemberRole): 'read' | 'write' | 'admin' {
   if (role === 'admin') {
     return 'admin'
   }
@@ -183,12 +181,7 @@ export const GitService = {
     const permission = mapRoleToPermission(role)
 
     // Add collaborator in Gitea
-    await giteaClient.addCollaborator(
-      ownerName,
-      repoNameStr,
-      giteaUsername,
-      permission
-    )
+    await giteaClient.addCollaborator(ownerName, repoNameStr, giteaUsername, permission)
 
     logger.info({ workspaceId, userId, role }, 'Added collaborator to repository')
   },
@@ -213,11 +206,7 @@ export const GitService = {
     const giteaUsername = this.generateGiteaUsername(userId)
 
     try {
-      await giteaClient.removeCollaborator(
-        ownerName,
-        repoNameStr,
-        giteaUsername
-      )
+      await giteaClient.removeCollaborator(ownerName, repoNameStr, giteaUsername)
     } catch (error) {
       logger.error({ error, workspaceId, userId }, 'Failed to remove collaborator')
     }
@@ -234,15 +223,10 @@ export const GitService = {
     const tokenName = `sibylla-${nanoid(8)}`
 
     // Create token in Gitea
-    const giteaToken = await giteaClient.createAccessToken(
-      giteaUsername,
-      tokenName
-    )
+    const giteaToken = await giteaClient.createAccessToken(giteaUsername, tokenName)
 
     // Store token info (hash only)
-    const tokenHash = createHash('sha256')
-      .update(giteaToken.sha1)
-      .digest('hex')
+    const tokenHash = createHash('sha256').update(giteaToken.sha1).digest('hex')
 
     await sql`
       INSERT INTO git_access_tokens (user_id, gitea_token_id, token_name, token_hash)
@@ -272,10 +256,7 @@ export const GitService = {
     for (const token of tokens) {
       const record = token as Record<string, unknown>
       try {
-        await giteaClient.deleteAccessToken(
-          giteaUsername,
-          record['gitea_token_id'] as number
-        )
+        await giteaClient.deleteAccessToken(giteaUsername, record['gitea_token_id'] as number)
       } catch (error) {
         logger.error({ error, userId }, 'Failed to delete Gitea token')
       }

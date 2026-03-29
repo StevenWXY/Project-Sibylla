@@ -116,10 +116,7 @@ export const AuthService = {
   /**
    * Refresh access token using refresh token
    */
-  async refreshAccessToken(
-    app: FastifyInstance,
-    refreshToken: string
-  ): Promise<AuthTokens> {
+  async refreshAccessToken(app: FastifyInstance, refreshToken: string): Promise<AuthTokens> {
     // Parse refresh token
     const [tokenId, token] = refreshToken.split('.')
     if (!tokenId || !token) {
