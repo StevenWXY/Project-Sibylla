@@ -76,8 +76,8 @@ services:
       # API settings
       - GITEA__api__ENABLE_SWAGGER=false
     # NOTE: Admin user is NOT auto-created by Gitea env vars.
-    # After the container is healthy, run:
-    #   docker exec sibylla-gitea-test gitea admin user create \
+    # After the container is healthy, run (must use --user git to avoid root error):
+    #   docker exec --user git sibylla-gitea-test gitea admin user create \
     #     --admin --username sibylla-test-admin \
     #     --password test-admin-password-123 \
     #     --email admin@sibylla-test.local --must-change-password=false
