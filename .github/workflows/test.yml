@@ -46,14 +46,14 @@ jobs:
             sleep 2
           done
       
-      - name: Run tests (Unit only on Mac/Win, Unit+Integration on Ubuntu)
+      - name: Run unit tests
         working-directory: sibylla-desktop
-        run: |
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            npm test
-          else
-            npm test tests/unit
-          fi
+        run: npm test
+      
+      - name: Run integration tests
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: sibylla-desktop
+        run: npm run test:integration
       
       - name: Stop Gitea
         if: always() && matrix.os == 'ubuntu-latest'
