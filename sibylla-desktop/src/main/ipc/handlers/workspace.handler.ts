@@ -182,7 +182,7 @@ export class WorkspaceHandler extends IpcHandler {
    *
    * @param event - IPC event
    */
-  private async closeWorkspace(event: IpcMainInvokeEvent): Promise<void> {
+  private async closeWorkspace(_event: IpcMainInvokeEvent): Promise<void> {
     const manager = this.ensureWorkspaceManager()
     logger.info('[WorkspaceHandler] Closing workspace')
     
@@ -200,7 +200,7 @@ export class WorkspaceHandler extends IpcHandler {
    * @param event - IPC event
    * @returns Current workspace info or null if no workspace is open
    */
-  private async getCurrentWorkspace(event: IpcMainInvokeEvent): Promise<WorkspaceInfo | null> {
+  private async getCurrentWorkspace(_event: IpcMainInvokeEvent): Promise<WorkspaceInfo | null> {
     const manager = this.ensureWorkspaceManager()
     const workspace = manager.getCurrentWorkspace()
     
@@ -236,7 +236,7 @@ export class WorkspaceHandler extends IpcHandler {
    * @param event - IPC event
    * @returns WorkspaceConfig
    */
-  private async getConfig(event: IpcMainInvokeEvent): Promise<WorkspaceConfig> {
+  private async getConfig(_event: IpcMainInvokeEvent): Promise<WorkspaceConfig> {
     const manager = this.ensureWorkspaceManager()
     logger.info('[WorkspaceHandler] Getting workspace config')
     
@@ -270,7 +270,7 @@ export class WorkspaceHandler extends IpcHandler {
    * @param event - IPC event
    * @returns WorkspaceMetadata
    */
-  private async getMetadata(event: IpcMainInvokeEvent): Promise<WorkspaceMetadata> {
+  private async getMetadata(_event: IpcMainInvokeEvent): Promise<WorkspaceMetadata> {
     const manager = this.ensureWorkspaceManager()
     logger.info('[WorkspaceHandler] Getting workspace metadata')
     
@@ -286,7 +286,7 @@ export class WorkspaceHandler extends IpcHandler {
    * @param event - IPC event
    * @returns Selected folder path or null if cancelled
    */
-  private async selectFolder(event: IpcMainInvokeEvent): Promise<string | null> {
+  private async selectFolder(_event: IpcMainInvokeEvent): Promise<string | null> {
     logger.info('[WorkspaceHandler] Opening folder selection dialog')
     
     const result = await dialog.showOpenDialog({

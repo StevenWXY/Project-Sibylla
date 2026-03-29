@@ -37,7 +37,7 @@ export interface DirectoryNode {
  * @param workspacePath - Absolute path to workspace root
  * @returns Array of directory nodes to create
  */
-export function getDirectoryStructure(workspacePath: string): DirectoryNode[] {
+export function getDirectoryStructure(_workspacePath: string): DirectoryNode[] {
   return [
     // System directories
     { path: WORKSPACE_STRUCTURE.SYSTEM_DIR, type: 'directory' },
@@ -303,7 +303,7 @@ export function generateTasksTemplate(options: CreateWorkspaceOptions): string {
  * @param options - Workspace creation options
  * @returns changelog.md content
  */
-export function generateChangelogTemplate(options: CreateWorkspaceOptions): string {
+export function generateChangelogTemplate(_options: CreateWorkspaceOptions): string {
   const today = new Date().toISOString().split('T')[0]
   
   return `# 变更日志
@@ -340,7 +340,7 @@ export function generateChangelogTemplate(options: CreateWorkspaceOptions): stri
  * @param options - Workspace creation options
  * @returns tokenomics.md content
  */
-export function generateTokenomicsTemplate(options: CreateWorkspaceOptions): string {
+export function generateTokenomicsTemplate(_options: CreateWorkspaceOptions): string {
   return `# 积分经济模型
 
 > 本文档定义团队的积分规则和分配机制。
@@ -381,7 +381,7 @@ export function generateTokenomicsTemplate(options: CreateWorkspaceOptions): str
  * @param options - Workspace creation options
  * @returns skills/_index.md content
  */
-export function generateSkillsIndexTemplate(options: CreateWorkspaceOptions): string {
+export function generateSkillsIndexTemplate(_options: CreateWorkspaceOptions): string {
   return `# Skills 索引
 
 > 本文档索引团队共享的所有 Skills。

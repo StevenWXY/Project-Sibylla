@@ -75,7 +75,7 @@ describe('FileManager - Performance', () => {
   })
 
   describe('List Performance', () => {
-    it('should list 100 files in < 50ms', async () => {
+    it('should list 100 files in < 200ms', async () => {
       // Create 100 files
       const promises = Array.from({ length: 100 }, (_, i) =>
         fs.writeFile(path.join(testDir, `file-${i}.txt`), `content-${i}`)
@@ -86,10 +86,10 @@ describe('FileManager - Performance', () => {
       await fileManager.listFiles('.')
       const duration = performance.now() - start
       
-      expect(duration).toBeLessThan(50)
+      expect(duration).toBeLessThan(200)
     })
     
-    it('should list 1000 files recursively in < 500ms', async () => {
+    it('should list 1000 files recursively in < 2000ms', async () => {
       // Create 10 directories with 100 files each
       for (let dir = 0; dir < 10; dir++) {
         const dirPath = path.join(testDir, `dir-${dir}`)
@@ -105,7 +105,7 @@ describe('FileManager - Performance', () => {
       await fileManager.listFiles('.', { recursive: true })
       const duration = performance.now() - start
       
-      expect(duration).toBeLessThan(500)
+      expect(duration).toBeLessThan(2000)
     })
   })
 

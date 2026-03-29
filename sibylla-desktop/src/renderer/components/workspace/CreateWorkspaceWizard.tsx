@@ -3,7 +3,7 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Checkbox } from '../ui/Checkbox'
-import { ChevronLeft, ChevronRight, FolderOpen, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderOpen } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import type { CreateWorkspaceOptions, WorkspaceInfo } from '../../../shared/types'
 

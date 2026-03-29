@@ -28,7 +28,7 @@ export class FileWatcher {
     this.workspaceRoot = workspaceRoot
     // Build ignored patterns: hidden files + provided paths
     this.ignoredPaths = [
-      /(^|[\/\\])\../, // Hidden files (starting with .)
+      /(^|[/\\])\../, // Hidden files (starting with .)
       ...ignoredPaths.map(p => `**/${p}/**`)
     ]
     logger.info('[FileWatcher] Initialized', {

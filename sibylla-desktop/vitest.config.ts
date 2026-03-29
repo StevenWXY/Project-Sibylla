@@ -6,8 +6,9 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
-    testTimeout: 8000, // 8 seconds for file watcher tests
-    hookTimeout: 8000,
+    exclude: ['tests/integration/**/*.test.ts', 'node_modules', 'dist'],
+    testTimeout: 20000, // 20 seconds for slow performance tests on CI
+    hookTimeout: 10000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

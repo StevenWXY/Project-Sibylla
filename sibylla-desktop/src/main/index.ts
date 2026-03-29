@@ -1,6 +1,4 @@
 import { app, BrowserWindow } from 'electron'
-import * as path from 'path'
-import { promises as fs } from 'fs'
 import { createMainWindow } from './window'
 import { ipcManager } from './ipc'
 import { TestHandler } from './ipc/handlers/test.handler'

@@ -337,13 +337,13 @@ describe('FileHandler IPC Integration', () => {
       await handler!(mockEvent)
       
       // Wait for watcher to be ready
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 1000))
       
       // Create a file to trigger event
       await fileManager.writeFile('watch-test.txt', 'Watch me')
       
       // Wait for event to be processed
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 1500))
       
       // Verify event was pushed
       expect(events.length).toBeGreaterThan(0)

@@ -30,8 +30,6 @@ import {
   WorkspaceError,
   WorkspaceErrorCode,
   WORKSPACE_STRUCTURE,
-  DEFAULT_WORKSPACE_CONFIG,
-  DEFAULT_POINTS_CONFIG,
 } from './types/workspace.types'
 import {
   getDirectoryStructure,
