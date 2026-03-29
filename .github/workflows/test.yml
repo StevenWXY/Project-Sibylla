@@ -45,6 +45,36 @@ jobs:
             fi
             sleep 2
           done
+
+      - name: Create Gitea admin user
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          echo "Creating Gitea admin user..."
+          docker exec sibylla-gitea-test gitea admin user create \
+            --admin \
+            --username sibylla-test-admin \
+            --password test-admin-password-123 \
+            --email admin@sibylla-test.local \
+            --must-change-password=false || true
+
+          echo "Verifying admin user..."
+          BASIC_AUTH=$(echo -n 'sibylla-test-admin:test-admin-password-123' | base64)
+          for i in {1..15}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Basic ${BASIC_AUTH}" \
+              http://127.0.0.1:30011/api/v1/user)
+            if [ "$STATUS" = "200" ]; then
+              echo "Admin user is ready!"
+              break
+            fi
+            echo "Attempt $i: admin not ready yet (HTTP $STATUS), retrying..."
+            sleep 2
+          done
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: Admin user not available after retries"
+            docker logs sibylla-gitea-test
+            exit 1
+          fi
       
       - name: Run unit tests
         working-directory: sibylla-desktop

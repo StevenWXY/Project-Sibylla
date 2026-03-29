@@ -75,10 +75,13 @@ services:
       - GITEA__service__DEFAULT_ORG_VISIBILITY=private
       # API settings
       - GITEA__api__ENABLE_SWAGGER=false
-      # Admin user (created on first startup)
-      - GITEA__admin__ADMIN_NAME=sibylla-test-admin
-      - GITEA__admin__ADMIN_PASSWORD=test-admin-password-123
-      - GITEA__admin__ADMIN_EMAIL=admin@sibylla-test.local
+    # NOTE: Admin user is NOT auto-created by Gitea env vars.
+    # After the container is healthy, run:
+    #   docker exec sibylla-gitea-test gitea admin user create \
+    #     --admin --username sibylla-test-admin \
+    #     --password test-admin-password-123 \
+    #     --email admin@sibylla-test.local --must-change-password=false
+    # CI does this automatically in the workflow.
     ports:
       - "30011:3001"
     healthcheck:
