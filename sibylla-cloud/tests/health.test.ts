@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { buildApp } from '../src/app.js'
+import { closeDatabaseConnection } from '../src/db/client.js'
 import type { FastifyInstance } from 'fastify'
 
 describe('Health Check Endpoints', () => {
@@ -17,7 +18,13 @@ describe('Health Check Endpoints', () => {
   })
 
   afterAll(async () => {
-    await app.close()
+    try {
+      if (app) {
+        await app.close()
+      }
+    } finally {
+      await closeDatabaseConnection()
+    }
   })
 
   describe('GET /api/v1/health', () => {
