@@ -331,12 +331,13 @@ describe('Auth Workflow Integration', () => {
         url: '/api/v1/auth/login',
         payload: { email: testEmail, password: testPassword },
       })
-      const { refreshToken } = loginRes.json<LoginResponse>()
+      const { accessToken, refreshToken } = loginRes.json<LoginResponse>()
 
-      // Act — logout
+      // Act — logout (requires valid JWT in Authorization header)
       const logoutRes = await app.inject({
         method: 'POST',
         url: '/api/v1/auth/logout',
+        headers: { authorization: `Bearer ${accessToken}` },
         payload: { refreshToken },
       })
       expect(logoutRes.statusCode).toBe(204)
