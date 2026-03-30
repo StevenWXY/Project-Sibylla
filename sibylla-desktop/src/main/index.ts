@@ -6,10 +6,14 @@ import { SystemHandler } from './ipc/handlers/system.handler'
 import { FileHandler } from './ipc/handlers/file.handler'
 import { WorkspaceHandler } from './ipc/handlers/workspace.handler'
 import { SyncHandler } from './ipc/handlers/sync.handler'
+import { AuthHandler } from './ipc/handlers/auth.handler'
 import { FileManager } from './services/file-manager'
 import { WorkspaceManager } from './services/workspace-manager'
 import { GitAbstraction } from './services/git-abstraction'
 import { SyncManager } from './services/sync-manager'
+import { FileWatcher } from './services/file-watcher'
+import { AuthClient } from './services/auth-client'
+import { TokenStorage } from './services/token-storage'
 import type { WorkspaceInfo } from '../shared/types'
 
 // Keep reference to main window to prevent garbage collection
@@ -17,6 +21,9 @@ let mainWindow: BrowserWindow | null = null
 
 // Keep reference to SyncManager for cleanup on quit
 let syncManager: SyncManager | null = null
+
+// Keep reference to FileWatcher for cleanup on quit
+let fileWatcher: FileWatcher | null = null
 
 // Enable single instance lock to prevent multiple app instances
 const gotTheLock = app.requestSingleInstanceLock()
@@ -60,20 +67,30 @@ if (!gotTheLock) {
       // Create SyncHandler
       const syncHandler = new SyncHandler()
       
+      // Create AuthHandler with AuthClient and TokenStorage
+      const authClient = new AuthClient()
+      const tokenStorage = new TokenStorage()
+      const authHandler = new AuthHandler(authClient, tokenStorage)
+      
       // ─── Workspace lifecycle hooks ────────────────────────────────
       // Wire up SyncManager initialization/teardown to workspace open/close
       
       workspaceHandler.onWorkspaceOpened(async (workspaceInfo: WorkspaceInfo) => {
         const workspacePath = workspaceInfo.metadata.path
         
-        console.log('[Main] Initializing SyncManager for workspace', { path: workspacePath })
+        console.log('[Main] Initializing services for workspace', { path: workspacePath })
         
         try {
+          // Resolve author info from auth (if available), fallback to workspace owner
+          const cachedUser = authHandler.getCachedUser()
+          const authorName = cachedUser?.name ?? 'Sibylla User'
+          const authorEmail = cachedUser?.email ?? 'user@sibylla.local'
+          
           // Create GitAbstraction for this workspace
           const gitAbstraction = new GitAbstraction({
             workspaceDir: workspacePath,
-            authorName: 'Sibylla User',   // TODO: use actual user info from auth
-            authorEmail: 'user@sibylla.local',
+            authorName,
+            authorEmail,
           })
           
           // Initialize Git repo if not already initialized
@@ -86,6 +103,11 @@ if (!gotTheLock) {
               throw error
             }
           }
+          
+          // ── S3 FIX: Inject FileManager into FileHandler ──
+          // Update FileManager root to workspace path and inject into FileHandler
+          await fileManager.updateWorkspaceRoot(workspacePath)
+          fileHandler.setFileManager(fileManager)
           
           // Create and start SyncManager
           const syncInterval = workspaceInfo.config.syncInterval ?? 30
@@ -105,14 +127,37 @@ if (!gotTheLock) {
           // Start automatic sync
           syncManager.start()
           
-          console.log('[Main] SyncManager started for workspace', { path: workspacePath })
+          // ── S4 FIX: Wire FileWatcher → SyncManager.notifyFileChanged() ──
+          // Stop previous FileWatcher if any
+          if (fileWatcher) {
+            await fileWatcher.stop()
+            fileWatcher = null
+          }
+          
+          fileWatcher = new FileWatcher(workspacePath)
+          const currentSyncManager = syncManager  // capture for closure
+          await fileWatcher.start((event) => {
+            // Only notify on file content changes (add/change/unlink), not directory events
+            if (event.type === 'add' || event.type === 'change' || event.type === 'unlink') {
+              currentSyncManager.notifyFileChanged(event.path)
+            }
+          })
+          
+          console.log('[Main] All services started for workspace', { path: workspacePath })
         } catch (error) {
-          console.error('[Main] Failed to initialize SyncManager', error)
+          console.error('[Main] Failed to initialize workspace services', error)
           // Non-fatal: workspace can still be used without sync
         }
       })
       
-      workspaceHandler.onWorkspaceClosed(() => {
+      workspaceHandler.onWorkspaceClosed(async () => {
+        // Stop FileWatcher
+        if (fileWatcher) {
+          console.log('[Main] Stopping FileWatcher for workspace close')
+          await fileWatcher.stop()
+          fileWatcher = null
+        }
+        
         if (syncManager) {
           console.log('[Main] Stopping SyncManager for workspace close')
           syncManager.stop()
@@ -127,6 +172,7 @@ if (!gotTheLock) {
         fileHandler,
         workspaceHandler,
         syncHandler,
+        authHandler,
       ]
       
       for (const handler of handlers) {
@@ -165,6 +211,13 @@ if (!gotTheLock) {
   // Handle app quit
   app.on('will-quit', () => {
     console.log('[Main] Application is quitting')
+    // Stop FileWatcher if running
+    if (fileWatcher) {
+      fileWatcher.stop().catch((err: unknown) => {
+        console.error('[Main] Error stopping FileWatcher on quit', err)
+      })
+      fileWatcher = null
+    }
     // Stop SyncManager if running
     if (syncManager) {
       syncManager.stop()

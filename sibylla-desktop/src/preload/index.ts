@@ -16,6 +16,9 @@ import type {
   WorkspaceMetadata,
   SyncStatusData,
   SyncResult,
+  AuthLoginInput,
+  AuthRegisterInput,
+  AuthSession,
 } from '../shared/types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
 
@@ -87,6 +90,15 @@ interface ElectronAPI {
     onStatusChange: (callback: (data: SyncStatusData) => void) => () => void
   }
   
+  // Auth operations
+  auth: {
+    login: (input: AuthLoginInput) => Promise<IPCResponse<AuthSession>>
+    register: (input: AuthRegisterInput) => Promise<IPCResponse<AuthSession>>
+    logout: () => Promise<IPCResponse<void>>
+    getCurrentUser: () => Promise<IPCResponse<AuthSession>>
+    refreshToken: () => Promise<IPCResponse<AuthSession>>
+  }
+  
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
   off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => void
@@ -132,6 +144,12 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   // Sync operations
   IPC_CHANNELS.SYNC_FORCE,
   IPC_CHANNELS.SYNC_STATUS_CHANGED,
+  // Auth operations
+  IPC_CHANNELS.AUTH_LOGIN,
+  IPC_CHANNELS.AUTH_REGISTER,
+  IPC_CHANNELS.AUTH_LOGOUT,
+  IPC_CHANNELS.AUTH_GET_CURRENT_USER,
+  IPC_CHANNELS.AUTH_REFRESH_TOKEN,
 ]
 
 /**
@@ -347,6 +365,29 @@ const api: ElectronAPI = {
     
     onStatusChange: (callback: (data: SyncStatusData) => void) => {
       return api.on(IPC_CHANNELS.SYNC_STATUS_CHANGED, callback as (...args: unknown[]) => void)
+    },
+  },
+  
+  // Auth operations
+  auth: {
+    login: async (input: AuthLoginInput) => {
+      return await safeInvoke<AuthSession>(IPC_CHANNELS.AUTH_LOGIN, input)
+    },
+    
+    register: async (input: AuthRegisterInput) => {
+      return await safeInvoke<AuthSession>(IPC_CHANNELS.AUTH_REGISTER, input)
+    },
+    
+    logout: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.AUTH_LOGOUT)
+    },
+    
+    getCurrentUser: async () => {
+      return await safeInvoke<AuthSession>(IPC_CHANNELS.AUTH_GET_CURRENT_USER)
+    },
+    
+    refreshToken: async () => {
+      return await safeInvoke<AuthSession>(IPC_CHANNELS.AUTH_REFRESH_TOKEN)
     },
   },
   

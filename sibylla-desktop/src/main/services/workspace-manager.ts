@@ -17,6 +17,7 @@
 import * as path from 'path'
 import { randomBytes } from 'crypto'
 import { FileManager } from './file-manager'
+import { GitAbstraction } from './git-abstraction'
 import { FileOperationContext } from './types/file-manager.types'
 import type {
   WorkspaceConfig,
@@ -109,8 +110,23 @@ export class WorkspaceManager {
       await this.generateInitialDocuments(options.path, options)
       logger.info('Generated initial documents')
 
-      // Step 7: Initialize Git repository (optional, will be implemented in TASK010)
-      // TODO: Initialize Git repository when Git abstraction layer is ready
+      // Step 7: Initialize Git repository
+      try {
+        const gitAbstraction = new GitAbstraction({
+          workspaceDir: options.path,
+          authorName: options.owner.name,
+          authorEmail: options.owner.email,
+        })
+        await gitAbstraction.init()
+        // Commit all generated workspace files
+        await gitAbstraction.commitAll('Initial workspace setup')
+        logger.info('Git repository initialized and initial commit created')
+      } catch (gitError: unknown) {
+        // Git init failure is non-fatal: workspace is usable without Git
+        logger.warn('Failed to initialize Git repository during workspace creation', {
+          error: gitError instanceof Error ? gitError.message : String(gitError),
+        })
+      }
 
       // Step 8: Create remote workspace (optional, requires cloud sync)
       if (options.enableCloudSync) {

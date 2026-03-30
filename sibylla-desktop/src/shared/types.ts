@@ -108,6 +108,18 @@ export const IPC_CHANNELS = {
   /** Main → Renderer: Broadcast sync status changes */
   SYNC_STATUS_CHANGED: 'sync:status-changed',
 
+  // Auth operations
+  /** Login with email/password */
+  AUTH_LOGIN: 'auth:login',
+  /** Register a new account */
+  AUTH_REGISTER: 'auth:register',
+  /** Logout and revoke tokens */
+  AUTH_LOGOUT: 'auth:logout',
+  /** Get currently authenticated user */
+  AUTH_GET_CURRENT_USER: 'auth:get-current-user',
+  /** Refresh the access token using stored refresh token */
+  AUTH_REFRESH_TOKEN: 'auth:refresh-token',
+
   // Event notifications (main process → renderer process)
   NOTIFICATION: 'notification',
   LOG_MESSAGE: 'log:message',
@@ -525,4 +537,69 @@ export interface SyncResult {
 
   /** Error message if the sync failed */
   readonly error?: string
+}
+
+
+/**
+ * Auth Types
+ *
+ * These types are shared between main and renderer processes for authentication.
+ */
+
+/**
+ * Login credentials
+ */
+export interface AuthLoginInput {
+  /** User email address */
+  readonly email: string
+  /** User password */
+  readonly password: string
+}
+
+/**
+ * Registration input
+ */
+export interface AuthRegisterInput {
+  /** User email address */
+  readonly email: string
+  /** User password */
+  readonly password: string
+  /** User display name */
+  readonly name: string
+}
+
+/**
+ * Authenticated user information
+ */
+export interface AuthUser {
+  /** User unique identifier */
+  readonly id: string
+  /** User email address */
+  readonly email: string
+  /** User display name */
+  readonly name: string
+  /** User avatar URL */
+  readonly avatarUrl?: string
+}
+
+/**
+ * Auth token pair returned from login/register
+ */
+export interface AuthTokens {
+  /** JWT access token */
+  readonly accessToken: string
+  /** Refresh token for token rotation */
+  readonly refreshToken: string
+  /** Access token expiry in seconds */
+  readonly expiresIn: number
+}
+
+/**
+ * Auth session state exposed to renderer
+ */
+export interface AuthSession {
+  /** Whether the user is authenticated */
+  readonly isAuthenticated: boolean
+  /** Currently authenticated user (null if not authenticated) */
+  readonly user: AuthUser | null
 }

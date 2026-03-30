@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { ThemeProvider } from './components/providers/ThemeProvider'
 import { AppLayout } from './components/layout/AppLayout'
 import { ComponentShowcase } from './pages/ComponentShowcase'
@@ -7,6 +7,7 @@ import { LayoutShowcase } from './pages/LayoutShowcase'
 import UIComponentsShowcase from './pages/UIComponentsShowcase'
 import { CreateWorkspaceWizard } from './components/workspace/CreateWorkspaceWizard'
 import { OpenWorkspaceDialog } from './components/workspace/OpenWorkspaceDialog'
+import { LoginPage } from './components/auth/LoginPage'
 import { useAppStore } from './store/appStore'
 
 type Page = 'home' | 'components' | 'theme' | 'layout' | 'ui-components' | 'workspace'
@@ -15,7 +16,61 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home')
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [showOpenDialog, setShowOpenDialog] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
   const currentWorkspace = useAppStore((state) => state.currentWorkspace)
+  const isAuthenticated = useAppStore((state) => state.isAuthenticated)
+  const setAuthenticated = useAppStore((state) => state.setAuthenticated)
+
+  // Check existing session on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await window.electronAPI.auth.getCurrentUser()
+        if (response.success && response.data?.isAuthenticated && response.data.user) {
+          setAuthenticated(true, response.data.user)
+        }
+      } catch {
+        // Auth check failed — user needs to login
+      } finally {
+        setAuthChecked(true)
+      }
+    }
+    checkAuth()
+  }, [setAuthenticated])
+
+  // Show loading until auth check completes
+  if (!authChecked) {
+    return (
+      <ThemeProvider>
+        <div className="flex min-h-screen items-center justify-center bg-notion-bg-primary dark:bg-gray-900">
+          <div className="text-notion-text-secondary dark:text-gray-400">Loading...</div>
+        </div>
+      </ThemeProvider>
+    )
+  }
+
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <ThemeProvider>
+        <LoginPage
+          onAuthSuccess={async () => {
+            try {
+              const response = await window.electronAPI.auth.getCurrentUser()
+              if (response.success && response.data?.isAuthenticated && response.data.user) {
+                setAuthenticated(true, response.data.user)
+              } else {
+                // Dev skip: mark as authenticated without user data
+                setAuthenticated(true, null)
+              }
+            } catch {
+              setAuthenticated(true, null)
+            }
+          }}
+        />
+      </ThemeProvider>
+    )
+  }
 
   const renderPage = () => {
     switch (currentPage) {

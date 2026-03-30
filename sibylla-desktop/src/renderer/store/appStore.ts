@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
-import type { WorkspaceInfo } from '../../shared/types'
+import type { WorkspaceInfo, AuthUser } from '../../shared/types'
 
 /**
  * Theme type definition
@@ -20,6 +20,12 @@ export interface FileInfo {
  * Application state interface
  */
 interface AppState {
+  // ========== Auth ==========
+  isAuthenticated: boolean
+  currentUser: AuthUser | null
+  setAuthenticated: (isAuthenticated: boolean, user: AuthUser | null) => void
+  clearAuth: () => void
+  
   // ========== Theme ==========
   theme: Theme
   setTheme: (theme: Theme) => void
@@ -74,6 +80,8 @@ interface AppState {
  * Initial state
  */
 const initialState = {
+  isAuthenticated: false,
+  currentUser: null as AuthUser | null,
   theme: 'system' as Theme,
   sidebarCollapsed: false,
   sidebarWidth: 256,
@@ -103,6 +111,19 @@ export const useAppStore = create<AppState>()(
     persist(
       (set, get) => ({
         ...initialState,
+        
+        // ========== Auth Actions ==========
+        setAuthenticated: (isAuthenticated, user) => set(
+          { isAuthenticated, currentUser: user },
+          false,
+          'setAuthenticated'
+        ),
+        
+        clearAuth: () => set(
+          { isAuthenticated: false, currentUser: null },
+          false,
+          'clearAuth'
+        ),
         
         // ========== Theme Actions ==========
         setTheme: (theme) => set({ theme }, false, 'setTheme'),
@@ -292,3 +313,5 @@ export const selectIsLoading = (state: AppState) => state.isLoading
 export const selectError = (state: AppState) => state.error
 export const selectOpenFiles = (state: AppState) => state.openFiles
 export const selectRecentWorkspaces = (state: AppState) => state.recentWorkspaces
+export const selectIsAuthenticated = (state: AppState) => state.isAuthenticated
+export const selectCurrentUser = (state: AppState) => state.currentUser
