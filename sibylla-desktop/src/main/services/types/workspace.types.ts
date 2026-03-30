@@ -201,7 +201,7 @@ export const WORKSPACE_STRUCTURE = {
  * Default workspace configuration values
  */
 export const DEFAULT_WORKSPACE_CONFIG = {
-  DEFAULT_MODEL: 'claude-3-opus',
+  DEFAULT_MODEL: 'claude-sonnet-4-20250514',
   DEFAULT_SYNC_INTERVAL: 30,
   DEFAULT_GIT_PROVIDER: 'sibylla' as const,
   DEFAULT_ICON: '🧠',

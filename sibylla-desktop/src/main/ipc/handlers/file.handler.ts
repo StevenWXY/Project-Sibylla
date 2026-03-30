@@ -73,9 +73,23 @@ export class FileHandler extends IpcHandler {
   }
   
   /**
-   * Cleanup resources
+   * Cleanup — remove all registered IPC handlers and release resources
    */
   override cleanup(): void {
+    // Remove all registered IPC handlers
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_READ)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_WRITE)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_DELETE)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_COPY)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_MOVE)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_INFO)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_EXISTS)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_LIST)
+    ipcMain.removeHandler(IPC_CHANNELS.DIR_CREATE)
+    ipcMain.removeHandler(IPC_CHANNELS.DIR_DELETE)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_WATCH_START)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_WATCH_STOP)
+    
     if (this.fileManager) {
       // Stop file watching
       this.fileManager.stopWatching().catch(err => {

@@ -44,4 +44,35 @@
 - [x] TASK015 - 基础技术文档编写 ✅
 
 **目标日期：** Week 3 结束  
-**实际完成：** 2026-03-30 提前完成。Phase 0 目标“跑通 Electron + 本地文件 + Git + 云端认证最小链路”已全面实现。
+**实际完成：** 2026-03-30 提前完成。Phase 0 目标"跑通 Electron + 本地文件 + Git + 云端认证最小链路"已全面实现。
+
+---
+
+## Phase 0 收尾修复
+
+| 状态 | 修复 ID | 说明 | 完成时间 |
+|------|---------|------|----------|
+| ✅ | M1 | Git 作者信息硬编码修复 — 移除 'Sibylla User' 硬编码回退，改用 workspace 名称作为可追溯标识 | 2026-03-30 |
+| ✅ | M2 | Cloud README 虚假端点修复 — 移除 4 个未实现端点文档，补充 9 个已实现的 Workspace API 和 commits 端点 | 2026-03-30 |
+| ✅ | M3 | requireWorkspaceRole 空壳中间件移除 — 删除未使用的死代码，实际角色检查已由 workspace 路由内联实现 | 2026-03-30 |
+| ✅ | M4 | GET /api/v1/git/:workspaceId/commits 实现 — 对接 Gitea API 实现真实 commit 历史查询 | 2026-03-30 |
+| ✅ | M5 | Redis 预留标注 — 注释掉三套 docker-compose 中的 Redis 服务，标注为 Phase 0 预留 | 2026-03-30 |
+
+---
+
+## Phase 0 质量改进 (L1-L12)
+
+| 状态 | 修复 ID | 说明 | 完成时间 |
+|------|---------|------|----------|
+| ✅ | L1 | 创建 CHANGELOG.md — 遵循 documentation-standards.md 格式，记录 Phase 0 全部变更 | 2026-03-30 |
+| ✅ | L2 | 创建 CONTRIBUTING.md — 基于 docs/development/workflow.md 提取独立贡献指南 | 2026-03-30 |
+| ✅ | L3 | Linux 构建配置 — electron-builder.json 添加 AppImage/deb target，package.json 添加 package:linux 脚本 | 2026-03-30 |
+| ✅ | L4 | default_model 更新 — 将过时的 'claude-3-opus' 更新为 'claude-sonnet-4-20250514'，涉及迁移文件、模型层、测试、UI 组件 | 2026-03-30 |
+| ✅ | L5 | moveFile() 跨设备安全 — copy 成功后 delete 失败时添加回滚逻辑，删除目标副本防止重复文件 | 2026-03-30 |
+| ✅ | L6 | 认证端点速率限制 — 安装 @fastify/rate-limit，login/register 限制 10次/分钟，refresh 限制 30次/分钟 | 2026-03-30 |
+| ✅ | L7 | email_verified Phase 1+ 标注 — 在迁移文件、类型定义中注释标注验证流程为 Phase 1+ 功能 | 2026-03-30 |
+| ✅ | L8 | React 组件测试 — 安装 @testing-library/react，添加 Button/ErrorBoundary 共 15 个测试用例，全部通过 | 2026-03-30 |
+| ✅ | L9 | logout JWT 验证 — 添加 app.authenticate preHandler，新增 logoutForUser() 验证 token 归属 | 2026-03-30 |
+| ✅ | L10 | IPC 类型推断 — 添加 IPCChannelMap mapped type，实现 channel → params → return 完整类型推断 | 2026-03-30 |
+| ✅ | L11 | Workspace update NULL 修复 — 使用 CASE WHEN 替代 COALESCE，UpdateWorkspaceInput 支持显式 null | 2026-03-30 |
+| ✅ | L12 | BYOK Phase 1+ 标注 — 在 CLAUDE.md §7、workspace 类型、数据库迁移中添加 Phase 1+ 注释 | 2026-03-30 |

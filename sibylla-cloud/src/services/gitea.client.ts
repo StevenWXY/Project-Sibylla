@@ -5,7 +5,7 @@
 
 import { config } from '../config/index.js'
 import { logger } from '../utils/logger.js'
-import type { GiteaUser, GiteaRepo, GiteaAccessToken } from '../types/git.js'
+import type { GiteaUser, GiteaRepo, GiteaAccessToken, GiteaCommit } from '../types/git.js'
 
 export class GiteaClient {
   private baseUrl: string
@@ -170,6 +170,26 @@ export class GiteaClient {
    */
   async deleteAccessToken(username: string, tokenId: number): Promise<void> {
     await this.request<void>('DELETE', `/users/${username}/tokens/${tokenId}`)
+  }
+
+  // ========== Commit History ==========
+
+  /**
+   * Get commits for a repository
+   */
+  async getCommits(
+    owner: string,
+    repo: string,
+    options?: { page?: number; limit?: number; sha?: string }
+  ): Promise<GiteaCommit[]> {
+    const params = new URLSearchParams()
+    if (options?.page) params.set('page', String(options.page))
+    if (options?.limit) params.set('limit', String(options.limit))
+    if (options?.sha) params.set('sha', options.sha)
+
+    const query = params.toString()
+    const path = `/repos/${owner}/${repo}/git/commits${query ? `?${query}` : ''}`
+    return await this.request<GiteaCommit[]>('GET', path)
   }
 }
 

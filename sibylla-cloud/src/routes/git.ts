@@ -95,11 +95,17 @@ export async function gitRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(parseInt(query.limit || '20'), 100)
     const page = parseInt(query.page || '1')
 
-    // TODO: Implement commit fetching via Gitea API
-    // For now, return placeholder
+    const result = await GitService.getWorkspaceCommits(workspaceId, { page, limit })
+
     return reply.send({
-      commits: [],
-      pagination: { page, limit, total: 0 },
+      commits: result.commits.map((c) => ({
+        sha: c.sha,
+        message: c.message,
+        author: { name: c.author.name, email: c.author.email, date: c.author.date },
+        committer: { name: c.committer.name, email: c.committer.email, date: c.committer.date },
+        created: c.created,
+      })),
+      pagination: { page, limit, total: result.total },
     })
   })
 }

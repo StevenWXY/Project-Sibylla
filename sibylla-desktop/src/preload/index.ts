@@ -99,6 +99,14 @@ interface ElectronAPI {
     refreshToken: () => Promise<IPCResponse<AuthSession>>
   }
   
+  // Window control
+  window: {
+    minimize: () => Promise<IPCResponse<void>>
+    maximize: () => Promise<IPCResponse<boolean>>
+    close: () => Promise<IPCResponse<void>>
+    toggleFullscreen: () => Promise<IPCResponse<boolean>>
+  }
+  
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
   off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => void
@@ -150,6 +158,11 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.AUTH_LOGOUT,
   IPC_CHANNELS.AUTH_GET_CURRENT_USER,
   IPC_CHANNELS.AUTH_REFRESH_TOKEN,
+  // Window control
+  IPC_CHANNELS.WINDOW_MINIMIZE,
+  IPC_CHANNELS.WINDOW_MAXIMIZE,
+  IPC_CHANNELS.WINDOW_CLOSE,
+  IPC_CHANNELS.WINDOW_TOGGLE_FULLSCREEN,
 ]
 
 /**
@@ -388,6 +401,25 @@ const api: ElectronAPI = {
     
     refreshToken: async () => {
       return await safeInvoke<AuthSession>(IPC_CHANNELS.AUTH_REFRESH_TOKEN)
+    },
+  },
+  
+  // Window control
+  window: {
+    minimize: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.WINDOW_MINIMIZE)
+    },
+    
+    maximize: async () => {
+      return await safeInvoke<boolean>(IPC_CHANNELS.WINDOW_MAXIMIZE)
+    },
+    
+    close: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.WINDOW_CLOSE)
+    },
+    
+    toggleFullscreen: async () => {
+      return await safeInvoke<boolean>(IPC_CHANNELS.WINDOW_TOGGLE_FULLSCREEN)
     },
   },
   

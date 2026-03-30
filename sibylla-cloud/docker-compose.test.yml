@@ -31,23 +31,23 @@ services:
       - sibylla-test-network
 
   # ============================================
-  # Redis (Test)
+  # Redis (Test) — Phase 0 预留，当前未使用
   # ============================================
-  redis-test:
-    image: redis:7-alpine
-    container_name: sibylla-redis-test
-    command: redis-server --appendonly no
-    ports:
-      - "63791:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 3s
-      timeout: 3s
-      retries: 5
-    tmpfs:
-      - /data
-    networks:
-      - sibylla-test-network
+  # redis-test:
+  #   image: redis:7-alpine
+  #   container_name: sibylla-redis-test
+  #   command: redis-server --appendonly no
+  #   ports:
+  #     - "63791:6379"
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 3s
+  #     timeout: 3s
+  #     retries: 5
+  #   tmpfs:
+  #     - /data
+  #   networks:
+  #     - sibylla-test-network
 
   # ============================================
   # Gitea - Git Hosting Service (Test)

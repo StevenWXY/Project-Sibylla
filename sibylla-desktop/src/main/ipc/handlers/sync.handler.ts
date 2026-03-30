@@ -65,9 +65,10 @@ export class SyncHandler extends IpcHandler {
   }
 
   /**
-   * Cleanup resources — remove SyncManager event listeners
+   * Cleanup — remove SyncManager event listeners and IPC handlers
    */
   override cleanup(): void {
+    ipcMain.removeHandler(IPC_CHANNELS.SYNC_FORCE)
     this.removeStatusListener()
     logger.info('[SyncHandler] Cleanup completed')
   }

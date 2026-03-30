@@ -67,7 +67,7 @@ export const WorkspaceModel = {
                               default_model, sync_interval)
       VALUES (${input.name}, ${input.description || null}, ${input.icon || null},
               ${input.gitProvider || 'sibylla'}, ${input.gitRemoteUrl || null},
-              ${input.defaultModel || 'claude-3-opus'}, ${input.syncInterval || 30})
+              ${input.defaultModel || 'claude-sonnet-4-20250514'}, ${input.syncInterval || 30})
       RETURNING id, name, description, icon, git_provider, git_remote_url,
                 default_model, sync_interval, created_at, updated_at
     `
@@ -76,25 +76,33 @@ export const WorkspaceModel = {
 
   /**
    * Update workspace
+   *
+   * Uses explicit CASE WHEN expressions instead of COALESCE to correctly
+   * support setting nullable fields (description, icon, gitRemoteUrl) to NULL.
+   * Fields not present in the input are left unchanged.
    */
   async update(id: string, input: UpdateWorkspaceInput): Promise<Workspace | null> {
-    const name = input.name ?? null
-    const description = input.description ?? null
-    const icon = input.icon ?? null
-    const gitProvider = input.gitProvider ?? null
-    const gitRemoteUrl = input.gitRemoteUrl ?? null
-    const defaultModel = input.defaultModel ?? null
-    const syncInterval = input.syncInterval ?? null
+    // Distinguish "field provided (possibly null)" from "field not provided (undefined)"
+    // - 'key' in input && input[key] === undefined  →  not provided, keep current
+    // - 'key' in input && input[key] === null        →  explicitly set to NULL
+    // - 'key' in input && input[key] === 'value'     →  set to new value
+    const nameProvided = 'name' in input
+    const descriptionProvided = 'description' in input
+    const iconProvided = 'icon' in input
+    const gitProviderProvided = 'gitProvider' in input
+    const gitRemoteUrlProvided = 'gitRemoteUrl' in input
+    const defaultModelProvided = 'defaultModel' in input
+    const syncIntervalProvided = 'syncInterval' in input
 
     const result = await sql`
       UPDATE workspaces
-      SET name = COALESCE(${name}, name),
-          description = COALESCE(${description}, description),
-          icon = COALESCE(${icon}, icon),
-          git_provider = COALESCE(${gitProvider}, git_provider),
-          git_remote_url = COALESCE(${gitRemoteUrl}, git_remote_url),
-          default_model = COALESCE(${defaultModel}, default_model),
-          sync_interval = COALESCE(${syncInterval}, sync_interval),
+      SET name = CASE WHEN ${nameProvided} THEN ${input.name ?? null} ELSE name END,
+          description = CASE WHEN ${descriptionProvided} THEN ${input.description ?? null} ELSE description END,
+          icon = CASE WHEN ${iconProvided} THEN ${input.icon ?? null} ELSE icon END,
+          git_provider = CASE WHEN ${gitProviderProvided} THEN ${input.gitProvider ?? null} ELSE git_provider END,
+          git_remote_url = CASE WHEN ${gitRemoteUrlProvided} THEN ${input.gitRemoteUrl ?? null} ELSE git_remote_url END,
+          default_model = CASE WHEN ${defaultModelProvided} THEN ${input.defaultModel ?? null} ELSE default_model END,
+          sync_interval = CASE WHEN ${syncIntervalProvided} THEN ${input.syncInterval ?? null} ELSE sync_interval END,
           updated_at = NOW()
       WHERE id = ${id}
       RETURNING id, name, description, icon, git_provider, git_remote_url,

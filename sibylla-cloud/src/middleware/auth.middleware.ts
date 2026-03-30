@@ -35,15 +35,3 @@ export async function optionalAuth(request: FastifyRequest, _reply: FastifyReply
     }
   }
 }
-
-/**
- * Check if user has specific role in workspace
- * Factory function that returns middleware
- */
-export function requireWorkspaceRole(_roles: string[]) {
-  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    await requireAuth(request, reply)
-    // Role checking will be implemented when workspace routes are added
-    // For now, just verify authentication
-  }
-}

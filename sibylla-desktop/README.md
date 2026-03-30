@@ -73,7 +73,3 @@ sibylla-desktop/
 - [CLAUDE.md](../CLAUDE.md) - 项目宪法
 - [架构设计](../specs/design/architecture.md)
 - [Phase 0 需求](../specs/requirements/phase0/infrastructure-setup.md)
-
-## License
-
-MIT

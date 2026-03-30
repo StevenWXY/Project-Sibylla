@@ -20,7 +20,7 @@ CREATE TABLE workspaces (
     git_remote_url TEXT,
     
     -- AI Settings
-    default_model VARCHAR(50) DEFAULT 'claude-3-opus',
+    default_model VARCHAR(50) DEFAULT 'claude-sonnet-4-20250514',
     
     -- Sync Settings
     sync_interval INTEGER DEFAULT 30,
@@ -47,5 +47,5 @@ COMMENT ON COLUMN workspaces.description IS 'Workspace description';
 COMMENT ON COLUMN workspaces.icon IS 'Emoji icon for workspace';
 COMMENT ON COLUMN workspaces.git_provider IS 'Git hosting: sibylla (self-hosted), github, or gitlab';
 COMMENT ON COLUMN workspaces.git_remote_url IS 'Git remote repository URL';
-COMMENT ON COLUMN workspaces.default_model IS 'Default AI model for this workspace';
+COMMENT ON COLUMN workspaces.default_model IS 'Default AI model for this workspace (Phase 1+: BYOK mode will allow user-provided API keys, see CLAUDE.md §7)';
 COMMENT ON COLUMN workspaces.sync_interval IS 'Auto-sync interval in seconds';

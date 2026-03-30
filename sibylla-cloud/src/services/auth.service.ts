@@ -188,6 +188,30 @@ export const AuthService = {
   },
 
   /**
+   * Logout with user ownership verification
+   * Ensures the refresh token belongs to the authenticated user
+   */
+  async logoutForUser(refreshToken: string, userId: string): Promise<void> {
+    const [tokenId] = refreshToken.split('.')
+    if (!tokenId) {
+      throw new AuthError('INVALID_TOKEN', 'Invalid refresh token format')
+    }
+
+    const result = await sql`
+      UPDATE refresh_tokens
+      SET revoked_at = NOW()
+      WHERE id = ${tokenId} AND user_id = ${userId} AND revoked_at IS NULL
+      RETURNING id
+    `
+
+    if (result.length === 0) {
+      throw new AuthError('INVALID_TOKEN', 'Refresh token not found or does not belong to this user')
+    }
+
+    logger.info({ tokenId, userId }, 'User logged out (verified ownership)')
+  },
+
+  /**
    * Revoke all refresh tokens for a user
    */
   async revokeAllTokens(userId: string): Promise<void> {

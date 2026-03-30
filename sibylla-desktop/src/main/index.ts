@@ -5,6 +5,7 @@ import { TestHandler } from './ipc/handlers/test.handler'
 import { SystemHandler } from './ipc/handlers/system.handler'
 import { FileHandler } from './ipc/handlers/file.handler'
 import { WorkspaceHandler } from './ipc/handlers/workspace.handler'
+import { WindowHandler } from './ipc/handlers/window.handler'
 import { SyncHandler } from './ipc/handlers/sync.handler'
 import { AuthHandler } from './ipc/handlers/auth.handler'
 import { FileManager } from './services/file-manager'
@@ -72,6 +73,9 @@ if (!gotTheLock) {
       const tokenStorage = new TokenStorage()
       const authHandler = new AuthHandler(authClient, tokenStorage)
       
+      // Create WindowHandler (window reference set after createMainWindow)
+      const windowHandler = new WindowHandler()
+      
       // ─── Workspace lifecycle hooks ────────────────────────────────
       // Wire up SyncManager initialization/teardown to workspace open/close
       
@@ -81,10 +85,12 @@ if (!gotTheLock) {
         console.log('[Main] Initializing services for workspace', { path: workspacePath })
         
         try {
-          // Resolve author info from auth (if available), fallback to workspace owner
+          // Resolve author info from auth (if available)
+          // No hardcoded fallback — if user is not authenticated, git config
+          // from workspace creation (which used real owner info) will be used.
           const cachedUser = authHandler.getCachedUser()
-          const authorName = cachedUser?.name ?? 'Sibylla User'
-          const authorEmail = cachedUser?.email ?? 'user@sibylla.local'
+          const authorName = cachedUser?.name ?? workspaceInfo.config.name
+          const authorEmail = cachedUser?.email ?? `${workspaceInfo.config.workspaceId}@workspace.sibylla.local`
           
           // Create GitAbstraction for this workspace
           const gitAbstraction = new GitAbstraction({
@@ -173,6 +179,7 @@ if (!gotTheLock) {
         workspaceHandler,
         syncHandler,
         authHandler,
+        windowHandler,
       ]
       
       for (const handler of handlers) {
@@ -181,6 +188,9 @@ if (!gotTheLock) {
       
       // Create main window
       mainWindow = createMainWindow()
+      
+      // Wire WindowHandler to the main window
+      windowHandler.setWindow(mainWindow)
       
       // Handle window closed event
       mainWindow.on('closed', () => {

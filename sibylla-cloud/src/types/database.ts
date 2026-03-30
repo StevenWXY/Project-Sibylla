@@ -11,6 +11,7 @@ export interface User {
   passwordHash: string
   name: string
   avatarUrl: string | null
+  /** Phase 1+: Email verification flow not yet implemented. Field reserved for forward compatibility. */
   emailVerified: boolean
   lastLoginAt: Date | null
   createdAt: Date
@@ -27,6 +28,7 @@ export interface CreateUserInput {
 export interface UpdateUserInput {
   name?: string
   avatarUrl?: string
+  /** Phase 1+: Updating email_verified is reserved for future verification flow */
   emailVerified?: boolean
 }
 
@@ -59,10 +61,13 @@ export interface CreateWorkspaceInput {
 
 export interface UpdateWorkspaceInput {
   name?: string
-  description?: string
-  icon?: string
+  /** Set to null to clear, omit to keep current value */
+  description?: string | null
+  /** Set to null to clear, omit to keep current value */
+  icon?: string | null
   gitProvider?: GitProvider
-  gitRemoteUrl?: string
+  /** Set to null to clear, omit to keep current value */
+  gitRemoteUrl?: string | null
   defaultModel?: string
   syncInterval?: number
 }

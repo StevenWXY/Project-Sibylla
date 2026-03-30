@@ -35,7 +35,7 @@ describe('WorkspaceService lifecycle sync', () => {
     icon: null,
     gitProvider: 'sibylla',
     gitRemoteUrl: null,
-    defaultModel: 'claude-3-opus',
+    defaultModel: 'claude-sonnet-4-20250514',
     syncInterval: 30,
     createdAt: new Date(),
     updatedAt: new Date(),

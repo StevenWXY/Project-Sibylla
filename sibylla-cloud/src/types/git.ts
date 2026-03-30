@@ -79,3 +79,23 @@ export interface GiteaAccessToken {
   name: string
   sha1: string
 }
+
+/**
+ * Gitea commit object from API response
+ * @see https://gitea.io/en-us/api-usage/ GET /repos/:owner/:repo/git/commits
+ */
+export interface GiteaCommit {
+  sha: string
+  message: string
+  created: string
+  author: {
+    name: string
+    email: string
+    date: string
+  }
+  committer: {
+    name: string
+    email: string
+    date: string
+  }
+}

@@ -22,7 +22,7 @@ Sibylla Cloud 提供以下核心服务：
 | 语言 | TypeScript（严格模式）|
 | Web 框架 | Fastify |
 | 数据库 | PostgreSQL 16 + pgvector |
-| 缓存 | Redis |
+| 缓存 | Redis（Phase 0 预留，尚未启用）|
 | 容器化 | Docker + Docker Compose |
 
 ## 快速开始
@@ -49,7 +49,7 @@ npm install
 cp .env.example .env
 
 # 2. 启动数据库服务
-docker compose up postgres redis -d
+docker compose up postgres -d
 
 # 3. 运行数据库迁移
 npm run migrate:up
@@ -189,7 +189,6 @@ sibylla-cloud/
 | POST | `/api/v1/auth/refresh` | 刷新 Token | 否 |
 | POST | `/api/v1/auth/logout` | 登出 | 否 |
 | GET | `/api/v1/auth/me` | 获取当前用户 | 是 |
-| POST | `/api/v1/auth/logout-all` | 登出所有设备 | 是 |
 
 ### Git API
 
@@ -198,9 +197,21 @@ sibylla-cloud/
 | GET | `/api/v1/git/:workspaceId/info` | 获取仓库信息 | 是 |
 | POST | `/api/v1/git/token` | 生成 Git 访问 Token | 是 |
 | DELETE | `/api/v1/git/token` | 吊销所有 Git Token | 是 |
-| GET | `/api/v1/git/token/count` | 获取 Token 数量 | 是 |
-| GET | `/api/v1/git/health` | Gitea 健康检查 | 是 |
-| POST | `/api/v1/git/:workspaceId/sync-permissions` | 同步权限（管理员）| 是 |
+| GET | `/api/v1/git/:workspaceId/commits` | 获取仓库提交历史 | 是 |
+
+### Workspace API
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| GET | `/api/v1/workspaces` | 获取用户所有 Workspace | 是 |
+| POST | `/api/v1/workspaces` | 创建 Workspace | 是 |
+| GET | `/api/v1/workspaces/:workspaceId` | 获取 Workspace 详情 | 是 |
+| PATCH | `/api/v1/workspaces/:workspaceId` | 更新 Workspace | 是 |
+| DELETE | `/api/v1/workspaces/:workspaceId` | 删除 Workspace | 是 |
+| GET | `/api/v1/workspaces/:workspaceId/members` | 获取成员列表 | 是 |
+| POST | `/api/v1/workspaces/:workspaceId/members` | 添加成员 | 是 |
+| PATCH | `/api/v1/workspaces/:workspaceId/members/:memberUserId` | 更新成员角色 | 是 |
+| DELETE | `/api/v1/workspaces/:workspaceId/members/:memberUserId` | 移除成员 | 是 |
 
 **注册示例：**
 
@@ -258,7 +269,6 @@ curl http://localhost:3000/api/v1/auth/me \
 | `HOST` | `0.0.0.0` | 监听地址 |
 | `LOG_LEVEL` | `info` | 日志级别 |
 | `DATABASE_URL` | - | PostgreSQL 连接字符串 |
-| `REDIS_URL` | - | Redis 连接字符串 |
 | `JWT_SECRET` | - | JWT 签名密钥 |
 | `CORS_ORIGIN` | `*` | CORS 允许的来源 |
 
@@ -273,7 +283,7 @@ npm run docker:build
 ### 启动服务
 
 ```bash
-# 启动所有服务（API + PostgreSQL + Redis）
+# 启动所有服务（API + PostgreSQL + Gitea）
 npm run docker:up
 
 # 查看日志

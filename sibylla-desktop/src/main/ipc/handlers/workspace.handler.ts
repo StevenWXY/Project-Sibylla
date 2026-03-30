@@ -105,10 +105,24 @@ export class WorkspaceHandler extends IpcHandler {
   }
   
   /**
-   * Cleanup resources
+   * Cleanup — remove all registered IPC handlers and release resources
    */
   override cleanup(): void {
-    logger.info('[WorkspaceHandler] Cleanup completed')
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_CREATE)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_OPEN)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_CLOSE)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_GET_CURRENT)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_VALIDATE)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_GET_CONFIG)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_UPDATE_CONFIG)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_GET_METADATA)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_SELECT_FOLDER)
+    
+    this.workspaceManager = null
+    this.onWorkspaceOpenedCallback = null
+    this.onWorkspaceClosedCallback = null
+    
+    super.cleanup()
   }
   
   /**

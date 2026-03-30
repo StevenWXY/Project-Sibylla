@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { AuthService, AuthError } from '../services/auth.service.js'
 import { UserModel } from '../models/user.model.js'
+import { AUTH_RATE_LIMIT, REFRESH_RATE_LIMIT } from '../plugins/rate-limit.js'
 
 // Request schemas
 const registerSchema = z.object({
@@ -29,7 +30,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
    * POST /api/v1/auth/register
    * Register a new user
    */
-  app.post('/register', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/register', AUTH_RATE_LIMIT, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = registerSchema.parse(request.body)
       const user = await AuthService.register(body)
@@ -57,7 +58,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
    * POST /api/v1/auth/login
    * Login and get tokens
    */
-  app.post('/login', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/login', AUTH_RATE_LIMIT, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = loginSchema.parse(request.body)
       const tokens = await AuthService.login(body, app, {
@@ -75,7 +76,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
    * POST /api/v1/auth/refresh
    * Refresh access token
    */
-  app.post('/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/refresh', REFRESH_RATE_LIMIT, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = refreshSchema.parse(request.body)
       const tokens = await AuthService.refreshAccessToken(app, body.refreshToken)
@@ -89,17 +90,28 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   /**
    * POST /api/v1/auth/logout
    * Logout and revoke refresh token
+   * Requires JWT authentication to ensure users can only revoke their own tokens
    */
-  app.post('/logout', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const body = refreshSchema.parse(request.body)
-      await AuthService.logout(body.refreshToken)
+  app.post(
+    '/logout',
+    {
+      ...AUTH_RATE_LIMIT,
+      preHandler: [app.authenticate],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const body = refreshSchema.parse(request.body)
+        const { userId } = request.user
 
-      return reply.status(204).send()
-    } catch (error) {
-      return handleAuthError(error, reply)
+        // Verify the refresh token belongs to the authenticated user
+        await AuthService.logoutForUser(body.refreshToken, userId)
+
+        return reply.status(204).send()
+      } catch (error) {
+        return handleAuthError(error, reply)
+      }
     }
-  })
+  )
 
   /**
    * GET /api/v1/auth/me

@@ -874,8 +874,31 @@ export class FileManager {
           // Copy file to destination
           await this.copyFile(sourcePath, destPath)
           
-          // Delete source file
-          await this.deleteFile(sourcePath)
+          // Delete source file — if this fails, rollback by removing the copy
+          try {
+            await this.deleteFile(sourcePath)
+          } catch (deleteError) {
+            logger.error(
+              `[FileManager] moveFile: Source delete failed after copy, rolling back destination: ${destPath}`,
+              deleteError
+            )
+            
+            // Rollback: remove the destination copy to prevent duplicate files
+            try {
+              await this.deleteFile(destPath)
+              logger.info(
+                `[FileManager] moveFile: Rollback successful, destination copy removed: ${destPath}`
+              )
+            } catch (rollbackError) {
+              // Critical: both delete and rollback failed — log for manual intervention
+              logger.error(
+                `[FileManager] moveFile: CRITICAL — Rollback also failed, duplicate file may exist at: ${destPath}`,
+                rollbackError
+              )
+            }
+            
+            throw deleteError
+          }
           
           const totalDuration = Date.now() - startTime
           logger.info(

@@ -20,7 +20,6 @@ services:
       - HOST=0.0.0.0
       - LOG_LEVEL=debug
       - DATABASE_URL=postgresql://sibylla:sibylla@postgres:5432/sibylla
-      - REDIS_URL=redis://redis:6379
       - CORS_ORIGIN=*
     volumes:
       # Mount source code for hot reloading
@@ -30,8 +29,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     networks:
       - sibylla-network-dev
 
@@ -58,15 +55,16 @@ services:
       - sibylla-network-dev
 
   # ============================================
-  # Redis (Development)
+  # Redis (Development) — Phase 0 预留，当前未使用
+  # 将在后续 Phase 引入缓存/会话管理时启用
   # ============================================
-  redis:
-    image: redis:7-alpine
-    container_name: sibylla-redis-dev
-    ports:
-      - "6379:6379"
-    networks:
-      - sibylla-network-dev
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: sibylla-redis-dev
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - sibylla-network-dev
 
   # ============================================
   # Gitea - Git Hosting Service (Development)

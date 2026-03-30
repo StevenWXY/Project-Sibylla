@@ -20,15 +20,12 @@ services:
       - HOST=0.0.0.0
       - LOG_LEVEL=info
       - DATABASE_URL=postgresql://sibylla:sibylla@postgres:5432/sibylla
-      - REDIS_URL=redis://redis:6379
       - CORS_ORIGIN=*
       - GITEA_URL=http://gitea:3001
       - GITEA_ADMIN_TOKEN=${GITEA_ADMIN_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
       gitea:
         condition: service_healthy
     restart: unless-stopped
@@ -65,24 +62,25 @@ services:
       - sibylla-network
 
   # ============================================
-  # Redis
+  # Redis — Phase 0 预留，当前未使用
+  # 将在后续 Phase 引入缓存/会话管理时启用
   # ============================================
-  redis:
-    image: redis:7-alpine
-    container_name: sibylla-redis
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-    networks:
-      - sibylla-network
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: sibylla-redis
+  #   command: redis-server --appendonly yes
+  #   volumes:
+  #     - redis_data:/data
+  #   ports:
+  #     - "6379:6379"
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+  #   restart: unless-stopped
+  #   networks:
+  #     - sibylla-network
 
   # ============================================
   # Gitea - Git Hosting Service
@@ -140,8 +138,6 @@ services:
 # ============================================
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
     driver: local
   gitea_data:
     driver: local

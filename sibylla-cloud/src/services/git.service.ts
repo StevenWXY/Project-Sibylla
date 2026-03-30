@@ -8,7 +8,7 @@ import { createHash } from 'crypto'
 import { sql } from '../db/client.js'
 import { giteaClient } from './gitea.client.js'
 import { logger } from '../utils/logger.js'
-import type { GitRepoInfo, CreateRepoParams } from '../types/git.js'
+import type { GitRepoInfo, CreateRepoParams, GiteaCommit } from '../types/git.js'
 import type { WorkspaceMemberRole } from '../types/database.js'
 
 /**
@@ -302,5 +302,34 @@ export const GitService = {
   generateGiteaUsername(userId: string): string {
     // Use first 16 chars of user ID to keep it short
     return `u-${userId.replace(/-/g, '').slice(0, 16)}`
+  },
+
+  /**
+   * Get commit history for a workspace repository via Gitea API
+   */
+  async getWorkspaceCommits(
+    workspaceId: string,
+    options: { page: number; limit: number }
+  ): Promise<{ commits: GiteaCommit[]; total: number }> {
+    const result = await sql`
+      SELECT gitea_owner_name, gitea_repo_name
+      FROM git_repos
+      WHERE workspace_id = ${workspaceId}
+    `
+
+    const record = result[0] as Record<string, unknown> | undefined
+    if (!record) {
+      return { commits: [], total: 0 }
+    }
+
+    const ownerName = record['gitea_owner_name'] as string
+    const repoName = record['gitea_repo_name'] as string
+
+    const commits = await giteaClient.getCommits(ownerName, repoName, {
+      page: options.page,
+      limit: options.limit,
+    })
+
+    return { commits, total: commits.length }
   },
 }

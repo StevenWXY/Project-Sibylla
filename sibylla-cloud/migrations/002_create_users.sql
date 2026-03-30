@@ -14,7 +14,7 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(100) NOT NULL,
     avatar_url TEXT,
-    email_verified BOOLEAN DEFAULT FALSE,
+    email_verified BOOLEAN DEFAULT FALSE, -- Phase 1+: Email verification flow not yet implemented
     last_login_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -46,5 +46,5 @@ COMMENT ON COLUMN users.email IS 'User email address (unique)';
 COMMENT ON COLUMN users.password_hash IS 'Argon2 hashed password';
 COMMENT ON COLUMN users.name IS 'Display name';
 COMMENT ON COLUMN users.avatar_url IS 'URL to user avatar image';
-COMMENT ON COLUMN users.email_verified IS 'Whether email has been verified';
+COMMENT ON COLUMN users.email_verified IS 'Whether email has been verified (Phase 1+: verification flow not yet implemented, field reserved for forward compatibility)';
 COMMENT ON COLUMN users.last_login_at IS 'Last successful login timestamp';

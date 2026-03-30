@@ -56,7 +56,7 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
     ownerEmail: '',
     path: '',
     enableCloudSync: false,
-    defaultModel: 'claude-3-opus',
+    defaultModel: 'claude-sonnet-4-20250514',
     syncInterval: 30,
   })
   
@@ -206,7 +206,7 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
         ownerEmail: '',
         path: '',
         enableCloudSync: false,
-        defaultModel: 'claude-3-opus',
+        defaultModel: 'claude-sonnet-4-20250514',
         syncInterval: 30,
       })
       setFormErrors({})

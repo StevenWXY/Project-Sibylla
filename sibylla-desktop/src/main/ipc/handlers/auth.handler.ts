@@ -272,4 +272,17 @@ export class AuthHandler extends IpcHandler {
       return { isAuthenticated: false, user: null }
     }
   }
+
+  /**
+   * Cleanup — remove all registered IPC handlers
+   */
+  override cleanup(): void {
+    ipcMain.removeHandler(IPC_CHANNELS.AUTH_LOGIN)
+    ipcMain.removeHandler(IPC_CHANNELS.AUTH_REGISTER)
+    ipcMain.removeHandler(IPC_CHANNELS.AUTH_LOGOUT)
+    ipcMain.removeHandler(IPC_CHANNELS.AUTH_GET_CURRENT_USER)
+    ipcMain.removeHandler(IPC_CHANNELS.AUTH_REFRESH_TOKEN)
+    this.cachedUser = null
+    super.cleanup()
+  }
 }

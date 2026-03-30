@@ -143,6 +143,113 @@ export const IPC_CHANNELS = {
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
 
 /**
+ * IPC Channel Type Map
+ *
+ * Provides compile-time type safety for IPC channel → params → return mapping.
+ * Each entry maps a channel constant to its expected parameter tuple and return type.
+ *
+ * - `params`: Tuple of argument types passed from renderer to main
+ * - `return`: The data type inside IPCResponse<T>
+ *
+ * @example
+ * ```typescript
+ * // Type-safe handler registration (main process)
+ * type FileReadParams = IPCChannelMap[typeof IPC_CHANNELS.FILE_READ]['params']
+ * // => [path: string, options?: FileReadOptions]
+ *
+ * type FileReadReturn = IPCChannelMap[typeof IPC_CHANNELS.FILE_READ]['return']
+ * // => FileContent
+ *
+ * // Type-safe invoke wrapper (preload)
+ * function typedInvoke<C extends IPCChannel>(
+ *   channel: C,
+ *   ...args: IPCChannelMap[C]['params']
+ * ): Promise<IPCResponse<IPCChannelMap[C]['return']>>
+ * ```
+ */
+export interface IPCChannelMap {
+  // Test channels
+  [IPC_CHANNELS.TEST_PING]: { params: []; return: string }
+  [IPC_CHANNELS.TEST_ECHO]: { params: [request: EchoRequest]; return: string }
+
+  // System information
+  [IPC_CHANNELS.SYSTEM_INFO]: { params: []; return: SystemInfo }
+  [IPC_CHANNELS.SYSTEM_PLATFORM]: { params: []; return: NodeJS.Platform }
+  [IPC_CHANNELS.SYSTEM_VERSION]: { params: []; return: string }
+
+  // Window control
+  [IPC_CHANNELS.WINDOW_MINIMIZE]: { params: []; return: void }
+  [IPC_CHANNELS.WINDOW_MAXIMIZE]: { params: []; return: boolean }
+  [IPC_CHANNELS.WINDOW_CLOSE]: { params: []; return: void }
+  [IPC_CHANNELS.WINDOW_TOGGLE_FULLSCREEN]: { params: []; return: boolean }
+
+  // File operations
+  [IPC_CHANNELS.FILE_READ]: { params: [path: string, options?: FileReadOptions]; return: FileContent }
+  [IPC_CHANNELS.FILE_WRITE]: { params: [path: string, content: string, options?: FileWriteOptions]; return: void }
+  [IPC_CHANNELS.FILE_DELETE]: { params: [path: string]; return: void }
+  [IPC_CHANNELS.FILE_COPY]: { params: [sourcePath: string, destPath: string]; return: void }
+  [IPC_CHANNELS.FILE_MOVE]: { params: [sourcePath: string, destPath: string]; return: void }
+  [IPC_CHANNELS.FILE_LIST]: { params: [path: string, options?: ListFilesOptions]; return: FileInfo[] }
+  [IPC_CHANNELS.FILE_INFO]: { params: [path: string]; return: FileInfo }
+  [IPC_CHANNELS.FILE_EXISTS]: { params: [path: string]; return: boolean }
+
+  // Directory operations
+  [IPC_CHANNELS.DIR_CREATE]: { params: [path: string, recursive?: boolean]; return: void }
+  [IPC_CHANNELS.DIR_DELETE]: { params: [path: string, recursive?: boolean]; return: void }
+
+  // File watching
+  [IPC_CHANNELS.FILE_WATCH_START]: { params: []; return: void }
+  [IPC_CHANNELS.FILE_WATCH_STOP]: { params: []; return: void }
+  [IPC_CHANNELS.FILE_WATCH_EVENT]: { params: [event: FileWatchEvent]; return: void }
+
+  // Workspace operations
+  [IPC_CHANNELS.WORKSPACE_CREATE]: { params: [options: CreateWorkspaceOptions]; return: WorkspaceInfo }
+  [IPC_CHANNELS.WORKSPACE_OPEN]: { params: [path: string]; return: WorkspaceInfo }
+  [IPC_CHANNELS.WORKSPACE_CLOSE]: { params: []; return: void }
+  [IPC_CHANNELS.WORKSPACE_GET_CURRENT]: { params: []; return: WorkspaceInfo | null }
+  [IPC_CHANNELS.WORKSPACE_VALIDATE]: { params: [path: string]; return: boolean }
+  [IPC_CHANNELS.WORKSPACE_SELECT_FOLDER]: { params: []; return: string | null }
+  [IPC_CHANNELS.WORKSPACE_GET_CONFIG]: { params: []; return: WorkspaceConfig }
+  [IPC_CHANNELS.WORKSPACE_UPDATE_CONFIG]: { params: [updates: Partial<WorkspaceConfig>]; return: void }
+  [IPC_CHANNELS.WORKSPACE_GET_METADATA]: { params: []; return: WorkspaceMetadata }
+
+  // Git operations (reserved)
+  [IPC_CHANNELS.GIT_STATUS]: { params: []; return: unknown }
+  [IPC_CHANNELS.GIT_SYNC]: { params: []; return: unknown }
+  [IPC_CHANNELS.GIT_COMMIT]: { params: [message?: string]; return: unknown }
+  [IPC_CHANNELS.GIT_HISTORY]: { params: []; return: unknown }
+  [IPC_CHANNELS.GIT_DIFF]: { params: []; return: unknown }
+
+  // AI operations (reserved)
+  [IPC_CHANNELS.AI_CHAT]: { params: [message: string]; return: unknown }
+  [IPC_CHANNELS.AI_STREAM]: { params: [message: string]; return: unknown }
+  [IPC_CHANNELS.AI_EMBED]: { params: [text: string]; return: unknown }
+
+  // Sync operations
+  [IPC_CHANNELS.SYNC_FORCE]: { params: []; return: SyncResult }
+  [IPC_CHANNELS.SYNC_STATUS_CHANGED]: { params: [data: SyncStatusData]; return: void }
+
+  // Auth operations
+  [IPC_CHANNELS.AUTH_LOGIN]: { params: [input: AuthLoginInput]; return: AuthSession }
+  [IPC_CHANNELS.AUTH_REGISTER]: { params: [input: AuthRegisterInput]; return: AuthSession }
+  [IPC_CHANNELS.AUTH_LOGOUT]: { params: []; return: void }
+  [IPC_CHANNELS.AUTH_GET_CURRENT_USER]: { params: []; return: AuthSession }
+  [IPC_CHANNELS.AUTH_REFRESH_TOKEN]: { params: []; return: AuthSession }
+
+  // Event notifications
+  [IPC_CHANNELS.NOTIFICATION]: { params: [message: string]; return: void }
+  [IPC_CHANNELS.LOG_MESSAGE]: { params: [message: string]; return: void }
+  [IPC_CHANNELS.FILE_CHANGED]: { params: [event: FileWatchEvent]; return: void }
+  [IPC_CHANNELS.GIT_STATUS_CHANGED]: { params: [status: unknown]; return: void }
+}
+
+/**
+ * Helper types for extracting channel params and return types
+ */
+export type IPCChannelParams<C extends IPCChannel> = IPCChannelMap[C]['params']
+export type IPCChannelReturn<C extends IPCChannel> = IPCChannelMap[C]['return']
+
+/**
  * Generic IPC response wrapper
  * 
  * This interface wraps all IPC responses to provide consistent
@@ -391,7 +498,7 @@ export interface WorkspaceConfig {
   /** Workspace icon (emoji or URL) */
   icon: string
   
-  /** Default AI model to use */
+  /** Default AI model to use (Phase 1+: BYOK mode will allow user-provided API keys) */
   defaultModel: string
   
   /** Auto-sync interval in seconds (0 = manual only) */
@@ -464,7 +571,7 @@ export interface CreateWorkspaceOptions {
   /** Custom git remote URL (for GitHub provider) */
   gitRemoteUrl?: string
   
-  /** Default AI model (default: 'claude-3-opus') */
+  /** Default AI model (default: 'claude-sonnet-4-20250514'). Phase 1+: BYOK mode will allow user-provided API keys */
   defaultModel?: string
   
   /** Auto-sync interval in seconds (default: 30, 0 = manual only) */

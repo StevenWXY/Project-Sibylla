@@ -27,5 +27,20 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "category": "Office",
+    "icon": "resources/icons",
+    "maintainer": "Sibylla Team",
+    "synopsis": "AI 共享上下文的团队知识协作平台"
+  },
+  "deb": {
+    "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils"],
+    "priority": "optional",
+    "section": "editors"
+  },
+  "appImage": {
+    "artifactName": "${productName}-${version}-${arch}.AppImage"
   }
 }
