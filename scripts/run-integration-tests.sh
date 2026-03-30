@@ -64,6 +64,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# ─── Step 1b: Create Gitea admin user ───────────────────────────────
+# Gitea does NOT auto-create admin users from env vars.
+# We must create it via CLI after the container is healthy.
+
+echo "      Creating Gitea admin user..."
+docker exec --user git sibylla-gitea-test gitea admin user create \
+  --admin \
+  --username sibylla-test-admin \
+  --password test-admin-password-123 \
+  --email admin@sibylla-test.local \
+  --must-change-password=false 2>&1 || {
+  # If user already exists (exit code 1 with "already exists"), that's fine
+  echo "      (Admin user may already exist — continuing)"
+}
+echo "      Gitea admin user ready."
+echo ""
+
 # ─── Step 2: Run cloud integration tests ────────────────────────────
 
 echo "[2/4] Running cloud integration tests (Auth Workflow)..."
