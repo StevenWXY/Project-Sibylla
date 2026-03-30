@@ -37,8 +37,7 @@
   },
   "deb": {
     "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils"],
-    "priority": "optional",
-    "section": "editors"
+    "priority": "optional"
   },
   "appImage": {
     "artifactName": "${productName}-${version}-${arch}.AppImage"
