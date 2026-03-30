@@ -1,7 +1,7 @@
 # Phase 1 Skills
 
 > Sibylla 项目 Phase 1（核心功能）开发所需的 skills
-> 状态：待创建
+> 状态：已完成
 > 优先级：中高
 
 ---
@@ -12,113 +12,52 @@ Phase 1 专注于 Sibylla 的核心功能实现，包括编辑器、本地存储
 
 ---
 
-## 待创建 Skills 列表
+## Skills 列表
 
-### 1. [`tiptap-wysiwyg-editor`]
+### 1. [`tiptap-wysiwyg-editor`](tiptap-wysiwyg-editor/SKILL.md)
 
-**功能**：Tiptap WYSIWYG 编辑器集成与扩展
+Tiptap v2 富文本编辑器集成与扩展最佳实践，涵盖 React 集成、ProseMirror 扩展开发、Markdown 双向转换、自定义节点与标记、斜杠命令、工具栏构建、编辑器与 Electron IPC 集成、性能优化等核心内容。
 
-**覆盖内容**：
-- Tiptap v2 基础使用
-- ProseMirror 底层扩展
-- 自定义节点与标记
-- 协作编辑集成
-- Markdown 双向转换
-- 编辑器性能优化
+### 2. [`sqlite-local-storage`](sqlite-local-storage/SKILL.md)
 
-**参考文档**：
-- [`architecture.md`](../../specs/design/architecture.md:96)
-- [`ui-ux-design.md`](../../specs/design/ui-ux-design.md)
+基于 better-sqlite3 的本地数据库设计与优化最佳实践，涵盖数据库 schema 设计、全文搜索索引（FTS5）、向量检索扩展（sqlite-vec）、事务管理与并发控制、数据库 migration、性能优化、IPC 集成等核心内容。
 
-**互补关系**：与 [`frontend-design`](../.kilocode/skills/common/frontend-design/SKILL.md) 和 [`ui-ux-pro-max`](../.kilocode/skills/common/ui-ux-pro-max/SKILL.md) 互补，专注于编辑器实现
+### 3. [`ai-context-engine`](ai-context-engine/SKILL.md)
 
----
+AI 上下文引擎设计与实现最佳实践，涵盖三层上下文模型（始终加载、语义相关、手动引用）、Token 预算管理与裁剪策略、语义搜索集成（embedding + 向量检索 + RRF 融合）、上下文组装算法、MCP（Model Context Protocol）集成、记忆系统交互等核心内容。
 
-### 2. [`sqlite-local-storage`]
+### 4. [`llm-streaming-integration`](llm-streaming-integration/SKILL.md)
 
-**功能**：SQLite 本地数据库设计与优化
+LLM 流式响应集成与处理最佳实践，涵盖多模型流式 API 调用（Claude/GPT/Gemini/DeepSeek）、统一适配器模式、Server-Sent Events (SSE) 处理、Electron IPC 流式传输、React 流式渲染、错误处理与重试机制、Token 计算与预算控制（tiktoken）等核心内容。
 
-**覆盖内容**：
-- better-sqlite3 使用与配置
-- 数据库 schema 设计
-- 全文搜索索引（FTS5）
-- 向量检索扩展（sqlite-vec）
-- 事务管理与并发控制
-- 性能优化（索引、查询优化）
+### 5. [`zustand-state-management`](zustand-state-management/SKILL.md)
 
-**参考文档**：
-- [`architecture.md`](../../specs/design/architecture.md:98)
-- [`data-and-api.md`](../../specs/design/data-and-api.md:354-402)
-
-**互补关系**：为本地数据存储提供基础
+Zustand 轻量状态管理最佳实践，涵盖 store 设计模式、TypeScript 类型安全集成（严格模式零 any）、中间件使用（persist、devtools、immer）、性能优化（selector、useShallow）、模块化 store 拆分、与 Electron IPC 集成、异步操作状态管理等核心内容。
 
 ---
 
-### 3. [`ai-context-engine`]
+## 开发状态
 
-**功能**：AI 上下文引擎设计与实现
+**Phase 1 进度**：5/5 已完成 ✅
 
-**覆盖内容**：
-- 三层上下文模型（始终加载、语义相关、手动引用）
-- Token 预算管理与裁剪策略
-- 语义搜索集成（embedding、向量检索）
-- 上下文组装算法
-- MCP（Model Context Protocol）集成
-
-**参考文档**：
-- [`architecture.md`](../../specs/design/architecture.md:214-249)
-- [`memory-system-design.md`](../../specs/design/memory-system-design.md)
-
-**互补关系**：AI 上下文管理的核心逻辑
+| Skill | 状态 |
+|-------|------|
+| `tiptap-wysiwyg-editor` | ✅ 已完成 |
+| `sqlite-local-storage` | ✅ 已完成 |
+| `ai-context-engine` | ✅ 已完成 |
+| `llm-streaming-integration` | ✅ 已完成 |
+| `zustand-state-management` | ✅ 已完成 |
 
 ---
 
-### 4. [`llm-streaming-integration`]
+## 技能协同
 
-**功能**：LLM 流式响应集成与处理
-
-**覆盖内容**：
-- 流式 API 调用（Claude/GPT/Gemini/DeepSeek）
-- Server-Sent Events (SSE) 处理
-- 流式响应的 UI 渲染
-- 错误处理与重试机制
-- Token 计算与预算控制（tiktoken）
-
-**参考文档**：
-- [`architecture.md`](../../specs/design/architecture.md:119-126)
-- [`data-and-api.md`](../../specs/design/data-and-api.md:281-302)
-
-**互补关系**：与 [`ai-context-engine`] 互补，专注于 LLM 调用的技术细节
-
----
-
-### 5. [`zustand-state-management`]
-
-**功能**：Zustand 轻量状态管理
-
-**覆盖内容**：
-- Zustand store 设计模式
-- TypeScript 类型安全集成
-- 中间件使用（persist、devtools）
-- 性能优化（selector、shallow）
-- 与 React 集成最佳实践
-
-**参考文档**：
-- [`architecture.md`](../../specs/design/architecture.md:95)
-
-**互补关系**：与 [`vercel-react-best-practices`](../.kilocode/skills/common/vercel-react-best-practices/SKILL.md) 互补，专注于 Zustand 的使用
-
----
-
-## 创建顺序建议
-
-按照依赖关系和优先级，建议按以下顺序创建：
-
-1. **`zustand-state-management`** - 状态管理基础
-2. **`sqlite-local-storage`** - 数据存储基础
-3. **`tiptap-wysiwyg-editor`** - 编辑器核心
-4. **`ai-context-engine`** - AI 上下文引擎
-5. **`llm-streaming-integration`** - LLM 集成
+这些 skills 形成完整的 Phase 1 核心功能技术栈：
+- **编辑器**：`tiptap-wysiwyg-editor` 提供富文本编辑能力
+- **本地存储**：`sqlite-local-storage` 提供本地数据库设计指导
+- **AI 上下文**：`ai-context-engine` 负责上下文组装与检索
+- **LLM 集成**：`llm-streaming-integration` 处理流式 AI 调用
+- **状态管理**：`zustand-state-management` 管理渲染进程应用状态
 
 ---
 
