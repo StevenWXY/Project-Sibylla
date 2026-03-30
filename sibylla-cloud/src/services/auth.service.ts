@@ -205,7 +205,10 @@ export const AuthService = {
     `
 
     if (result.length === 0) {
-      throw new AuthError('INVALID_TOKEN', 'Refresh token not found or does not belong to this user')
+      throw new AuthError(
+        'INVALID_TOKEN',
+        'Refresh token not found or does not belong to this user'
+      )
     }
 
     logger.info({ tokenId, userId }, 'User logged out (verified ownership)')
