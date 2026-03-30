@@ -122,7 +122,7 @@ function handleWorkspaceError(error: unknown, reply: FastifyReply): FastifyReply
   throw error
 }
 
-export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
+export function workspaceRoutes(app: FastifyInstance): void {
   app.addHook('preHandler', app.authenticate)
 
   app.get('/', async (request: FastifyRequest) => {

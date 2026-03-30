@@ -32,10 +32,13 @@ async function start(): Promise<void> {
 // Graceful shutdown
 const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM']
 signals.forEach((signal) => {
-  process.on(signal, async () => {
+  process.on(signal, () => {
     logger.info(`Received ${signal}, shutting down gracefully...`)
-    await closeDatabaseConnection()
-    process.exit(0)
+    closeDatabaseConnection()
+      .catch((err: Error) => logger.error(err, 'Error closing database connection'))
+      .finally(() => {
+        process.exit(0)
+      })
   })
 })
 
@@ -45,9 +48,7 @@ process.on('uncaughtException', (error) => {
   process.exit(1)
 })
 
-process.on('unhandledRejection', (reason) => {
-  logger.error({ reason }, 'Unhandled rejection')
+start().catch((err: Error) => {
+  logger.error(err, 'Failed to start application')
   process.exit(1)
 })
-
-start()

@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { GitService } from '../services/git.service.js'
 import { MemberModel } from '../models/member.model.js'
 
-export async function gitRoutes(app: FastifyInstance): Promise<void> {
+export function gitRoutes(app: FastifyInstance): void {
   // All Git routes require authentication
   app.addHook('preHandler', app.authenticate)
 

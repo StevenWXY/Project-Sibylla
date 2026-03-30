@@ -64,7 +64,17 @@ function shouldSyncGit(provider: string): boolean {
   return provider === 'sibylla'
 }
 
-export function createWorkspaceService(deps: WorkspaceServiceDeps) {
+export function createWorkspaceService(deps: WorkspaceServiceDeps): {
+  createWorkspaceWithOwner: (ownerUserId: string, input: CreateWorkspaceInput) => Promise<Workspace>
+  addMemberWithGitSync: (input: AddWorkspaceMemberInput) => Promise<WorkspaceMember>
+  updateMemberRoleWithGitSync: (
+    userId: string,
+    workspaceId: string,
+    role: WorkspaceMemberRole
+  ) => Promise<WorkspaceMember | null>
+  removeMemberWithGitSync: (userId: string, workspaceId: string) => Promise<boolean>
+  deleteWorkspaceWithGitSync: (workspaceId: string) => Promise<boolean>
+} {
   return {
     async createWorkspaceWithOwner(
       ownerUserId: string,

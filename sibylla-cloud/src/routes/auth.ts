@@ -23,7 +23,7 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 })
 
-export async function authRoutes(app: FastifyInstance): Promise<void> {
+export function authRoutes(app: FastifyInstance): void {
   /**
    * POST /api/v1/auth/register
    * Register a new user

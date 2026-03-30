@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify'
 import { checkDatabaseHealth } from '../db/health.js'
 import type { HealthResponse, ReadyResponse, LiveResponse } from '../types/index.js'
 
-export async function healthRoutes(app: FastifyInstance): Promise<void> {
+export function healthRoutes(app: FastifyInstance): void {
   /**
    * GET /api/v1/health
    * Main health check endpoint
@@ -44,7 +44,7 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
    * GET /api/v1/health/live
    * Liveness check for Kubernetes
    */
-  app.get<{ Reply: LiveResponse }>('/health/live', async () => {
+  app.get<{ Reply: LiveResponse }>('/health/live', () => {
     return { live: true }
   })
 }

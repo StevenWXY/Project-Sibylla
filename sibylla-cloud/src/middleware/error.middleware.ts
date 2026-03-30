@@ -60,5 +60,5 @@ export function errorMiddleware(
     response.error.details = { validation: error.validation }
   }
 
-  reply.status(statusCode).send(response)
+  void reply.status(statusCode).send(response)
 }
