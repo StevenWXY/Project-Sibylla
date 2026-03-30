@@ -6,7 +6,7 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/integration/**/*.test.ts'],
     testTimeout: 30000, // integration tests may need longer
-    hookTimeout: 60000, // setup/teardown with Docker can be slow
+    hookTimeout: 120000, // setup/teardown with Docker can be slow (Gitea wait up to 120s)
     // Disable parallel execution — integration tests share DB state
     pool: 'forks',
     poolOptions: {
