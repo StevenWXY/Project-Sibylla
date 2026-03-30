@@ -18,6 +18,7 @@
     "package:mac": "npm run build && electron-builder --mac",
     "package:win": "npm run build && electron-builder --win",
     "test": "vitest --run",
+    "test:ci": "vitest --run --reporter=verbose",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:integration": "vitest --run --config vitest.integration.config.ts",

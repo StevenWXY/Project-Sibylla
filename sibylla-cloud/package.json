@@ -16,6 +16,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "test:ci": "vitest run --reporter=verbose",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "docker:dev": "docker compose -f docker-compose.dev.yml up --build",

@@ -58,16 +58,16 @@
 | 状态 | 任务 ID | 任务标题 | 负责人 | 开始日期 | 完成日期 | 实际工时 | 备注 |
 |------|---------|---------|--------|----------|----------|----------|------|
 | ✅ | [PHASE0-TASK013](phase0-task013_client-cloud-integration.md) | 客户端与云端集成测试 | AI | 2026-03-30 | 2026-03-30 | 4小时 | 已完成全部5步：Docker隔离测试环境(docker-compose.test.yml)、Auth集成测试(注册/登录/刷新/保护路由/登出共12个用例)、Git同步单边推送测试(init/setRemote/stage/commit/push共5个用例)、双边同步测试(pull/一致性/双向同步共6个用例)、跨项目集成脚本(run-integration-tests.sh) |
-| ⬜ | [PHASE0-TASK014](phase0-task014_cicd-pipeline.md) | CI/CD 流水线配置 | 待分配 | - | - | - | 依赖 TASK013 |
+| ✅ | [PHASE0-TASK014](phase0-task014_cicd-pipeline.md) | CI/CD 流水线配置 | AI | 2026-03-30 | 2026-03-30 | 4小时 | 已完成全部5步：添加test:ci脚本(cloud/desktop)、pr-check.yml(lint+type-check+单元测试+集成测试)、main-build.yml(全质检+跨平台Electron构建+Docker镜像构建)、release.yml(tag触发+macOS/Windows打包+GitHub Release上传产物)、清理旧test.yml |
 | ⬜ | [PHASE0-TASK015](phase0-task015_documentation.md) | 基础技术文档编写 | 待分配 | - | - | - | 依赖 TASK013 |
 
-**小组进度：** 1/3 (33%)
+**小组进度：** 2/3 (67%)
 
 ---
 
 ## 总体进度
 
-**Phase 0 总进度：** 13/15 (87%)
+**Phase 0 总进度：** 14/15 (93%)
 
 **预估总工时：** 28-40 工作日
 **实际总工时：** 69 小时
@@ -110,7 +110,7 @@
 ### 里程碑 4：Phase 0 完成（Week 3）
 
 - [x] TASK013 - 客户端与云端集成测试 ✅
-- [ ] TASK014 - CI/CD 流水线配置
+- [x] TASK014 - CI/CD 流水线配置 ✅
 - [ ] TASK015 - 基础技术文档编写
 
 **目标日期：** Week 3 结束  
@@ -124,7 +124,7 @@
 |---------|---------|---------|------|---------|--------|
 | RISK-001 | isomorphic-git 学习曲线陡峭 | TASK010 | 🟢 已解决 | TASK010 已完成，isomorphic-git 集成正常，63个测试全部通过 | AI |
 | RISK-002 | Gitea 配置复杂度高 | TASK007 | 🟢 已解决 | 使用 Docker Compose，环境变量自动配置 | AI |
-| RISK-003 | 跨平台构建环境差异 | TASK001, TASK014 | 🟡 待评估 | 使用 GitHub Actions | 待分配 |
+| RISK-003 | 跨平台构建环境差异 | TASK001, TASK014 | 🟢 已解决 | GitHub Actions 跨平台矩阵（macos-latest/windows-latest）+ CSC_IDENTITY_AUTO_DISCOVERY=false 绕过签名 | AI |
 | RISK-004 | 集成测试问题多 | TASK013 | 🟢 已解决 | Docker隔离环境+自动化测试脚本覆盖全链路 | AI |
 
 **风险状态说明：**
