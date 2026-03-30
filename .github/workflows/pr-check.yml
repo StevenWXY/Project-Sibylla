@@ -1,0 +1,182 @@
+name: PR Check
+
+# Triggers on every pull request targeting main or develop.
+# All jobs must pass — this workflow is intended to be configured
+# as a required status check in branch protection rules.
+on:
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Cloud: Lint & Type-check ───────────────────────────────────────
+  cloud-lint:
+    name: Cloud — Lint & Type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: sibylla-cloud
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sibylla-cloud/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+  # ─── Desktop: Lint & Type-check ─────────────────────────────────────
+  desktop-lint:
+    name: Desktop — Lint & Type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: sibylla-desktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sibylla-desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+  # ─── Cloud: Unit Tests ──────────────────────────────────────────────
+  cloud-unit-tests:
+    name: Cloud — Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    needs: [cloud-lint]
+    defaults:
+      run:
+        working-directory: sibylla-cloud
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sibylla-cloud/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:ci
+
+  # ─── Desktop: Unit Tests ────────────────────────────────────────────
+  desktop-unit-tests:
+    name: Desktop — Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    needs: [desktop-lint]
+    defaults:
+      run:
+        working-directory: sibylla-desktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sibylla-desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:ci
+
+  # ─── Integration Tests ──────────────────────────────────────────────
+  # Runs only on ubuntu-latest because it requires Docker Compose.
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    needs: [cloud-unit-tests, desktop-unit-tests]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install cloud dependencies
+        working-directory: sibylla-cloud
+        run: npm ci
+
+      - name: Install desktop dependencies
+        working-directory: sibylla-desktop
+        run: npm ci
+
+      # run-integration-tests.sh handles Docker lifecycle internally
+      # (start infra → run cloud tests → run desktop tests → tear down).
+      - name: Run integration tests
+        run: bash scripts/run-integration-tests.sh
+
+  # ─── PR Gate ────────────────────────────────────────────────────────
+  # A single synthetic job that depends on all checks above.
+  # Configure this job's name as the required status check in GitHub
+  # branch protection so only one rule needs to be maintained.
+  pr-gate:
+    name: PR Gate (all checks passed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    needs:
+      - cloud-lint
+      - desktop-lint
+      - cloud-unit-tests
+      - desktop-unit-tests
+      - integration-tests
+    if: always()
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" || \
+                "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required checks failed."
+            exit 1
+          fi
+          echo "All checks passed."

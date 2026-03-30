@@ -1,0 +1,189 @@
+name: Release
+
+# Triggered only by pushing a Semantic Versioning tag, e.g. v0.1.0, v1.0.0-beta.1.
+# Produces:
+#   1. A GitHub Release with macOS (.dmg) and Windows (.exe) installer attachments.
+#   2. A Docker image for sibylla-cloud pushed to GHCR.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write    # Create GitHub Releases & upload assets
+  packages: write    # Push to GHCR
+
+jobs:
+  # ─── Pre-flight: Lint, Type-check & Unit Tests ──────────────────────
+  preflight:
+    name: Pre-flight Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install cloud dependencies
+        working-directory: sibylla-cloud
+        run: npm ci
+
+      - name: Install desktop dependencies
+        working-directory: sibylla-desktop
+        run: npm ci
+
+      - name: Cloud — Lint & Type-check
+        working-directory: sibylla-cloud
+        run: npm run lint && npm run type-check
+
+      - name: Desktop — Lint & Type-check
+        working-directory: sibylla-desktop
+        run: npm run lint && npm run type-check
+
+      - name: Cloud — Unit Tests
+        working-directory: sibylla-cloud
+        run: npm run test:ci
+
+      - name: Desktop — Unit Tests
+        working-directory: sibylla-desktop
+        run: npm run test:ci
+
+  # ─── Cloud: Docker Image → GHCR ────────────────────────────────────
+  cloud-docker-release:
+    name: Cloud — Docker Image (GHCR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    needs: [preflight]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: sibylla-cloud
+          file: sibylla-cloud/docker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/sibylla-cloud:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/sibylla-cloud:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=sibylla-cloud
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+  # ─── Desktop: Cross-platform Release Build ──────────────────────────
+  desktop-release-build:
+    name: Desktop — Release Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [preflight]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            package_script: package:mac
+            artifact_name: sibylla-desktop-mac
+            artifact_path: sibylla-desktop/release
+          - os: windows-latest
+            package_script: package:win
+            artifact_name: sibylla-desktop-win
+            artifact_path: sibylla-desktop/release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sibylla-desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: sibylla-desktop
+        run: npm ci
+
+      - name: Build & package Electron app
+        working-directory: sibylla-desktop
+        run: npm run ${{ matrix.package_script }}
+        env:
+          # Pass signing secrets when available.
+          # For unsigned dev releases these remain empty/unset — electron-builder
+          # simply skips signing when credentials are absent.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Fallback: disable auto-discovery if no explicit cert is provided
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          retention-days: 30
+
+  # ─── GitHub Release ─────────────────────────────────────────────────
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    needs: [desktop-release-build, cloud-docker-release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sibylla-desktop-mac
+          path: release-assets/mac
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sibylla-desktop-win
+          path: release-assets/win
+
+      - name: List release assets
+        run: find release-assets -type f | head -50
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            release-assets/mac/**/*.dmg
+            release-assets/mac/**/*.zip
+            release-assets/win/**/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

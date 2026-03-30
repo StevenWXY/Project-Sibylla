@@ -1,0 +1,178 @@
+name: Main Build
+
+# Runs on every push to main or develop branches.
+# Validates the codebase and produces cross-platform build artifacts
+# so the team always has a fresh, verified build from the trunk.
+on:
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: main-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Cloud: Lint, Type-check & Unit Tests ───────────────────────────
+  cloud-check:
+    name: Cloud — Lint, Type-check & Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: sibylla-cloud
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sibylla-cloud/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Unit tests
+        run: npm run test:ci
+
+  # ─── Desktop: Lint, Type-check & Unit Tests ─────────────────────────
+  desktop-check:
+    name: Desktop — Lint, Type-check & Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: sibylla-desktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sibylla-desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Unit tests
+        run: npm run test:ci
+
+  # ─── Integration Tests ──────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    needs: [cloud-check, desktop-check]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install cloud dependencies
+        working-directory: sibylla-cloud
+        run: npm ci
+
+      - name: Install desktop dependencies
+        working-directory: sibylla-desktop
+        run: npm ci
+
+      # run-integration-tests.sh handles Docker lifecycle internally
+      # (start infra → run cloud tests → run desktop tests → tear down).
+      - name: Run integration tests
+        run: bash scripts/run-integration-tests.sh
+
+  # ─── Cloud: Docker Image Build ──────────────────────────────────────
+  cloud-docker-build:
+    name: Cloud — Docker Image Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    needs: [integration-tests]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (sibylla-cloud)
+        uses: docker/build-push-action@v5
+        with:
+          context: sibylla-cloud
+          file: sibylla-cloud/docker/Dockerfile
+          push: false
+          tags: sibylla-cloud:${{ github.sha }},sibylla-cloud:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Desktop: Cross-platform Electron Build ─────────────────────────
+  desktop-build:
+    name: Desktop — Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [integration-tests]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            package_script: package:mac
+            artifact_name: sibylla-desktop-mac
+            artifact_path: sibylla-desktop/release
+          - os: windows-latest
+            package_script: package:win
+            artifact_name: sibylla-desktop-win
+            artifact_path: sibylla-desktop/release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sibylla-desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: sibylla-desktop
+        run: npm ci
+
+      - name: Build & package Electron app
+        working-directory: sibylla-desktop
+        run: npm run ${{ matrix.package_script }}
+        env:
+          # Disable code signing in CI — signing is only done in the release workflow
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-${{ github.sha }}
+          path: ${{ matrix.artifact_path }}
+          retention-days: 7
+          if-no-files-found: error
