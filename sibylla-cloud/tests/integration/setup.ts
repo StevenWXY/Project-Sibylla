@@ -173,12 +173,23 @@ async function waitForPostgres(
  * Run node-pg-migrate programmatically against the test database.
  */
 async function runMigrations(): Promise<void> {
-  const { execSync } = await import('child_process')
+  // Use node-pg-migrate directly instead of via child_process
   const dbUrl = `postgresql://${TEST_DB_USER}:${TEST_DB_PASSWORD}@${TEST_DB_HOST}:${TEST_DB_PORT}/${TEST_DB_NAME}`
-  execSync(`npx node-pg-migrate up -m migrations`, {
-    cwd: new URL('../../', import.meta.url).pathname,
-    env: { ...process.env, DATABASE_URL: dbUrl },
-    stdio: 'pipe',
+  const { runner } = await import('node-pg-migrate')
+  await runner({
+    databaseUrl: dbUrl,
+    dir: new URL('../../migrations', import.meta.url).pathname.replace(/%20/g, ' '),
+    direction: 'up',
+    migrationsTable: 'pgmigrations',
+    createSchema: true,
+    createMigrationsSchema: true,
+    schema: 'public',
+    count: Infinity,
+    ignorePattern: '\\..*',
+    verbose: true,
+    checkOrder: true,
+    singleTransaction: true,
+    dryRun: false
   })
 }
 

@@ -6,7 +6,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { GitService } from '../services/git.service.js'
 import { MemberModel } from '../models/member.model.js'
 
-export function gitRoutes(app: FastifyInstance): void {
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function gitRoutes(app: FastifyInstance): Promise<void> {
   // All Git routes require authentication
   app.addHook('preHandler', app.authenticate)
 

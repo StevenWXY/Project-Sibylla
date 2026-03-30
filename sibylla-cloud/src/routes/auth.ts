@@ -23,7 +23,8 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 })
 
-export function authRoutes(app: FastifyInstance): void {
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function authRoutes(app: FastifyInstance): Promise<void> {
   /**
    * POST /api/v1/auth/register
    * Register a new user

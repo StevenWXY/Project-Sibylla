@@ -122,7 +122,8 @@ function handleWorkspaceError(error: unknown, reply: FastifyReply): FastifyReply
   throw error
 }
 
-export function workspaceRoutes(app: FastifyInstance): void {
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', app.authenticate)
 
   app.get('/', async (request: FastifyRequest) => {

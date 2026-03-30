@@ -6,7 +6,8 @@ import type { FastifyInstance } from 'fastify'
 import { checkDatabaseHealth } from '../db/health.js'
 import type { HealthResponse, ReadyResponse, LiveResponse } from '../types/index.js'
 
-export function healthRoutes(app: FastifyInstance): void {
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function healthRoutes(app: FastifyInstance): Promise<void> {
   /**
    * GET /api/v1/health
    * Main health check endpoint
