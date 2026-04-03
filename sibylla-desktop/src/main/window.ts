@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import path from 'path'
 
 const isDev = process.env.NODE_ENV === 'development'
-const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
+const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5555'
 
 /**
  * Create and configure the main application window

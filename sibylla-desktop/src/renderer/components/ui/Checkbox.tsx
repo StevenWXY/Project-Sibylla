@@ -35,13 +35,11 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
               type="checkbox"
               checked={checked}
               className={cn(
-                'peer h-5 w-5 cursor-pointer appearance-none rounded border-2 border-notion-border-default',
-                'bg-white transition-all duration-200',
-                'checked:border-notion-accent checked:bg-notion-accent',
-                'focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:ring-offset-2',
+                'peer h-5 w-5 cursor-pointer appearance-none rounded border-2 border-sys-darkBorder',
+                'bg-sys-black transition-all duration-200',
+                'checked:border-white checked:bg-white',
+                'focus:outline-none focus:ring-2 focus:ring-white/40 focus:ring-offset-2 focus:ring-offset-black',
                 'disabled:cursor-not-allowed disabled:opacity-50',
-                'dark:border-gray-600 dark:bg-gray-800',
-                'dark:checked:border-notion-accent dark:checked:bg-notion-accent',
                 error && 'border-red-500 checked:border-red-500 checked:bg-red-500',
                 className
               )}
@@ -51,7 +49,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
             />
             <Check
               className={cn(
-                'pointer-events-none absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 text-white',
+                'pointer-events-none absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 text-black',
                 'opacity-0 transition-opacity duration-200',
                 'peer-checked:opacity-100'
               )}
@@ -65,7 +63,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
               {label && (
                 <label
                   htmlFor={checkboxId}
-                  className="block cursor-pointer text-sm font-medium text-notion-text-primary dark:text-white"
+                  className="block cursor-pointer text-sm font-medium text-white"
                 >
                   {label}
                 </label>
@@ -73,7 +71,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
               {description && (
                 <p
                   id={`${checkboxId}-description`}
-                  className="mt-0.5 text-sm text-notion-text-secondary dark:text-gray-400"
+                  className="mt-0.5 text-sm text-sys-darkMuted"
                 >
                   {description}
                 </p>

@@ -220,10 +220,10 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.GIT_HISTORY]: { params: []; return: unknown }
   [IPC_CHANNELS.GIT_DIFF]: { params: []; return: unknown }
 
-  // AI operations (reserved)
-  [IPC_CHANNELS.AI_CHAT]: { params: [message: string]; return: unknown }
-  [IPC_CHANNELS.AI_STREAM]: { params: [message: string]; return: unknown }
-  [IPC_CHANNELS.AI_EMBED]: { params: [text: string]; return: unknown }
+  // AI operations
+  [IPC_CHANNELS.AI_CHAT]: { params: [request: AIChatRequest | string]; return: AIChatResponse }
+  [IPC_CHANNELS.AI_STREAM]: { params: [request: AIChatRequest | string]; return: AIChatResponse }
+  [IPC_CHANNELS.AI_EMBED]: { params: [request: AIEmbedRequest | string]; return: AIEmbedResponse }
 
   // Sync operations
   [IPC_CHANNELS.SYNC_FORCE]: { params: []; return: SyncResult }
@@ -474,6 +474,76 @@ export interface FileWatchEvent {
   path: string
   /** File stats (only for add/change/addDir events) */
   stats?: FileInfo
+}
+
+/**
+ * AI Types
+ *
+ * These types are shared between main and renderer processes for
+ * cloud gateway communication, local memory updates, and local RAG retrieval.
+ */
+
+export interface AIChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export interface AIChatRequest {
+  /** User message text */
+  message: string
+  /** Chat session identifier for logging */
+  sessionId?: string
+  /** Preferred model name */
+  model?: string
+  /** Sampling temperature (0-2) */
+  temperature?: number
+  /** Maximum response tokens */
+  maxTokens?: number
+  /** Whether to perform local RAG retrieval from archives */
+  useRag?: boolean
+  /** Context window size used for 75% flush threshold calculation */
+  contextWindowTokens?: number
+  /** Current session token usage before this turn */
+  sessionTokenUsage?: number
+}
+
+export interface AIRagHit {
+  path: string
+  score: number
+  snippet: string
+}
+
+export interface AIMemoryState {
+  tokenCount: number
+  tokenDebt: number
+  flushTriggered: boolean
+}
+
+export interface AIChatResponse {
+  id: string
+  model: string
+  provider: 'openai' | 'anthropic' | 'mock'
+  content: string
+  usage: {
+    inputTokens: number
+    outputTokens: number
+    totalTokens: number
+    estimatedCostUsd: number
+  }
+  intercepted: boolean
+  warnings: string[]
+  ragHits: AIRagHit[]
+  memory: AIMemoryState
+}
+
+export interface AIEmbedRequest {
+  text: string
+  dimensions?: number
+}
+
+export interface AIEmbedResponse {
+  model: string
+  vector: number[]
 }
 
 /**

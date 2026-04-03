@@ -11,14 +11,14 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', loading, icon, children, disabled, ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer'
+    const baseStyles = 'inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:pointer-events-none disabled:opacity-50 cursor-pointer'
     
     const variants = {
-      primary: 'bg-notion-accent text-white hover:bg-notion-accent/90 focus-visible:ring-notion-accent',
-      secondary: 'bg-notion-bg-tertiary text-notion-text-primary hover:bg-notion-border-light dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600',
-      outline: 'border border-notion-border-default bg-transparent hover:bg-notion-bg-secondary dark:border-gray-600 dark:hover:bg-gray-800',
-      ghost: 'hover:bg-notion-bg-secondary dark:hover:bg-gray-800',
-      danger: 'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600',
+      primary: 'bg-white text-black hover:bg-zinc-200 focus-visible:ring-white',
+      secondary: 'border border-sys-darkBorder bg-sys-darkSurface text-white hover:bg-black focus-visible:ring-white/60',
+      outline: 'border border-sys-darkBorder bg-transparent text-sys-darkMuted hover:bg-sys-darkSurface hover:text-white focus-visible:ring-white/60',
+      ghost: 'text-sys-darkMuted hover:bg-sys-darkSurface hover:text-white focus-visible:ring-white/60',
+      danger: 'bg-red-700 text-white hover:bg-red-600 focus-visible:ring-red-500',
     }
     
     const sizes = {

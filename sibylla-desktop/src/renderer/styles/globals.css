@@ -4,7 +4,7 @@
 
 @layer base {
   * {
-    @apply border-notion-border-default dark:border-gray-700;
+    @apply border-sys-darkBorder;
   }
   
   html {
@@ -12,10 +12,11 @@
   }
   
   body {
-    @apply bg-notion-bg-primary text-notion-text-primary dark:bg-gray-950 dark:text-gray-100;
+    @apply bg-[#050505] text-gray-100;
+    background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.2) 0%, transparent 60%);
   }
   
-  /* 自定义滚动条 - Notion 风格 */
+  /* 自定义滚动条 */
   /* WebKit browsers (Chrome, Safari, Edge) */
   ::-webkit-scrollbar {
     @apply w-2 h-2;
@@ -26,47 +27,41 @@
   }
   
   ::-webkit-scrollbar-thumb {
-    @apply bg-notion-border-default dark:bg-gray-600 rounded-full;
+    @apply rounded-full bg-[#52525B];
   }
   
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-notion-text-placeholder dark:bg-gray-500;
+    @apply bg-[#71717A];
   }
   
   /* Firefox */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(211, 210, 206) transparent;
-  }
-  
-  .dark * {
-    scrollbar-color: rgb(75, 85, 99) transparent;
+    scrollbar-color: rgb(82, 82, 91) transparent;
   }
 }
 
 @layer components {
   /* 玻璃拟态效果 */
   .glass {
-    @apply bg-white/70 dark:bg-gray-800/70 backdrop-blur-xl;
-    @apply border border-white/30 dark:border-white/10 shadow-lg;
+    @apply bg-black/60 backdrop-blur-xl;
+    @apply border border-white/10 shadow-glass-dark;
   }
   
-  /* Notion 风格卡片 */
+  /* 基础卡片 */
   .card {
-    @apply rounded-lg border border-notion-border-light bg-white p-6 shadow-sm;
-    @apply dark:bg-gray-800 dark:border-gray-700;
+    @apply rounded-xl border border-sys-darkBorder bg-sys-darkSurface p-6 text-white;
   }
   
   /* 输入框基础样式 */
   .input-base {
-    @apply w-full rounded-lg border border-notion-border-default bg-white px-3 py-2 text-sm;
-    @apply placeholder:text-notion-text-placeholder;
-    @apply focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20;
+    @apply w-full rounded-xl border border-sys-darkBorder bg-sys-black px-3 py-2 text-sm text-white;
+    @apply placeholder:text-sys-darkMuted;
+    @apply focus:border-white/60 focus:outline-none focus:ring-1 focus:ring-white/30;
     @apply disabled:cursor-not-allowed disabled:opacity-50;
-    @apply dark:border-gray-600 dark:bg-gray-800 dark:placeholder:text-gray-500;
   }
   
-  /* Notion 风格按钮 */
+  /* 按钮基类 */
   .btn-notion {
     @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium;
     @apply transition-colors duration-200;
@@ -75,17 +70,52 @@
   }
   
   .btn-notion-primary {
-    @apply btn-notion bg-notion-accent text-white hover:bg-notion-accent/90;
-    @apply focus-visible:ring-notion-accent;
+    @apply btn-notion bg-white text-black hover:bg-zinc-200;
+    @apply focus-visible:ring-white;
   }
   
   .btn-notion-secondary {
-    @apply btn-notion bg-notion-bg-tertiary text-notion-text-primary hover:bg-notion-border-light;
-    @apply dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600;
+    @apply btn-notion bg-zinc-900 text-zinc-200 hover:bg-zinc-800 border border-zinc-700;
   }
   
   .btn-notion-ghost {
-    @apply btn-notion hover:bg-notion-bg-secondary dark:hover:bg-gray-800;
+    @apply btn-notion text-zinc-300 hover:bg-zinc-900 hover:text-white;
+  }
+
+  .sibylla-shell {
+    @apply relative overflow-hidden bg-sys-black text-gray-100;
+  }
+
+  .sibylla-shell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .sibylla-shell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)" opacity="0.6"/%3E%3C/svg%3E');
+    mix-blend-mode: overlay;
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .sibylla-panel {
+    @apply relative z-10 rounded-2xl border border-white/10 bg-sys-darkSurface/70 backdrop-blur-xl shadow-glass-dark;
+  }
+
+  .sibylla-panel-subtle {
+    @apply rounded-xl border border-white/10 bg-black/45;
   }
 }
 
@@ -114,12 +144,59 @@
     @apply bg-gray-900/50 backdrop-blur-md border border-gray-700/50;
   }
   
-  /* Notion 风格阴影 */
+  /* 阴影 */
   .shadow-notion {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
   }
   
   .shadow-notion-lg {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .markdown-preview h1,
+  .markdown-preview h2,
+  .markdown-preview h3,
+  .markdown-preview h4,
+  .markdown-preview h5,
+  .markdown-preview h6 {
+    @apply mb-2 mt-6 font-semibold text-white;
+  }
+
+  .markdown-preview p {
+    @apply my-2;
+  }
+
+  .markdown-preview ul,
+  .markdown-preview ol {
+    @apply my-2 pl-6;
+  }
+
+  .markdown-preview li {
+    @apply my-1;
+  }
+
+  .markdown-preview blockquote {
+    @apply my-3 border-l-4 border-white/20 pl-3 text-sys-darkMuted;
+  }
+
+  .markdown-preview code {
+    @apply rounded border border-white/10 bg-sys-darkSurface px-1 py-0.5 font-mono text-xs text-white;
+  }
+
+  .markdown-preview pre {
+    @apply my-3 overflow-auto rounded-lg border border-sys-darkBorder bg-sys-darkSurface p-3;
+  }
+
+  .markdown-preview pre code {
+    @apply bg-transparent p-0 text-xs;
+  }
+
+  .markdown-preview table {
+    @apply my-3 w-full border-collapse overflow-hidden rounded-lg;
+  }
+
+  .markdown-preview th,
+  .markdown-preview td {
+    @apply border border-sys-darkBorder px-3 py-1.5 text-left text-xs;
   }
 }

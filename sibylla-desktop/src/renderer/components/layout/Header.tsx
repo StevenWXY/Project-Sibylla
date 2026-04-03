@@ -2,6 +2,7 @@ import React from 'react'
 import { Sun, Moon, Monitor } from 'lucide-react'
 import { useTheme } from '../providers/ThemeProvider'
 import { cn } from '../../utils/cn'
+import { useAppStore } from '../../store/appStore'
 
 /**
  * Header - 顶部导航栏组件
@@ -23,6 +24,8 @@ import { cn } from '../../utils/cn'
  */
 export const Header = React.memo(function Header() {
   const { theme, setTheme, resolvedTheme } = useTheme()
+  const currentWorkspace = useAppStore((state) => state.currentWorkspace)
+  const currentFile = useAppStore((state) => state.currentFile)
   
   /**
    * 三态主题切换：light → dark → system → light
@@ -42,11 +45,11 @@ export const Header = React.memo(function Header() {
    */
   const getThemeIcon = () => {
     if (theme === 'system') {
-      return <Monitor size={20} className="text-notion-text-secondary dark:text-gray-400" />
+      return <Monitor size={20} className="text-sys-darkMuted" />
     }
     return resolvedTheme === 'dark'
-      ? <Moon size={20} className="text-notion-text-secondary dark:text-gray-400" />
-      : <Sun size={20} className="text-notion-text-secondary dark:text-gray-400" />
+      ? <Moon size={20} className="text-sys-darkMuted" />
+      : <Sun size={20} className="text-sys-darkMuted" />
   }
   
   /**
@@ -74,12 +77,22 @@ export const Header = React.memo(function Header() {
   }
   
   return (
-    <header className="flex h-14 items-center justify-between px-6 glass border-b border-notion-border-light dark:border-gray-700 shrink-0 z-30">
+    <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-black/45 px-6 backdrop-blur-xl">
       {/* 左侧：标题区域 */}
       <div className="flex items-center gap-4">
-        <h1 className="text-lg font-semibold text-notion-text-primary dark:text-white">
+        <h1 className="text-lg font-semibold text-white">
           Workspace
         </h1>
+        {currentWorkspace && (
+          <span className="rounded-md border border-white/10 bg-sys-black px-2 py-1 text-xs font-mono text-sys-darkMuted">
+            {currentWorkspace.config.name}
+          </span>
+        )}
+        {currentFile && (
+          <span className="max-w-[220px] truncate text-xs text-sys-darkMuted">
+            {currentFile.name}
+          </span>
+        )}
       </div>
       
       {/* 右侧：主题切换按钮 */}
@@ -88,14 +101,14 @@ export const Header = React.memo(function Header() {
         className={cn(
           'flex items-center gap-2 rounded-lg px-3 py-2',
           'transition-colors duration-200',
-          'hover:bg-notion-bg-secondary dark:hover:bg-gray-800',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-notion-accent'
+          'hover:bg-sys-darkSurface',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
         )}
         aria-label={getThemeLabel()}
         title={getThemeLabel()}
       >
         {getThemeIcon()}
-        <span className="text-xs text-notion-text-secondary dark:text-gray-400">
+        <span className="text-xs text-sys-darkMuted">
           {getThemeText()}
         </span>
       </button>

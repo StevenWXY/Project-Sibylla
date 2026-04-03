@@ -11,9 +11,9 @@
 ## 任务拆解预览
 
 ### 模块一：UI 视图构建
-- **TASK016**: 侧边栏与文件树组件开发 (React + Tailwind)
-- **TASK017**: Markdown 双链编辑器组件集成 (选型: Milkdown / Remirror)
-- **TASK018**: AI 对话面板与 Streaming 渲染组件
+- **TASK016**: 侧边栏与文件树组件开发 (React + Tailwind) ✅ 已完成（2026-04-01）
+- **TASK017**: Markdown 双链编辑器组件集成 (选型: Milkdown / Remirror) ✅ 已完成（2026-04-01）
+- **TASK018**: AI 对话面板与 Streaming 渲染组件 ✅ 已完成（2026-04-01）
 
 ### 模块二：AI 与记忆引擎
 - **TASK019**: LLM Gateway 云端转发与计费拦截设计
@@ -25,3 +25,6 @@
 - **TASK023**: AI 意图识别指令路由 (决定是闲聊还是需写文件)
 - **TASK024**: AI 变更文件前置 Diff 审查 UI 机制
 - **TASK025**: Phase 1 集成测试与多用户联调模拟
+
+## 进度记录
+- 2026-04-01: 完成 TASK016/TASK017/TASK018 集成实现，新增桌面端 Phase 1 工作台（文件树 + Markdown 双链编辑 + AI Streaming 对话）。

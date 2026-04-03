@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sibylla - 全局品牌视觉与设计规范 (Static B&W Edition)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans SC', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        sys: {
+                            black: '#000000',
+                            darkSurface: '#0A0A0A',
+                            darkBorder: '#27272A',
+                            darkMuted: '#A1A1AA',
+                            white: '#FFFFFF',
+                            lightBg: '#F4F4F5',
+                            lightSurface: '#FFFFFF',
+                            lightBorder: '#E4E4E7',
+                            lightMuted: '#71717A',
+                        }
+                    },
+                    boxShadow: {
+                        'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.6)',
+                        'glass-light': '0 8px 32px 0 rgba(0, 0, 0, 0.05)',
+                        'glow-white': '0 0 30px rgba(255, 255, 255, 0.3)',
+                    },
+                    backgroundImage: {
+                        'grid-pattern': "linear-gradient(to right, rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.1) 1px, transparent 1px)",
+                        'radial-glow': "radial-gradient(circle at 50% 0%, rgba(255,255,255,0.2) 0%, transparent 60%)",
+                        'noise-pattern': "url('data:image/svg+xml,%3Csvg viewBox=\"0 0 200 200\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cfilter id=\"noiseFilter\"%3E%3CfeTurbulence type=\"fractalNoise\" baseFrequency=\"0.9\" numOctaves=\"3\" stitchTiles=\"stitch\"/%3E%3C/filter%3E%3Crect width=\"100%25\" height=\"100%25\" filter=\"url(%23noiseFilter)\" opacity=\"0.6\"/%3E%3C/svg%3E')",
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #050505; color: #E2E8F0; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #52525B; border-radius: 3px; }
+        
+        .glass-panel-dark {
+            background: rgba(10, 10, 10, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .glass-panel-light {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .svg-def { display: none; }
+
+        .poster-grid {
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="min-h-screen relative overflow-x-hidden selection:bg-white selection:text-black">
+
+    <svg class="svg-def">
+        <defs>
+            <g id="pixel-octo" fill="currentColor">
+                <rect x="7" y="2" width="5" height="1"></rect><rect x="5" y="3" width="2" height="1"></rect><rect x="12" y="3" width="2" height="1"></rect>
+                <rect x="4" y="4" width="1" height="4"></rect><rect x="14" y="4" width="1" height="4"></rect><rect x="5" y="8" width="2" height="1"></rect>
+                <rect x="12" y="8" width="2" height="1"></rect><rect x="7" y="9" width="5" height="1"></rect><rect x="6" y="5" width="1" height="1"></rect>
+                <rect x="7" y="6" width="1" height="1"></rect><rect x="12" y="5" width="1" height="1"></rect><rect x="11" y="6" width="1" height="1"></rect>
+                <rect x="9" y="10" width="1" height="5"></rect><rect x="7" y="10" width="1" height="1"></rect><rect x="6" y="11" width="1" height="3"></rect>
+                <rect x="7" y="14" width="1" height="1"></rect><rect x="11" y="10" width="1" height="1"></rect><rect x="12" y="11" width="1" height="3"></rect>
+                <rect x="11" y="14" width="1" height="1"></rect><rect x="4" y="8" width="1" height="1"></rect><rect x="3" y="9" width="1" height="1"></rect>
+                <rect x="2" y="10" width="1" height="3"></rect><rect x="3" y="13" width="1" height="1"></rect><rect x="14" y="8" width="1" height="1"></rect>
+                <rect x="15" y="9" width="1" height="1"></rect><rect x="16" y="10" width="1" height="3"></rect><rect x="15" y="13" width="1" height="1"></rect>
+            </g>
+        </defs>
+    </svg>
+
+    <!-- 主容器 -->
+    <main class="pt-24 pb-24 px-6 md:px-12 max-w-[1400px] mx-auto space-y-32">
+        
+        <!-- Header -->
+        <header class="text-center max-w-4xl mx-auto space-y-6">
+            <div class="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/10 bg-white/5 mb-4">
+                <svg viewBox="0 0 19 19" class="w-5 h-5 text-white"><use href="#pixel-octo"></use></svg>
+                <span class="font-mono text-xs tracking-widest text-white">SIBYLLA_BRAND_GUIDELINES_V2.0</span>
+            </div>
+            <h1 class="text-5xl md:text-7xl font-bold tracking-tighter text-white">Design System</h1>
+            <p class="text-xl text-gray-400 leading-relaxed font-light">
+                极致的黑白，绝对的克制。<br>
+                本规范静态展示 Sibylla 品牌的全局视觉标准，涵盖从高级大背景、底层 UI 控件、中英文字体排版，到宣发海报与 Pitch Deck 的高级感设计范式。
+            </p>
+        </header>
+
+        <!-- 01. 品牌标识 -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">01. 品牌标识 (Brand Identity)</h2>
+                <p class="text-gray-400 mt-2">完全扁平化的像素章鱼与代码化字体的结合，分别适配深浅两套背景体系。</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-sys-black border border-sys-darkBorder rounded-3xl p-20 flex flex-col items-center justify-center">
+                    <svg viewBox="0 0 19 19" class="w-32 h-32 text-white mb-8"><use href="#pixel-octo"></use></svg>
+                    <span class="font-mono font-bold text-3xl text-white tracking-widest">&lt;SIBYLLA/&gt;</span>
+                    <p class="mt-8 text-sm text-sys-darkMuted font-mono">Dark Mode / Primary</p>
+                </div>
+                <div class="bg-sys-lightBg border border-sys-lightBorder rounded-3xl p-20 flex flex-col items-center justify-center">
+                    <svg viewBox="0 0 19 19" class="w-32 h-32 text-sys-black mb-8"><use href="#pixel-octo"></use></svg>
+                    <span class="font-mono font-bold text-3xl text-sys-black tracking-widest">&lt;SIBYLLA/&gt;</span>
+                    <p class="mt-8 text-sm text-sys-lightMuted font-mono">Light Mode / Secondary</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 02. 中英文字体排版 -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">02. 字体体系 (Typography)</h2>
+                <p class="text-gray-400 mt-2">现代、几何、严谨。中文采用思源黑体保障阅读性，英文及代码采用无衬线与等宽字体强调极客属性。</p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- English Font -->
+                <div class="p-10 rounded-3xl bg-sys-darkSurface border border-sys-darkBorder flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-8">
+                            <span class="text-6xl font-bold text-white tracking-tighter">Aa</span>
+                            <span class="px-3 py-1 bg-white/10 text-white text-xs font-mono rounded-full">EN / UI</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white mb-2">Inter</h3>
+                        <p class="text-sys-darkMuted text-sm leading-relaxed">用于所有英文 UI 界面、海报大标题、Deck 正文。提供极致的清晰度与现代感。</p>
+                    </div>
+                    <div class="mt-8 space-y-2 border-t border-white/10 pt-6">
+                        <p class="text-xl font-bold text-white tracking-tighter">Bold 700</p>
+                        <p class="text-xl font-medium text-white">Medium 500</p>
+                        <p class="text-xl font-normal text-gray-400">Regular 400</p>
+                    </div>
+                </div>
+
+                <!-- Chinese Font -->
+                <div class="p-10 rounded-3xl bg-sys-darkSurface border border-sys-darkBorder flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-8">
+                            <span class="text-6xl font-bold text-white tracking-tighter">字</span>
+                            <span class="px-3 py-1 bg-white/10 text-white text-xs font-mono rounded-full">CN / UI</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white mb-2">Noto Sans SC <span class="text-sm font-normal text-gray-500">(思源黑体)</span></h3>
+                        <p class="text-sys-darkMuted text-sm leading-relaxed">首选中文无衬线体。大标题使用 Bold (700) 配合紧凑字间距，正文使用 Regular (400) 保障大段 Markdown 的阅读舒适度。</p>
+                    </div>
+                    <div class="mt-8 space-y-2 border-t border-white/10 pt-6">
+                        <p class="text-xl font-bold text-white tracking-tighter">多智能体网络 700</p>
+                        <p class="text-xl font-medium text-white">群体记忆中枢 500</p>
+                        <p class="text-xl font-normal text-gray-400">数字资产沉淀 400</p>
+                    </div>
+                </div>
+
+                <!-- Code Font -->
+                <div class="p-10 rounded-3xl bg-sys-darkSurface border border-sys-darkBorder flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-start mb-8">
+                            <span class="text-6xl font-bold text-white font-mono">&lt;/&gt;</span>
+                            <span class="px-3 py-1 bg-white/10 text-white text-xs font-mono rounded-full">CODE / AGENT</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white mb-2 font-mono">JetBrains Mono</h3>
+                        <p class="text-sys-darkMuted text-sm leading-relaxed">用于 Logo、代码块、文件路径 (如 `CLAUDE.md`)、Skill 标签以及 Agent 的系统级提示信息。</p>
+                    </div>
+                    <div class="mt-8 space-y-2 border-t border-white/10 pt-6 font-mono">
+                        <p class="text-lg font-bold text-white tracking-widest">&lt;SIBYLLA/&gt;</p>
+                        <p class="text-lg font-medium text-white">git commit -m</p>
+                        <p class="text-lg font-normal text-gray-400">agent_ready = true</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 03. 色彩基调 -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">03. 色彩基调 (Monochrome Palette)</h2>
+                <p class="text-gray-400 mt-2">抛弃所有高饱和度主色，仅以黑白灰构建界面的层级关系。以下为深浅两套核心色值，须严格遵循。</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                <div class="space-y-6">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-3">
+                        <span class="w-4 h-4 bg-black border border-white/20 rounded-full"></span> Dark Theme (深色/主推)
+                    </h3>
+                    <div class="rounded-3xl overflow-hidden border border-sys-darkBorder bg-sys-black text-white shadow-2xl">
+                        <div class="flex items-center justify-between p-6 border-b border-sys-darkBorder">
+                            <div><p class="font-bold">Background (全局背景)</p><p class="text-xs text-sys-darkMuted mt-1">最深邃的画布</p></div>
+                            <span class="font-mono bg-white/10 px-3 py-1 rounded">#000000</span>
+                        </div>
+                        <div class="flex items-center justify-between p-6 bg-sys-darkSurface border-b border-sys-darkBorder">
+                            <div><p class="font-bold">Surface (面板/卡片)</p><p class="text-xs text-sys-darkMuted mt-1">承载内容的容器</p></div>
+                            <span class="font-mono bg-white/10 px-3 py-1 rounded">#0A0A0A</span>
+                        </div>
+                        <div class="flex items-center justify-between p-6 bg-[#27272A] border-b border-sys-darkBorder">
+                            <div><p class="font-bold">Border (边框/分割线)</p><p class="text-xs text-gray-400 mt-1">极细的层级划分</p></div>
+                            <span class="font-mono bg-black/30 px-3 py-1 rounded">#27272A</span>
+                        </div>
+                        <div class="flex items-center justify-between p-6 bg-sys-darkSurface">
+                            <div><p class="font-bold text-sys-darkMuted">Muted Text (次要文本)</p><p class="text-xs text-gray-500 mt-1">非关键性说明</p></div>
+                            <span class="font-mono bg-white/10 px-3 py-1 rounded text-sys-darkMuted">#A1A1AA</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-3">
+                        <span class="w-4 h-4 bg-white border border-white/20 rounded-full"></span> Light Theme (浅色)
+                    </h3>
+                    <div class="rounded-3xl overflow-hidden border border-sys-lightBorder bg-sys-lightBg text-sys-black shadow-lg">
+                        <div class="flex items-center justify-between p-6 border-b border-sys-lightBorder">
+                            <div><p class="font-bold">Background (全局背景)</p><p class="text-xs text-sys-lightMuted mt-1">温和的冷灰底色</p></div>
+                            <span class="font-mono bg-black/5 px-3 py-1 rounded">#F4F4F5</span>
+                        </div>
+                        <div class="flex items-center justify-between p-6 bg-sys-lightSurface border-b border-sys-lightBorder">
+                            <div><p class="font-bold">Surface (面板/卡片)</p><p class="text-xs text-sys-lightMuted mt-1">纯白容器突显内容</p></div>
+                            <span class="font-mono bg-black/5 px-3 py-1 rounded">#FFFFFF</span>
+                        </div>
+                        <div class="flex items-center justify-between p-6 bg-[#E4E4E7] border-b border-sys-lightBorder">
+                            <div><p class="font-bold">Border (边框/分割线)</p><p class="text-xs text-gray-500 mt-1">柔和的界限</p></div>
+                            <span class="font-mono bg-white/50 px-3 py-1 rounded">#E4E4E7</span>
+                        </div>
+                        <div class="flex items-center justify-between p-6 bg-sys-lightSurface">
+                            <div><p class="font-bold text-sys-lightMuted">Muted Text (次要文本)</p><p class="text-xs text-gray-400 mt-1">非关键性说明</p></div>
+                            <span class="font-mono bg-black/5 px-3 py-1 rounded text-sys-lightMuted">#71717A</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 04. 高级大背景与空间体系 (新增) -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">04. 高级大背景与空间体系 (Backgrounds & Spatial)</h2>
+                <p class="text-gray-400 mt-2">科技感不等于花哨的特效。我们通过极细的网格线、微弱的顶部径向发光、以及胶片级的噪点（Noise），在纯黑背景上构建极具深度的高级科技感空间。</p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- 量子网格背景 -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-medium text-white">A. Quantum Grid (量子网格发光)</h3>
+                    <p class="text-sm text-sys-darkMuted">用于官网 Hero Section、登录页或 Dashboard 顶层，提供向下的空间纵深感。</p>
+                    <div class="h-80 rounded-3xl border border-sys-darkBorder relative overflow-hidden bg-[#050505] flex items-center justify-center">
+                        <!-- 径向发光 -->
+                        <div class="absolute inset-0 bg-radial-glow"></div>
+                        <!-- 网格 -->
+                        <div class="absolute inset-0 bg-[size:40px_40px] bg-grid-pattern opacity-60"></div>
+                        
+                        <div class="relative z-10 px-6 py-3 bg-black/50 backdrop-blur-md border border-white/20 rounded-2xl text-white font-mono text-sm shadow-glow-white">
+                            &lt;Context Engine Ready/&gt;
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 深渊噪点背景 -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-medium text-white">B. Abyss Noise (深渊胶片噪点)</h3>
+                    <p class="text-sm text-sys-darkMuted">用于内容密集型编辑区、卡片底层。通过微妙的噪点打破纯色的死板，增加物理材质的高级感。</p>
+                    <!-- 将背景颜色调亮到深灰，以便噪点有反差空间 -->
+                    <div class="h-80 rounded-3xl border border-sys-darkBorder relative overflow-hidden bg-[#222222] flex items-center justify-center">
+                        <!-- SVG 噪点层，使用叠加模式并提升透明度 -->
+                        <div class="absolute inset-0 bg-noise-pattern mix-blend-overlay"></div>
+                        <!-- 暗角遮罩 -->
+                        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#050505]/60 to-[#050505]"></div>
+                        
+                        <div class="relative z-10 w-64 h-32 bg-[#000000]/60 backdrop-blur-md border border-white/20 rounded-xl flex items-center justify-center shadow-2xl">
+                            <span class="text-white font-medium text-sm tracking-widest">CONTENT_CANVAS</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 05. 核心 UI 组件库 -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">05. 核心 UI 组件库 (Core Components & Controls)</h2>
+                <p class="text-gray-400 mt-2">统一的底层交互控件库。极致克制的黑白灰调、微小的圆角 (rounded-xl) 以及基于透明度控制的极细边框，构成高级科技感。以下展示深色模式下的标准形态。</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Action Buttons & Segments -->
+                <div class="p-8 rounded-3xl bg-[#111111] border border-[#222222] flex flex-col space-y-10 shadow-lg">
+                    <div class="space-y-4">
+                        <p class="text-sm font-mono text-gray-500 mb-2">Action Buttons</p>
+                        <!-- Primary -->
+                        <button class="w-full bg-white text-black py-3.5 rounded-xl font-semibold hover:bg-gray-200 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.2)] text-[15px]">
+                            Initialize Agent
+                        </button>
+                        <!-- Secondary -->
+                        <button class="w-full bg-[#0A0A0A] border border-[#333333] text-gray-300 py-3.5 rounded-xl font-medium hover:bg-[#1A1A1A] hover:text-white transition-colors flex items-center justify-center gap-2 text-[15px]">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> Settings
+                        </button>
+                    </div>
+
+                    <div class="space-y-4">
+                        <p class="text-sm font-mono text-gray-500 mb-2">Segmented Control</p>
+                        <div class="flex bg-[#0A0A0A] p-1.5 rounded-xl border border-[#222222]">
+                            <button class="flex-1 py-2 bg-[#222222] text-white rounded-lg text-sm font-medium shadow-sm">Auto</button>
+                            <button class="flex-1 py-2 text-gray-500 hover:text-gray-300 rounded-lg text-sm font-medium transition-colors">Manual</button>
+                            <button class="flex-1 py-2 text-gray-500 hover:text-gray-300 rounded-lg text-sm font-medium transition-colors">Strict</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Toggles & Sliders -->
+                <div class="p-8 rounded-3xl bg-[#111111] border border-[#222222] flex flex-col space-y-10 shadow-lg">
+                    <div class="space-y-6">
+                        <p class="text-sm font-mono text-gray-500 mb-2">Toggles</p>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-200 text-[15px]">Web Search Access</span>
+                            <div class="w-12 h-6 bg-white rounded-full relative cursor-pointer shadow-[0_0_10px_rgba(255,255,255,0.2)]">
+                                <div class="w-5 h-5 bg-black rounded-full absolute right-0.5 top-0.5"></div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-200 text-[15px]">Memory Persistence</span>
+                            <div class="w-12 h-6 bg-[#333333] rounded-full relative cursor-pointer">
+                                <div class="w-5 h-5 bg-white rounded-full absolute left-0.5 top-0.5 shadow-sm"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <p class="text-sm font-mono text-gray-500 mb-2">Sliders (Parameters)</p>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-gray-400 text-sm">Temperature</span>
+                            <span class="font-mono text-gray-400 text-sm">0.7</span>
+                        </div>
+                        <div class="h-1 bg-[#333333] rounded-full relative">
+                            <div class="absolute left-0 top-0 h-full bg-white rounded-full" style="width: 70%;"></div>
+                            <div class="absolute w-4 h-4 bg-white rounded-full -mt-1.5 shadow-[0_0_10px_rgba(255,255,255,0.5)] cursor-pointer" style="left: 70%; transform: translateX(-50%);"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Indicators & Inputs -->
+                <div class="p-8 rounded-3xl bg-[#111111] border border-[#222222] flex flex-col space-y-10 shadow-lg">
+                    <div class="space-y-4">
+                        <p class="text-sm font-mono text-gray-500 mb-2">Status Indicators</p>
+                        <div class="bg-[#0A0A0A] border border-[#222222] px-4 py-3 rounded-xl flex items-center gap-3">
+                            <div class="w-2.5 h-2.5 bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)]"></div>
+                            <span class="text-white text-[15px] font-medium">Agent Running</span>
+                        </div>
+                        <div class="bg-[#0A0A0A] border border-[#1A1A1A] px-4 py-3 rounded-xl flex items-center gap-3 opacity-60">
+                            <div class="w-2.5 h-2.5 border-2 border-gray-500 rounded-full"></div>
+                            <span class="text-gray-500 text-[15px] font-medium">Standby</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <p class="text-sm font-mono text-gray-500 mb-2">Input Field</p>
+                        <div class="relative group">
+                            <input type="text" placeholder="Enter system prompt..." class="w-full bg-[#0A0A0A] border border-[#333333] rounded-xl py-3.5 pl-4 pr-12 text-white focus:border-white/50 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all placeholder-gray-500 text-[15px]">
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-xs border border-[#333333] rounded px-1.5 py-0.5 bg-[#111111]">⌘↵</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 06. 窗口与面板 (Command Palette) -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">06. 窗口与命令面板 (Windows & Command Palette)</h2>
+                <p class="text-gray-400 mt-2">全局搜索与命令调用的核心交互面板。采用极致细腻的暗色面板，配合高对比度的高亮选项。</p>
+            </div>
+            
+            <div class="max-w-3xl mx-auto">
+                <div class="bg-[#0A0A0A] border border-[#222222] rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                    <!-- Search Input -->
+                    <div class="relative border-b border-[#222222] flex items-center px-4">
+                        <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <input type="text" value="Search agents, commands, or logs..." readonly class="w-full bg-transparent border-none focus:outline-none text-gray-400 py-5 pl-4 text-[15px] font-mono cursor-default">
+                        <span class="text-gray-500 font-mono text-xs border border-[#333333] rounded px-1.5 py-0.5 flex-shrink-0">ESC</span>
+                    </div>
+                    
+                    <!-- Suggestions List -->
+                    <div class="p-2 flex flex-col gap-1">
+                        <p class="text-xs font-mono text-gray-500 px-3 py-2 uppercase tracking-widest">Suggestions</p>
+                        
+                        <!-- Active Item -->
+                        <div class="bg-white rounded-xl px-4 py-3 flex items-center justify-between cursor-pointer shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                <span class="text-black font-semibold text-[15px]">Create New Agent</span>
+                            </div>
+                            <span class="text-gray-400 font-mono text-xs">⌘ N</span>
+                        </div>
+                        
+                        <!-- Inactive Item 1 -->
+                        <div class="rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[#1A1A1A] transition-colors text-gray-300">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <span class="font-medium text-[15px]">View System Logs</span>
+                        </div>
+                        
+                        <!-- Inactive Item 2 -->
+                        <div class="rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[#1A1A1A] transition-colors text-gray-300">
+                            <div class="w-4 h-4 border-2 border-gray-400 rounded-full flex items-center justify-center"><div class="w-1.5 h-1.5 bg-gray-400 rounded-full"></div></div>
+                            <span class="font-medium text-[15px]">Halt All Operations</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 07. 窗口与毛玻璃系统 -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">07. 窗口与对话层级 (Windows & Glassmorphism)</h2>
+                <p class="text-gray-400 mt-2">Agent 对话窗口必须使用毛玻璃（背景模糊）效果，以体现其悬浮于整个 Workspace 之上的“全局视野”。</p>
+            </div>
+            
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <!-- Dark Mode Chat Window UI -->
+                <div class="rounded-3xl border border-sys-darkBorder bg-[url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2000&auto=format&fit=crop')] bg-cover bg-center overflow-hidden relative min-h-[600px] flex items-center justify-center p-6">
+                    <div class="absolute inset-0 bg-black/50"></div> <!-- 变暗遮罩 -->
+                    
+                    <!-- Dark Glass Window -->
+                    <div class="glass-panel-dark w-full max-w-md rounded-2xl shadow-glass-dark flex flex-col overflow-hidden relative z-10 text-white">
+                        <div class="px-5 py-4 border-b border-white/10 flex justify-between items-center bg-black/30">
+                            <div class="flex items-center gap-3">
+                                <svg viewBox="0 0 19 19" class="w-5 h-5"><use href="#pixel-octo"></use></svg>
+                                <span class="font-medium text-sm">Sibylla Agent</span>
+                            </div>
+                            <span class="font-mono text-xs text-gray-400">Dark UI</span>
+                        </div>
+                        <div class="p-5 space-y-6">
+                            <div class="flex flex-col items-end">
+                                <div class="px-4 py-3 bg-white text-black rounded-2xl rounded-tr-sm text-sm max-w-[85%] shadow-md font-medium">
+                                    审查一下支付接口的并发逻辑。
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0">
+                                    <svg viewBox="0 0 19 19" class="w-4 h-4"><use href="#pixel-octo"></use></svg>
+                                </div>
+                                <div class="flex flex-col gap-2 max-w-[85%]">
+                                    <div class="px-4 py-3 bg-black/60 border border-white/10 rounded-2xl rounded-tl-sm text-sm text-gray-200 space-y-2">
+                                        <p>已检索 <span class="font-mono px-1 py-0.5 bg-white/10 rounded text-white">api.md</span>。建议增加锁机制：</p>
+                                        <div class="p-2 bg-black rounded-lg border border-white/10 font-mono text-xs text-gray-400">
+                                            <span class="text-white">await</span> acquireLock(req.id);
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button class="px-3 py-1.5 text-xs font-medium border border-white/20 rounded-lg hover:bg-white hover:text-black transition-colors bg-white/10">Apply</button>
+                                        <button class="px-3 py-1.5 text-xs font-medium border border-white/20 rounded-lg hover:bg-white/20 transition-colors bg-transparent">Decline</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-4 border-t border-white/10 bg-black/40">
+                            <div class="relative flex items-center">
+                                <input type="text" placeholder="Message Agent..." class="w-full pl-4 pr-10 py-2.5 bg-black/50 border border-white/20 rounded-xl focus:outline-none focus:border-white text-sm placeholder-gray-500">
+                                <button class="absolute right-2 p-1.5 bg-white text-black rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Light Mode Chat Window UI -->
+                <div class="rounded-3xl border border-sys-darkBorder bg-[url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2000&auto=format&fit=crop')] bg-cover bg-center overflow-hidden relative min-h-[600px] flex items-center justify-center p-6">
+                    <div class="absolute inset-0 bg-white/30"></div> <!-- 变亮遮罩 -->
+                    
+                    <!-- Light Glass Window -->
+                    <div class="glass-panel-light w-full max-w-md rounded-2xl shadow-glass-light flex flex-col overflow-hidden relative z-10 text-sys-black">
+                        <div class="px-5 py-4 border-b border-black/10 flex justify-between items-center bg-white/40">
+                            <div class="flex items-center gap-3">
+                                <svg viewBox="0 0 19 19" class="w-5 h-5"><use href="#pixel-octo"></use></svg>
+                                <span class="font-medium text-sm">Sibylla Agent</span>
+                            </div>
+                            <span class="font-mono text-xs text-gray-500">Light UI</span>
+                        </div>
+                        <div class="p-5 space-y-6">
+                            <div class="flex flex-col items-end">
+                                <div class="px-4 py-3 bg-black text-white rounded-2xl rounded-tr-sm text-sm max-w-[85%] shadow-md font-medium">
+                                    生成一份关于竞品的分析报告。
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="w-8 h-8 rounded-full bg-white/50 border border-black/10 flex items-center justify-center flex-shrink-0">
+                                    <svg viewBox="0 0 19 19" class="w-4 h-4"><use href="#pixel-octo"></use></svg>
+                                </div>
+                                <div class="flex flex-col gap-2 max-w-[85%]">
+                                    <div class="px-4 py-3 bg-white/80 border border-black/10 rounded-2xl rounded-tl-sm text-sm text-gray-700 space-y-2 shadow-sm">
+                                        <p>已调用 <span class="font-mono px-1 py-0.5 bg-black/5 rounded text-black">#skill_analysis</span>。报告大纲已生成：</p>
+                                        <ul class="list-disc pl-4 text-xs space-y-1 text-gray-600">
+                                            <li>核心功能对比</li>
+                                            <li>定价策略拆解</li>
+                                        </ul>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button class="px-3 py-1.5 text-xs font-medium border border-black/20 rounded-lg hover:bg-black hover:text-white transition-colors bg-white">Write to File</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-4 border-t border-black/10 bg-white/60">
+                            <div class="relative flex items-center">
+                                <input type="text" placeholder="Message Agent..." class="w-full pl-4 pr-10 py-2.5 bg-white border border-black/20 rounded-xl focus:outline-none focus:border-black text-sm placeholder-gray-400">
+                                <button class="absolute right-2 p-1.5 bg-black text-white rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 08. 宣发规范：海报与 Pitch Deck -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">08. 品牌宣发规范 (Marketing & Decks)</h2>
+                <p class="text-gray-400 mt-2">对外的海报 (Posters) 与商业路演 (Pitch Deck) 必须延续极客、高级、留白的扁平科技感。禁止使用复杂的 3D 插画或花哨的渐变色。</p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                
+                <!-- Poster Guideline Mockup -->
+                <div class="space-y-6">
+                    <h3 class="text-xl font-bold text-white">海报规范 (Poster Layout)</h3>
+                    <p class="text-sm text-sys-darkMuted">大面积留白、网格线背景、超大字号排版、倾斜或切割的排版打破常规。</p>
+                    <div class="aspect-[3/4] bg-sys-black border border-sys-darkBorder rounded-2xl relative overflow-hidden poster-grid p-8 flex flex-col justify-between group">
+                        <div class="flex justify-between items-start">
+                            <svg viewBox="0 0 19 19" class="w-8 h-8 text-white"><use href="#pixel-octo"></use></svg>
+                            <div class="text-right">
+                                <p class="font-mono text-xs text-gray-500">RELEASE 2026</p>
+                                <p class="font-mono text-xs text-white">GLOBAL</p>
+                            </div>
+                        </div>
+                        <div class="transform -rotate-6 scale-110 group-hover:scale-105 transition-transform duration-700">
+                            <h2 class="text-7xl font-bold text-white tracking-tighter leading-none mix-blend-difference">
+                                MULTI-<br>AGENT<br>NETWORK
+                            </h2>
+                        </div>
+                        <div class="border-t border-white/20 pt-4 flex justify-between items-end">
+                            <p class="text-sm font-medium text-white w-2/3">驱动群体智能涌现的神经中枢。Sibylla 重新定义组织记忆。</p>
+                            <p class="font-mono text-xs text-gray-500">&lt;SYS/&gt;</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pitch Deck Guideline Mockup -->
+                <div class="space-y-6">
+                    <h3 class="text-xl font-bold text-white">路演 Deck 规范 (Pitch Deck Slide)</h3>
+                    <p class="text-sm text-sys-darkMuted">采用 16:9 比例，深色背景为主。多用 Bento Box (便当盒) 网格布局，数据可视化需极简干练。</p>
+                    <div class="aspect-video bg-[#0A0A0A] border border-sys-darkBorder rounded-2xl p-8 flex flex-col relative overflow-hidden">
+                        <div class="flex justify-between items-center mb-10">
+                            <h2 class="text-2xl font-bold text-white tracking-tight">The Context Engine</h2>
+                            <span class="font-mono text-xs text-gray-500 border border-gray-800 px-2 py-1 rounded">SLIDE 04</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4 flex-1">
+                            <div class="col-span-2 bg-[#111111] border border-white/5 rounded-xl p-6 flex flex-col justify-between">
+                                <p class="text-sm text-gray-400">Total Assets Managed</p>
+                                <div>
+                                    <h3 class="text-5xl font-mono font-bold text-white">100%</h3>
+                                    <p class="text-sm text-gray-500 mt-2">Local Markdown Storage. Zero lock-in.</p>
+                                </div>
+                            </div>
+                            <div class="bg-[#111111] border border-white/5 rounded-xl p-6 flex flex-col items-center justify-center text-center">
+                                <svg viewBox="0 0 19 19" class="w-12 h-12 text-white mb-4"><use href="#pixel-octo"></use></svg>
+                                <p class="text-sm font-bold text-white">Global AI</p>
+                            </div>
+                            <div class="col-span-3 bg-white text-black rounded-xl p-5 flex justify-between items-center">
+                                <p class="font-bold">Next-Gen Multi-Agent Collaboration</p>
+                                <span class="font-mono text-xs bg-black text-white px-2 py-1 rounded">ACTIVE</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- 09. 资产列表与导出 -->
+        <section class="space-y-12">
+            <div class="border-b border-white/10 pb-4">
+                <h2 class="text-3xl font-bold text-white">09. SVG 资产与资源清单 (Assets & Resources)</h2>
+                <p class="text-gray-400 mt-2">开发者与 AI Agent 可直接从此区域读取并复用核心代码片段。</p>
+            </div>
+            
+            <div class="space-y-8">
+                <!-- SVG Code Block 1: Octo Logo -->
+                <div class="bg-[#0A0A0A] border border-sys-darkBorder rounded-2xl overflow-hidden">
+                    <div class="flex items-center px-6 py-4 border-b border-sys-darkBorder bg-[#111111]">
+                        <div class="flex items-center gap-4">
+                            <svg viewBox="0 0 19 19" class="w-6 h-6 text-white"><use href="#pixel-octo"></use></svg>
+                            <span class="font-medium text-white">Sibylla Pixel Octo Logo</span>
+                        </div>
+                    </div>
+                    <pre class="p-6 overflow-x-auto text-sm font-mono text-gray-300"><code id="svg-code-octo">&lt;svg viewBox="0 0 19 19" fill="currentColor" xmlns="http://www.w3.org/2000/svg"&gt;
+    &lt;rect x="7" y="2" width="5" height="1"/&gt;&lt;rect x="5" y="3" width="2" height="1"/&gt;&lt;rect x="12" y="3" width="2" height="1"/&gt;
+    &lt;rect x="4" y="4" width="1" height="4"/&gt;&lt;rect x="14" y="4" width="1" height="4"/&gt;&lt;rect x="5" y="8" width="2" height="1"/&gt;
+    &lt;rect x="12" y="8" width="2" height="1"/&gt;&lt;rect x="7" y="9" width="5" height="1"/&gt;&lt;rect x="6" y="5" width="1" height="1"/&gt;
+    &lt;rect x="7" y="6" width="1" height="1"/&gt;&lt;rect x="12" y="5" width="1" height="1"/&gt;&lt;rect x="11" y="6" width="1" height="1"/&gt;
+    &lt;rect x="9" y="10" width="1" height="5"/&gt;&lt;rect x="7" y="10" width="1" height="1"/&gt;&lt;rect x="6" y="11" width="1" height="3"/&gt;
+    &lt;rect x="7" y="14" width="1" height="1"/&gt;&lt;rect x="11" y="10" width="1" height="1"/&gt;&lt;rect x="12" y="11" width="1" height="3"/&gt;
+    &lt;rect x="11" y="14" width="1" height="1"/&gt;&lt;rect x="4" y="8" width="1" height="1"/&gt;&lt;rect x="3" y="9" width="1" height="1"/&gt;
+    &lt;rect x="2" y="10" width="1" height="3"/&gt;&lt;rect x="3" y="13" width="1" height="1"/&gt;&lt;rect x="14" y="8" width="1" height="1"/&gt;
+    &lt;rect x="15" y="9" width="1" height="1"/&gt;&lt;rect x="16" y="10" width="1" height="3"/&gt;&lt;rect x="15" y="13" width="1" height="1"/&gt;
+&lt;/svg&gt;</code></pre>
+                </div>
+
+                <!-- Core UI Icons Set -->
+                <div class="bg-[#0A0A0A] border border-sys-darkBorder rounded-2xl overflow-hidden">
+                    <div class="flex items-center px-6 py-4 border-b border-sys-darkBorder bg-[#111111]">
+                        <span class="font-medium text-white">System Icons (系统常用图标集 SVG 源码)</span>
+                    </div>
+                    <div class="p-8 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                        
+                        <!-- Icon: Settings -->
+                        <div class="flex flex-col items-center gap-3 p-4 rounded-xl border border-white/10 group">
+                            <svg class="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            <span class="text-xs font-mono text-gray-500">settings</span>
+                        </div>
+
+                        <!-- Icon: Document/Book -->
+                        <div class="flex flex-col items-center gap-3 p-4 rounded-xl border border-white/10 group">
+                            <svg class="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                            <span class="text-xs font-mono text-gray-500">knowledge</span>
+                        </div>
+
+                        <!-- Icon: Search -->
+                        <div class="flex flex-col items-center gap-3 p-4 rounded-xl border border-white/10 group">
+                            <svg class="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            <span class="text-xs font-mono text-gray-500">search</span>
+                        </div>
+
+                        <!-- Icon: Terminal/Code -->
+                        <div class="flex flex-col items-center gap-3 p-4 rounded-xl border border-white/10 group">
+                            <svg class="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            <span class="text-xs font-mono text-gray-500">terminal</span>
+                        </div>
+
+                        <!-- Icon: Database/Memory -->
+                        <div class="flex flex-col items-center gap-3 p-4 rounded-xl border border-white/10 group">
+                            <svg class="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+                            <span class="text-xs font-mono text-gray-500">memory</span>
+                        </div>
+
+                        <!-- Icon: Document/Markdown -->
+                        <div class="flex flex-col items-center gap-3 p-4 rounded-xl border border-white/10 group">
+                            <svg class="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <span class="text-xs font-mono text-gray-500">document</span>
+                        </div>
+                        
+                        <!-- Icon: Network/Nodes -->
+                        <div class="flex flex-col items-center gap-3 p-4 rounded-xl border border-white/10 group">
+                            <svg class="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                            <span class="text-xs font-mono text-gray-500">network</span>
+                        </div>
+
+                        <!-- Icon: Add/Plus -->
+                        <div class="flex flex-col items-center gap-3 p-4 rounded-xl border border-white/10 group">
+                            <svg class="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            <span class="text-xs font-mono text-gray-500">add</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Tailwind Config Snippet -->
+                <div class="bg-[#0A0A0A] border border-sys-darkBorder rounded-2xl overflow-hidden">
+                    <div class="flex items-center px-6 py-4 border-b border-sys-darkBorder bg-[#111111]">
+                        <span class="font-medium text-white">Tailwind CSS Core Colors Configuration</span>
+                    </div>
+                    <pre class="p-6 overflow-x-auto text-sm font-mono text-gray-300"><code id="code-tw-colors">module.exports = {
+  theme: {
+    colors: {
+      sys: {
+        black: '#000000',
+        darkSurface: '#0A0A0A',
+        darkBorder: '#27272A',
+        darkMuted: '#A1A1AA',
+        white: '#FFFFFF',
+        lightBg: '#F4F4F5',
+        lightSurface: '#FFFFFF',
+        lightBorder: '#E4E4E7',
+        lightMuted: '#71717A',
+      }
+    }
+  }
+}</code></pre>
+                </div>
+            </div>
+        </section>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="border-t border-white/10 pt-12 text-center">
+            <svg viewBox="0 0 19 19" class="w-8 h-8 text-white mx-auto mb-6 opacity-50"><use href="#pixel-octo"></use></svg>
+            <p class="font-mono text-sm text-gray-500 tracking-widest uppercase">&lt;Sibylla / Design System / 2026&gt;</p>
+        </footer>
+
+    </main>
+
+</body>
+</html>

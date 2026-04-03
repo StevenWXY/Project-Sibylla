@@ -13,7 +13,8 @@ export default defineConfig({
   
   // Development server configuration
   server: {
-    port: 5173,
+    host: '127.0.0.1',
+    port: 5555,
     strictPort: true,
     hmr: {
       overlay: true // Show error overlay for quick debugging

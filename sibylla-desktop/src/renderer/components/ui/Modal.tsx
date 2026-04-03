@@ -59,7 +59,7 @@ export function Modal({
             >
               <Dialog.Panel
                 className={cn(
-                  'w-full transform overflow-hidden rounded-xl glass p-6 text-left align-middle shadow-notion-lg transition-all',
+                  'w-full transform overflow-hidden rounded-2xl border border-white/10 bg-sys-darkSurface/80 p-6 text-left align-middle text-white shadow-glass-dark backdrop-blur-xl transition-all',
                   sizeClasses[size]
                 )}
               >
@@ -70,13 +70,13 @@ export function Modal({
                       {title && (
                         <Dialog.Title
                           as="h3"
-                          className="text-lg font-semibold text-notion-text-primary dark:text-white"
+                          className="text-lg font-semibold text-white"
                         >
                           {title}
                         </Dialog.Title>
                       )}
                       {description && (
-                        <Dialog.Description className="mt-1 text-sm text-notion-text-secondary dark:text-gray-400">
+                        <Dialog.Description className="mt-1 text-sm text-sys-darkMuted">
                           {description}
                         </Dialog.Description>
                       )}
@@ -85,7 +85,7 @@ export function Modal({
                       <button
                         type="button"
                         onClick={onClose}
-                        className="ml-4 rounded-lg p-1.5 text-notion-text-secondary hover:bg-notion-bg-secondary dark:text-gray-400 dark:hover:bg-gray-800 transition-colors"
+                        className="ml-4 rounded-lg p-1.5 text-sys-darkMuted transition-colors hover:bg-sys-darkSurface hover:text-white"
                         aria-label="关闭对话框"
                       >
                         <X className="h-5 w-5" />
@@ -95,7 +95,7 @@ export function Modal({
                 )}
 
                 {/* Content */}
-                <div className="text-notion-text-primary dark:text-gray-200">
+                <div className="text-white">
                   {children}
                 </div>
               </Dialog.Panel>

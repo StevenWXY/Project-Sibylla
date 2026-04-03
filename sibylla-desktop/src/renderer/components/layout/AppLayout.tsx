@@ -27,13 +27,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const sidebarCollapsed = useAppStore(selectSidebarCollapsed)
   
   return (
-    <div className="flex h-screen overflow-hidden bg-notion-bg-primary dark:bg-gray-900">
+    <div className="sibylla-shell flex h-screen overflow-hidden">
       {/* 侧边栏 - 固定定位 */}
       <Sidebar />
       
       {/* 主内容区 - 根据侧边栏状态调整左边距 */}
       <div className={cn(
-        'flex flex-1 flex-col overflow-hidden transition-all duration-300 ease-in-out',
+        'relative z-10 flex flex-1 flex-col overflow-hidden transition-all duration-300 ease-in-out',
         sidebarCollapsed ? 'ml-16' : 'ml-64'
       )}>
         <Header />

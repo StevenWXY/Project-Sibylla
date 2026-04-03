@@ -62,6 +62,17 @@ export const config = {
     adminToken: env.GITEA_ADMIN_TOKEN,
     adminUsername: env.GITEA_ADMIN_USERNAME,
   },
+
+  // AI Gateway
+  ai: {
+    openaiApiKey: env.OPENAI_API_KEY,
+    openaiBaseUrl: env.OPENAI_BASE_URL,
+    anthropicApiKey: env.ANTHROPIC_API_KEY,
+    anthropicBaseUrl: env.ANTHROPIC_BASE_URL,
+    maxInputTokens: env.AI_MAX_INPUT_TOKENS,
+    dailyTokenLimit: env.AI_DAILY_TOKEN_LIMIT,
+    gatewayTimeoutMs: env.AI_GATEWAY_TIMEOUT_MS,
+  },
 }
 
 /**
