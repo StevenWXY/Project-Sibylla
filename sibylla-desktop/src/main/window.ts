@@ -20,7 +20,7 @@ export function createMainWindow(): BrowserWindow {
     // Window properties
     title: 'Sibylla',
     show: false, // Don't show until ready-to-show event
-    backgroundColor: '#ffffff',
+    backgroundColor: '#000000',
     
     // Web preferences with security best practices
     webPreferences: {
@@ -104,6 +104,22 @@ function setupWindowEvents(window: BrowserWindow): void {
     //   showSaveConfirmationDialog()
     // }
   })
+
+  window.webContents.on('did-finish-load', () => {
+    console.log('[Window] did-finish-load')
+  })
+
+  window.webContents.on('did-fail-load', (_event, code, description, url) => {
+    console.error('[Window] did-fail-load', { code, description, url })
+  })
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Window] render-process-gone', details)
+  })
+
+  window.webContents.on('unresponsive', () => {
+    console.error('[Window] Renderer became unresponsive')
+  })
 }
 
 /**
@@ -115,6 +131,13 @@ function loadWindowContent(window: BrowserWindow): void {
     // Development: Load from Vite dev server
     window.loadURL(DEV_SERVER_URL).catch((error) => {
       console.error('[Window] Failed to load dev server URL:', error)
+      window.loadURL(
+        `data:text/html;charset=utf-8,${encodeURIComponent(
+          '<h1 style="font-family: monospace; color: #fff; background: #000; padding: 24px;">Failed to load renderer. Check dev server and console logs.</h1>'
+        )}`
+      ).catch(() => {
+        // no-op: avoid secondary crash
+      })
     })
     
     // Open DevTools in development mode

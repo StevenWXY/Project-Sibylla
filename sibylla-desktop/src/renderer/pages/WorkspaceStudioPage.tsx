@@ -1,25 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import {
-  Loader2,
-  MessageSquare,
-  PencilLine,
-  RefreshCw,
-  Save,
-  Send,
-  Square,
-} from 'lucide-react'
-import { PixelOctoIcon } from '../components/brand/PixelOctoIcon'
-import { FileTree } from '../components/layout/FileTree'
-import { Button } from '../components/ui/Button'
+import type { AIChatResponse, FileInfo, FileWatchEvent, SyncStatusData } from '../../shared/types'
 import {
   useAppStore,
   selectCurrentFile,
   selectCurrentWorkspace,
   selectOpenFiles,
 } from '../store/appStore'
-import { cn } from '../utils/cn'
 import {
   buildTreeFromFiles,
   getBaseName,
@@ -27,26 +13,60 @@ import {
   normalizePath,
   type FileTreeNode,
 } from '../components/layout/file-tree.utils'
+import {
+  StudioAIPanel,
+  StudioEditorPanel,
+  StudioLeftPanel,
+  type ChatMessage,
+  type EditorMode,
+  type OpenFileTab,
+  type SaveStatus,
+} from '../components/studio'
+import type {
+  DiffProposal,
+  LeftToolMode,
+  NotificationItem,
+  NotificationLevel,
+  SearchResultItem,
+  TaskItem,
+} from '../components/studio/types'
 
-type EditorMode = 'edit' | 'preview' | 'split'
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
-type ChatRole = 'user' | 'assistant'
-
-interface ChatMessage {
-  id: string
-  role: ChatRole
-  content: string
-  createdAt: number
-  contextSources?: string[]
-  streaming?: boolean
-}
-
-interface AssistantContext {
-  currentFilePath: string | null
-}
-
-const STREAM_STEP_MS = 24
 const AUTOSAVE_DELAY_MS = 900
+const SEARCH_DEBOUNCE_MS = 260
+const MAX_SEARCH_RESULTS = 80
+const MAX_NOTIFICATIONS = 60
+const MAX_SEARCH_FILE_SIZE = 512 * 1024
+const MAX_TASK_FILE_SIZE = 768 * 1024
+const QUICK_AI_PROMPT_PREFIX = 'Create file:'
+
+const SEARCHABLE_EXTENSIONS = new Set([
+  'md',
+  'mdx',
+  'txt',
+  'json',
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'css',
+  'scss',
+  'html',
+  'xml',
+  'yaml',
+  'yml',
+  'toml',
+  'ini',
+  'py',
+  'java',
+  'go',
+  'rs',
+  'sql',
+  'sh',
+])
+
+const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdx'])
+
+const TASK_LINE_REGEX = /^(\s*[-*]\s\[)( |x|X)(\]\s+)(.*)$/
 
 function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -65,36 +85,180 @@ function extractMentionedFiles(input: string): string[] {
   let matched = mentionRegex.exec(input)
   while (matched) {
     if (matched[1]) {
-      mentions.add(matched[1])
+      mentions.add(normalizePath(matched[1]))
     }
     matched = mentionRegex.exec(input)
   }
   return Array.from(mentions)
 }
 
-function createAssistantResponse(userInput: string, context: AssistantContext): string {
-  const summary = userInput.length > 140 ? `${userInput.slice(0, 140)}...` : userInput
-  const fileHint = context.currentFilePath
-    ? `当前焦点文件是 \`${context.currentFilePath}\`。`
-    : '当前没有打开具体文件。'
+function normalizeExtension(extension?: string): string {
+  return (extension ?? '').replace(/^\./, '').toLowerCase()
+}
 
-  const fileAction = context.currentFilePath
-    ? `建议先在中栏补充该文件的目标结构，再让我继续细化内容。`
-    : '建议先从左侧文件树打开一个目标文档，我会基于该文档上下文继续生成。'
+function isSearchableFile(file: FileInfo): boolean {
+  if (file.isDirectory) {
+    return false
+  }
+  const extension = normalizeExtension(file.extension)
+  if (!extension) {
+    return true
+  }
+  return SEARCHABLE_EXTENSIONS.has(extension)
+}
 
-  return [
-    '我已经收到你的需求，以下是基于当前上下文的快速响应：',
-    '',
-    `你刚刚说的是：“${summary}”`,
-    fileHint,
-    '',
-    '下一步建议：',
-    '1. 先确认文档目标与受众，再拆成 3-5 个小节。',
-    '2. 每个小节保留「结论 + 依据 + 待办」。',
-    `3. ${fileAction}`,
-    '',
-    '如果你愿意，我可以继续直接给出可粘贴到 Markdown 的完整草稿。',
-  ].join('\n')
+function isMarkdownFile(file: FileInfo): boolean {
+  if (file.isDirectory) {
+    return false
+  }
+  return MARKDOWN_EXTENSIONS.has(normalizeExtension(file.extension))
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function extractFirstCodeBlock(text: string): string | null {
+  const matched = text.match(/```(?:[\w+-]+)?\n([\s\S]*?)```/)
+  const block = matched?.[1]?.trim()
+  return block && block.length > 0 ? block : null
+}
+
+function buildDiffProposal(
+  userInput: string,
+  response: AIChatResponse,
+  targetPath: string | null,
+  currentContent: string
+): DiffProposal | null {
+  if (!targetPath) {
+    return null
+  }
+
+  const fullRewrite = extractFirstCodeBlock(response.content)
+  if (fullRewrite && fullRewrite !== currentContent) {
+    return {
+      targetPath,
+      before: currentContent,
+      after: fullRewrite,
+    }
+  }
+
+  const replaceMatch = userInput.match(
+    /(?:将|把)[“"']([\s\S]+?)[”"'](?:替换为|替换成|改为|改成)[“"']([\s\S]+?)[”"']/
+  )
+  const beforeText = replaceMatch?.[1]
+  const afterText = replaceMatch?.[2]
+  if (beforeText && afterText && currentContent.includes(beforeText)) {
+    return {
+      targetPath,
+      before: beforeText,
+      after: afterText,
+    }
+  }
+
+  return null
+}
+
+function hasConflictMarkers(content: string): boolean {
+  return content.includes('<<<<<<<') && content.includes('=======') && content.includes('>>>>>>>')
+}
+
+function mergeConflictTexts(yours: string, theirs: string): string {
+  const merged: string[] = []
+  const seen = new Set<string>()
+
+  for (const line of [...yours.split('\n'), ...theirs.split('\n')]) {
+    const key = line.trim()
+    if (!key || seen.has(key)) {
+      continue
+    }
+    merged.push(line)
+    seen.add(key)
+  }
+
+  return merged.join('\n').trim()
+}
+
+function toPrefixedLines(text: string, prefix: '- ' | '+ ', limit: number = 6): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, limit)
+    .map((line) => `${prefix}${line}`)
+}
+
+function resolveConflictMarkers(content: string, strategy: 'yours' | 'theirs' | 'ai'): string {
+  const regex = /<<<<<<<[^\n]*\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>>[^\n]*(?:\n|$)/g
+
+  return content.replace(regex, (_matched, yoursRaw: string, theirsRaw: string) => {
+    const yours = yoursRaw.trimEnd()
+    const theirs = theirsRaw.trimEnd()
+
+    if (strategy === 'yours') {
+      return `${yours}\n`
+    }
+    if (strategy === 'theirs') {
+      return `${theirs}\n`
+    }
+
+    const merged = mergeConflictTexts(yours, theirs)
+    return `${merged}\n`
+  })
+}
+
+interface ConflictDraft {
+  filePath: string
+  yourLines: string[]
+  theirLines: string[]
+  aiMergeText: string
+  yourResolvedText: string
+  theirResolvedText: string
+  aiResolvedText: string
+}
+
+function buildConflictDraft(filePath: string, fileContent: string, currentEditorContent: string): ConflictDraft {
+  if (hasConflictMarkers(fileContent)) {
+    const firstBlockRegex = /<<<<<<<[^\n]*\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>>[^\n]*/
+    const matched = fileContent.match(firstBlockRegex)
+    const yours = matched?.[1]?.trim() ?? ''
+    const theirs = matched?.[2]?.trim() ?? ''
+    const ai = mergeConflictTexts(yours, theirs)
+
+    return {
+      filePath,
+      yourLines: toPrefixedLines(yours, '- '),
+      theirLines: toPrefixedLines(theirs, '+ '),
+      aiMergeText: ai || 'AI 建议保留双方关键信息并去重。',
+      yourResolvedText: resolveConflictMarkers(fileContent, 'yours'),
+      theirResolvedText: resolveConflictMarkers(fileContent, 'theirs'),
+      aiResolvedText: resolveConflictMarkers(fileContent, 'ai'),
+    }
+  }
+
+  const yoursFallback = currentEditorContent || fileContent
+  const theirsFallback = fileContent
+  const aiFallback = mergeConflictTexts(yoursFallback, theirsFallback) || theirsFallback
+
+  return {
+    filePath,
+    yourLines: toPrefixedLines(yoursFallback, '- '),
+    theirLines: toPrefixedLines(theirsFallback, '+ '),
+    aiMergeText: aiFallback,
+    yourResolvedText: yoursFallback,
+    theirResolvedText: theirsFallback,
+    aiResolvedText: aiFallback,
+  }
+}
+
+function applyProposalToContent(currentContent: string, proposal: DiffProposal): string {
+  if (proposal.before && currentContent.includes(proposal.before)) {
+    return currentContent.replace(new RegExp(escapeRegex(proposal.before)), proposal.after)
+  }
+  if (proposal.before === currentContent) {
+    return proposal.after
+  }
+  return proposal.after
 }
 
 export function WorkspaceStudioPage() {
@@ -102,8 +266,10 @@ export function WorkspaceStudioPage() {
   const currentFile = useAppStore(selectCurrentFile)
   const openFiles = useAppStore(selectOpenFiles)
   const setCurrentFile = useAppStore((state) => state.setCurrentFile)
+  const removeOpenFile = useAppStore((state) => state.removeOpenFile)
 
   const [treeNodes, setTreeNodes] = useState<FileTreeNode[]>([])
+  const [workspaceFiles, setWorkspaceFiles] = useState<FileInfo[]>([])
   const [defaultExpandedIds, setDefaultExpandedIds] = useState<string[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(undefined)
 
@@ -117,13 +283,37 @@ export function WorkspaceStudioPage() {
   const [treeError, setTreeError] = useState<string | null>(null)
   const [editorError, setEditorError] = useState<string | null>(null)
 
+  const [activeTool, setActiveTool] = useState<LeftToolMode>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+
+  const [tasks, setTasks] = useState<TaskItem[]>([])
+  const [isTasksLoading, setIsTasksLoading] = useState(false)
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [syncStatus, setSyncStatus] = useState<SyncStatusData | null>(null)
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [sessionTokenUsage, setSessionTokenUsage] = useState(0)
+  const [focusComposerSignal, setFocusComposerSignal] = useState(0)
 
-  const streamTimerRef = useRef<number | null>(null)
+  const [conflictDraft, setConflictDraft] = useState<ConflictDraft | null>(null)
+
+  const activeAIRequestRef = useRef<string | null>(null)
+  const selectedFileRef = useRef<string | null>(null)
+  const isDirtyRef = useRef(false)
+  const editorContentRef = useRef('')
+
+  const workspaceId = currentWorkspace?.config.workspaceId ?? null
 
   const selectedFilePath = useMemo(() => currentFile?.path ?? null, [currentFile?.path])
+  const selectedFilePathNormalized = useMemo(
+    () => (selectedFilePath ? normalizePath(selectedFilePath) : null),
+    [selectedFilePath]
+  )
 
   const isDirty = useMemo(() => {
     if (!selectedFilePath) {
@@ -144,9 +334,64 @@ export function WorkspaceStudioPage() {
     return [normalizePath(selectedFilePath)]
   }, [isDirty, selectedFilePath])
 
+  const openFileTabs = useMemo(() => {
+    const map = new Map<string, OpenFileTab>()
+    for (const file of openFiles) {
+      map.set(normalizePath(file.path), {
+        path: normalizePath(file.path),
+        name: file.name,
+      })
+    }
+    if (currentFile) {
+      map.set(normalizePath(currentFile.path), {
+        path: normalizePath(currentFile.path),
+        name: currentFile.name,
+      })
+    }
+    return Array.from(map.values())
+  }, [currentFile, openFiles])
+
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter((item) => !item.read).length,
+    [notifications]
+  )
+
+  const workspaceFileEntries = useMemo(
+    () => workspaceFiles.filter((file) => !file.isDirectory),
+    [workspaceFiles]
+  )
+
+  useEffect(() => {
+    selectedFileRef.current = selectedFilePathNormalized
+  }, [selectedFilePathNormalized])
+
+  useEffect(() => {
+    isDirtyRef.current = isDirty
+  }, [isDirty])
+
+  useEffect(() => {
+    editorContentRef.current = editorContent
+  }, [editorContent])
+
+  const pushNotification = useCallback(
+    (level: NotificationLevel, title: string, description: string) => {
+      const item: NotificationItem = {
+        id: createId('notice'),
+        level,
+        title,
+        description,
+        read: false,
+        timestamp: Date.now(),
+      }
+      setNotifications((previous) => [item, ...previous].slice(0, MAX_NOTIFICATIONS))
+    },
+    []
+  )
+
   const refreshTree = useCallback(async () => {
     if (!currentWorkspace) {
       setTreeNodes([])
+      setWorkspaceFiles([])
       setDefaultExpandedIds([])
       return
     }
@@ -163,154 +408,251 @@ export function WorkspaceStudioPage() {
       if (!response.success || !response.data) {
         setTreeError(response.error?.message ?? '文件树加载失败')
         setTreeNodes([])
+        setWorkspaceFiles([])
         setDefaultExpandedIds([])
         return
       }
 
       const tree = buildTreeFromFiles(response.data)
       setTreeNodes(tree)
+      setWorkspaceFiles(response.data)
       setDefaultExpandedIds(buildDefaultExpandedIds(tree))
+
+      if (selectedFileRef.current) {
+        const stillExists = response.data.some(
+          (file) => !file.isDirectory && normalizePath(file.path) === selectedFileRef.current
+        )
+        if (!stillExists) {
+          setCurrentFile(null)
+          setSelectedNodeId(undefined)
+          setEditorContent('')
+          setSavedContentSnapshot('')
+          setSaveStatus('idle')
+        }
+      }
     } catch (error) {
       setTreeError(error instanceof Error ? error.message : '文件树加载失败')
       setTreeNodes([])
+      setWorkspaceFiles([])
       setDefaultExpandedIds([])
     } finally {
       setIsTreeLoading(false)
     }
-  }, [currentWorkspace])
+  }, [currentWorkspace, setCurrentFile])
 
-  const openFile = useCallback(async (filePath: string) => {
-    setIsFileLoading(true)
-    setEditorError(null)
+  const openFile = useCallback(
+    async (filePath: string) => {
+      const normalizedPath = normalizePath(filePath)
+      setIsFileLoading(true)
+      setEditorError(null)
+
+      try {
+        const response = await window.electronAPI.file.read(normalizedPath)
+        if (!response.success || !response.data) {
+          setEditorError(response.error?.message ?? '文件读取失败')
+          return
+        }
+
+        const content = response.data.content
+        const filename = normalizedPath.split('/').filter(Boolean).pop() ?? normalizedPath
+
+        setSelectedNodeId(normalizedPath)
+        setEditorContent(content)
+        setSavedContentSnapshot(content)
+        setSaveStatus('idle')
+
+        setCurrentFile({
+          path: normalizedPath,
+          name: filename,
+          lastModified: Date.now(),
+        })
+      } catch (error) {
+        setEditorError(error instanceof Error ? error.message : '文件读取失败')
+      } finally {
+        setIsFileLoading(false)
+      }
+    },
+    [setCurrentFile]
+  )
+
+  const loadTasks = useCallback(async () => {
+    if (!currentWorkspace) {
+      setTasks([])
+      return
+    }
+
+    setIsTasksLoading(true)
 
     try {
-      const response = await window.electronAPI.file.read(filePath)
-      if (!response.success || !response.data) {
-        setEditorError(response.error?.message ?? '文件读取失败')
-        return
+      const markdownFiles = workspaceFileEntries.filter(isMarkdownFile).slice(0, 240)
+      const nextTasks: TaskItem[] = []
+
+      for (const file of markdownFiles) {
+        if (nextTasks.length >= 300) {
+          break
+        }
+
+        const readResult = await window.electronAPI.file.read(file.path, {
+          maxSize: MAX_TASK_FILE_SIZE,
+        })
+        if (!readResult.success || !readResult.data) {
+          continue
+        }
+
+        const lines = readResult.data.content.split('\n')
+        for (const [index, line] of lines.entries()) {
+          if (nextTasks.length >= 300) {
+            break
+          }
+
+          const matched = line.match(TASK_LINE_REGEX)
+          if (!matched) {
+            continue
+          }
+
+          nextTasks.push({
+            id: `${file.path}:${index + 1}`,
+            path: normalizePath(file.path),
+            lineNumber: index + 1,
+            text: matched[4]?.trim() ?? '(空任务)',
+            completed: matched[2]?.toLowerCase() === 'x',
+          })
+        }
       }
 
-      const content = response.data.content
-      const filename = filePath.split('/').filter(Boolean).pop() ?? filePath
-
-      setSelectedNodeId(filePath)
-      setEditorContent(content)
-      setSavedContentSnapshot(content)
-      setSaveStatus('idle')
-
-      setCurrentFile({
-        path: filePath,
-        name: filename,
-        lastModified: Date.now(),
-      })
+      setTasks(nextTasks)
     } catch (error) {
-      setEditorError(error instanceof Error ? error.message : '文件读取失败')
+      pushNotification(
+        'error',
+        '任务面板加载失败',
+        error instanceof Error ? error.message : '无法解析 Markdown 任务项'
+      )
     } finally {
-      setIsFileLoading(false)
+      setIsTasksLoading(false)
     }
-  }, [setCurrentFile])
+  }, [currentWorkspace, pushNotification, workspaceFileEntries])
 
-  const createFileAtPath = useCallback(async (targetPath: string) => {
-    try {
-      const filename = getBaseName(targetPath)
-      const initialContent = `# ${filename.replace(/\.md$/i, '')}\n\n`
-      const response = await window.electronAPI.file.write(targetPath, initialContent, {
-        atomic: true,
-        createDirs: true,
-      })
-
-      if (!response.success) {
-        setTreeError(response.error?.message ?? '创建文件失败')
-        return
-      }
-
-      await refreshTree()
-      await openFile(targetPath)
-    } catch (error) {
-      setTreeError(error instanceof Error ? error.message : '创建文件失败')
-    }
-  }, [openFile, refreshTree])
-
-  const createFolderAtPath = useCallback(async (targetPath: string) => {
-    try {
-      const response = await window.electronAPI.file.createDir(targetPath, true)
-      if (!response.success) {
-        setTreeError(response.error?.message ?? '创建文件夹失败')
-        return
-      }
-      await refreshTree()
-    } catch (error) {
-      setTreeError(error instanceof Error ? error.message : '创建文件夹失败')
-    }
-  }, [refreshTree])
-
-  const renamePath = useCallback(async (sourcePath: string, targetPath: string) => {
-    try {
-      const response = await window.electronAPI.file.move(sourcePath, targetPath)
-      if (!response.success) {
-        throw new Error(response.error?.message ?? '重命名失败')
-      }
-      await refreshTree()
-
-      if (selectedFilePath === sourcePath) {
-        const updatedName = getBaseName(targetPath)
-        setCurrentFile({
-          path: targetPath,
-          name: updatedName,
-          lastModified: Date.now(),
+  const createFileAtPath = useCallback(
+    async (targetPath: string) => {
+      try {
+        const filename = getBaseName(targetPath)
+        const initialContent = `# ${filename.replace(/\.md$/i, '')}\n\n`
+        const response = await window.electronAPI.file.write(targetPath, initialContent, {
+          atomic: true,
+          createDirs: true,
         })
+
+        if (!response.success) {
+          setTreeError(response.error?.message ?? '创建文件失败')
+          return
+        }
+
+        await refreshTree()
+        await loadTasks()
+        await openFile(targetPath)
+      } catch (error) {
+        setTreeError(error instanceof Error ? error.message : '创建文件失败')
       }
-    } catch (error) {
-      setTreeError(error instanceof Error ? error.message : '重命名失败')
-      throw error
-    }
-  }, [refreshTree, selectedFilePath, setCurrentFile])
+    },
+    [loadTasks, openFile, refreshTree]
+  )
 
-  const deleteNode = useCallback(async (node: FileTreeNode) => {
-    try {
-      const response = node.type === 'folder'
-        ? await window.electronAPI.file.deleteDir(node.path, true)
-        : await window.electronAPI.file.delete(node.path)
-
-      if (!response.success) {
-        throw new Error(response.error?.message ?? '删除失败')
+  const createFolderAtPath = useCallback(
+    async (targetPath: string) => {
+      try {
+        const response = await window.electronAPI.file.createDir(targetPath, true)
+        if (!response.success) {
+          setTreeError(response.error?.message ?? '创建文件夹失败')
+          return
+        }
+        await refreshTree()
+      } catch (error) {
+        setTreeError(error instanceof Error ? error.message : '创建文件夹失败')
       }
+    },
+    [refreshTree]
+  )
 
-      await refreshTree()
+  const renamePath = useCallback(
+    async (sourcePath: string, targetPath: string) => {
+      try {
+        const response = await window.electronAPI.file.move(sourcePath, targetPath)
+        if (!response.success) {
+          throw new Error(response.error?.message ?? '重命名失败')
+        }
+        await refreshTree()
+        await loadTasks()
 
-      if (selectedFilePath === node.path) {
-        setCurrentFile(null)
-        setEditorContent('')
-        setSavedContentSnapshot('')
-        setSelectedNodeId(undefined)
+        if (selectedFilePath === sourcePath) {
+          const updatedName = getBaseName(targetPath)
+          setCurrentFile({
+            path: targetPath,
+            name: updatedName,
+            lastModified: Date.now(),
+          })
+        }
+      } catch (error) {
+        setTreeError(error instanceof Error ? error.message : '重命名失败')
+        throw error
       }
-    } catch (error) {
-      setTreeError(error instanceof Error ? error.message : '删除失败')
-      throw error
-    }
-  }, [refreshTree, selectedFilePath, setCurrentFile])
+    },
+    [loadTasks, refreshTree, selectedFilePath, setCurrentFile]
+  )
 
-  const moveToFolder = useCallback(async (sourcePath: string, targetFolderPath: string) => {
-    const nextPath = joinPath(targetFolderPath, getBaseName(sourcePath))
-    try {
-      const response = await window.electronAPI.file.move(sourcePath, nextPath)
-      if (!response.success) {
-        throw new Error(response.error?.message ?? '移动失败')
-      }
+  const deleteNode = useCallback(
+    async (node: FileTreeNode) => {
+      try {
+        const response =
+          node.type === 'folder'
+            ? await window.electronAPI.file.deleteDir(node.path, true)
+            : await window.electronAPI.file.delete(node.path)
 
-      await refreshTree()
-      if (selectedFilePath === sourcePath) {
-        setCurrentFile({
-          path: nextPath,
-          name: getBaseName(nextPath),
-          lastModified: Date.now(),
-        })
+        if (!response.success) {
+          throw new Error(response.error?.message ?? '删除失败')
+        }
+
+        await refreshTree()
+        await loadTasks()
+
+        if (selectedFilePath === node.path) {
+          setCurrentFile(null)
+          setEditorContent('')
+          setSavedContentSnapshot('')
+          setSelectedNodeId(undefined)
+        }
+      } catch (error) {
+        setTreeError(error instanceof Error ? error.message : '删除失败')
+        throw error
       }
-    } catch (error) {
-      setTreeError(error instanceof Error ? error.message : '移动失败')
-      throw error
-    }
-  }, [refreshTree, selectedFilePath, setCurrentFile])
+    },
+    [loadTasks, refreshTree, selectedFilePath, setCurrentFile]
+  )
+
+  const moveToFolder = useCallback(
+    async (sourcePath: string, targetFolderPath: string) => {
+      const nextPath = joinPath(targetFolderPath, getBaseName(sourcePath))
+      try {
+        const response = await window.electronAPI.file.move(sourcePath, nextPath)
+        if (!response.success) {
+          throw new Error(response.error?.message ?? '移动失败')
+        }
+
+        await refreshTree()
+        await loadTasks()
+        if (selectedFilePath === sourcePath) {
+          setCurrentFile({
+            path: nextPath,
+            name: getBaseName(nextPath),
+            lastModified: Date.now(),
+          })
+        }
+      } catch (error) {
+        setTreeError(error instanceof Error ? error.message : '移动失败')
+        throw error
+      }
+    },
+    [loadTasks, refreshTree, selectedFilePath, setCurrentFile]
+  )
 
   const copyPath = useCallback(async (path: string) => {
     try {
@@ -323,42 +665,198 @@ export function WorkspaceStudioPage() {
     }
   }, [])
 
-  const stopStreaming = useCallback(() => {
-    if (streamTimerRef.current !== null) {
-      window.clearInterval(streamTimerRef.current)
-      streamTimerRef.current = null
-    }
+  const closeOpenFileTab = useCallback(
+    (path: string) => {
+      const normalizedPath = normalizePath(path)
+      const matchedPath = openFiles.find((file) => normalizePath(file.path) === normalizedPath)?.path ?? path
+      removeOpenFile(matchedPath)
+      if (normalizePath(selectedFilePath ?? '') !== normalizedPath) {
+        return
+      }
 
-    setIsStreaming(false)
-    setMessages((previous) =>
-      previous.map((message) => {
-        if (message.streaming) {
-          return {
-            ...message,
-            streaming: false,
-            content: `${message.content}\n\n[回答已暂停]`,
+      const nextTabs = openFiles
+        .map((file) => normalizePath(file.path))
+        .filter((item) => item !== normalizedPath)
+
+      if (nextTabs.length > 0) {
+        void openFile(nextTabs[0]!)
+        return
+      }
+
+      setCurrentFile(null)
+      setEditorContent('')
+      setSavedContentSnapshot('')
+      setSelectedNodeId(undefined)
+      setSaveStatus('idle')
+    },
+    [openFile, openFiles, removeOpenFile, selectedFilePath, setCurrentFile]
+  )
+
+  const runSearch = useCallback(
+    async (query: string) => {
+      if (!currentWorkspace) {
+        setSearchResults([])
+        return
+      }
+
+      const normalizedQuery = query.trim().toLowerCase()
+      if (!normalizedQuery) {
+        setSearchResults([])
+        setIsSearching(false)
+        return
+      }
+
+      setIsSearching(true)
+
+      try {
+        const searchableFiles = workspaceFileEntries.filter(isSearchableFile).slice(0, 260)
+        const nextResults: SearchResultItem[] = []
+
+        for (const file of searchableFiles) {
+          if (nextResults.length >= MAX_SEARCH_RESULTS) {
+            break
+          }
+
+          const readResult = await window.electronAPI.file.read(file.path, {
+            maxSize: MAX_SEARCH_FILE_SIZE,
+          })
+          if (!readResult.success || !readResult.data) {
+            continue
+          }
+
+          const lines = readResult.data.content.split('\n')
+          for (const [index, line] of lines.entries()) {
+            if (nextResults.length >= MAX_SEARCH_RESULTS) {
+              break
+            }
+
+            if (!line.toLowerCase().includes(normalizedQuery)) {
+              continue
+            }
+
+            nextResults.push({
+              id: `${file.path}:${index + 1}:${nextResults.length}`,
+              path: normalizePath(file.path),
+              lineNumber: index + 1,
+              preview: line.trim() || '(空行)',
+            })
           }
         }
-        return message
+
+        setSearchResults(nextResults)
+      } finally {
+        setIsSearching(false)
+      }
+    },
+    [currentWorkspace, workspaceFileEntries]
+  )
+
+  const openSearchResult = useCallback(
+    async (result: SearchResultItem) => {
+      await openFile(result.path)
+      setActiveTool('search')
+      setEditorMode('split')
+      pushNotification('info', '已定位搜索结果', `${result.path}:${result.lineNumber}`)
+    },
+    [openFile, pushNotification]
+  )
+
+  const toggleTask = useCallback(
+    async (task: TaskItem) => {
+      const readResult = await window.electronAPI.file.read(task.path, { maxSize: MAX_TASK_FILE_SIZE })
+      if (!readResult.success || !readResult.data) {
+        pushNotification('error', '任务更新失败', readResult.error?.message ?? '读取任务文件失败')
+        return
+      }
+
+      const lines = readResult.data.content.split('\n')
+      const lineIndex = task.lineNumber - 1
+      const originalLine = lines[lineIndex]
+      if (!originalLine) {
+        pushNotification('warning', '任务更新失败', '目标任务行不存在，文件可能已变化')
+        return
+      }
+
+      const matched = originalLine.match(TASK_LINE_REGEX)
+      if (!matched) {
+        pushNotification('warning', '任务更新失败', '目标行不再是有效的任务项')
+        return
+      }
+
+      lines[lineIndex] = `${matched[1]}${task.completed ? ' ' : 'x'}${matched[3]}${matched[4]}`
+      const nextContent = lines.join('\n')
+
+      const writeResult = await window.electronAPI.file.write(task.path, nextContent, {
+        atomic: true,
+        createDirs: true,
       })
-    )
+
+      if (!writeResult.success) {
+        pushNotification('error', '任务更新失败', writeResult.error?.message ?? '写入失败')
+        return
+      }
+
+      if (selectedFileRef.current === normalizePath(task.path)) {
+        setEditorContent(nextContent)
+        setSavedContentSnapshot(nextContent)
+        setSaveStatus('saved')
+        window.setTimeout(() => setSaveStatus('idle'), 800)
+      }
+
+      await loadTasks()
+      pushNotification('success', '任务已更新', `${task.text} → ${task.completed ? '未完成' : '已完成'}`)
+    },
+    [loadTasks, pushNotification]
+  )
+
+  const openTaskFile = useCallback(
+    async (task: TaskItem) => {
+      await openFile(task.path)
+      setActiveTool('tasks')
+      setEditorMode('split')
+      pushNotification('info', 'Task opened', `${task.path}:${task.lineNumber}`)
+    },
+    [openFile, pushNotification]
+  )
+
+  const quickStartAIPrompt = useCallback(() => {
+    setChatInput((previous) => {
+      const trimmed = previous.trim()
+      if (!trimmed) {
+        return QUICK_AI_PROMPT_PREFIX
+      }
+      if (trimmed.startsWith(QUICK_AI_PROMPT_PREFIX)) {
+        return previous
+      }
+      return `${QUICK_AI_PROMPT_PREFIX}\n${previous}`
+    })
+    setFocusComposerSignal((value) => value + 1)
   }, [])
 
-  const sendChatMessage = useCallback(() => {
+  const stopStreaming = useCallback(() => {
+    activeAIRequestRef.current = null
+    setIsStreaming(false)
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.streaming
+          ? {
+              ...message,
+              streaming: false,
+              content: message.content || '[请求已停止]',
+            }
+          : message
+      )
+    )
+    pushNotification('info', 'AI 请求已停止', '你可以继续发送下一条消息。')
+  }, [pushNotification])
+
+  const sendChatMessage = useCallback(async () => {
     const trimmed = chatInput.trim()
     if (!trimmed || isStreaming) {
       return
     }
 
     const mentions = extractMentionedFiles(trimmed)
-    const contextSources = Array.from(
-      new Set([
-        'CLAUDE.md',
-        ...(selectedFilePath ? [selectedFilePath] : []),
-        ...mentions,
-      ])
-    )
-
     const userMessage: ChatMessage = {
       id: createId('user'),
       role: 'user',
@@ -367,64 +865,337 @@ export function WorkspaceStudioPage() {
     }
 
     const assistantId = createId('assistant')
-    const assistantMessage: ChatMessage = {
+    const initialSources = Array.from(new Set([...(selectedFilePath ? [selectedFilePath] : []), ...mentions]))
+
+    const assistantPlaceholder: ChatMessage = {
       id: assistantId,
       role: 'assistant',
       content: '',
       createdAt: Date.now(),
-      contextSources,
+      contextSources: initialSources,
       streaming: true,
+      diffProposal: null,
     }
 
-    const fullAnswer = createAssistantResponse(trimmed, {
-      currentFilePath: selectedFilePath,
-    })
-    const chunks = fullAnswer.match(/.{1,6}/gs) ?? [fullAnswer]
-
+    setMessages((previous) => [...previous, userMessage, assistantPlaceholder])
     setChatInput('')
-    setMessages((previous) => [...previous, userMessage, assistantMessage])
     setIsStreaming(true)
 
-    let index = 0
-    streamTimerRef.current = window.setInterval(() => {
-      const chunk = chunks[index]
-      if (!chunk) {
-        if (streamTimerRef.current !== null) {
-          window.clearInterval(streamTimerRef.current)
-          streamTimerRef.current = null
-        }
-        setIsStreaming(false)
-        setMessages((previous) =>
-          previous.map((message) =>
-            message.id === assistantId
-              ? {
-                  ...message,
-                  streaming: false,
-                }
-              : message
-          )
-        )
+    const requestId = createId('ai-request')
+    activeAIRequestRef.current = requestId
+
+    try {
+      const request = {
+        message: trimmed,
+        sessionId: `desktop-${workspaceId ?? 'workspace'}`,
+        model: currentWorkspace?.config.defaultModel,
+        useRag: true,
+        contextWindowTokens: 16000,
+        sessionTokenUsage,
+      }
+
+      const response = await window.electronAPI.ai.stream(request)
+
+      if (activeAIRequestRef.current !== requestId) {
         return
       }
 
+      if (!response.success || !response.data) {
+        throw new Error(response.error?.message ?? 'AI 网关调用失败')
+      }
+
+      const ai = response.data
+      const ragSources = ai.ragHits.map((hit) => normalizePath(hit.path))
+      const contextSources = Array.from(new Set([...initialSources, ...ragSources]))
+      const proposal = buildDiffProposal(trimmed, ai, selectedFilePath, editorContentRef.current)
+
+      setSessionTokenUsage((previous) => previous + ai.usage.totalTokens)
       setMessages((previous) =>
         previous.map((message) =>
           message.id === assistantId
             ? {
                 ...message,
-                content: `${message.content}${chunk}`,
+                content: ai.content,
+                contextSources,
+                streaming: false,
+                diffProposal: proposal,
               }
             : message
         )
       )
 
-      index += 1
-    }, STREAM_STEP_MS)
-  }, [chatInput, isStreaming, selectedFilePath])
+      if (ai.intercepted) {
+        pushNotification('warning', 'LLM 网关已拦截请求', ai.warnings.join('；') || '请检查策略和提示词')
+      }
+
+      if (ai.memory.flushTriggered) {
+        pushNotification(
+          'warning',
+          'MEMORY 已触发压缩',
+          `token=${ai.memory.tokenCount} debt=${ai.memory.tokenDebt}`
+        )
+      }
+
+      if (ai.warnings.length > 0) {
+        pushNotification('warning', 'AI 返回警告', ai.warnings.join('；'))
+      }
+
+      if (!ai.intercepted && ai.warnings.length === 0) {
+        pushNotification(
+          'success',
+          'AI 响应完成',
+          `${ai.provider}/${ai.model} · ${ai.usage.totalTokens} tokens`
+        )
+      }
+    } catch (error) {
+      if (activeAIRequestRef.current !== requestId) {
+        return
+      }
+
+      const message = error instanceof Error ? error.message : 'AI 调用失败'
+      setMessages((previous) =>
+        previous.map((item) =>
+          item.id === assistantId
+            ? {
+                ...item,
+                content: `请求失败：${message}`,
+                streaming: false,
+              }
+            : item
+        )
+      )
+      pushNotification('error', 'AI 请求失败', message)
+    } finally {
+      if (activeAIRequestRef.current === requestId) {
+        activeAIRequestRef.current = null
+      }
+      setIsStreaming(false)
+    }
+  }, [
+    chatInput,
+    currentWorkspace?.config.defaultModel,
+    isStreaming,
+    pushNotification,
+    selectedFilePath,
+    sessionTokenUsage,
+    workspaceId,
+  ])
+
+  const applyDiffProposal = useCallback(
+    async (messageId: string, editFirst: boolean) => {
+      const message = messages.find((item) => item.id === messageId)
+      const proposal = message?.diffProposal
+      if (!proposal) {
+        pushNotification('warning', '无法应用修改', '未找到可用的 Diff 提案')
+        return
+      }
+
+      const targetPath = normalizePath(proposal.targetPath)
+      const readResult = await window.electronAPI.file.read(targetPath)
+      if (!readResult.success || !readResult.data) {
+        pushNotification('error', 'Diff 应用失败', readResult.error?.message ?? '读取目标文件失败')
+        return
+      }
+
+      const nextContent = applyProposalToContent(readResult.data.content, proposal)
+
+      if (editFirst) {
+        if (selectedFileRef.current !== targetPath) {
+          await openFile(targetPath)
+        }
+        setEditorMode('edit')
+        setEditorContent(nextContent)
+        setConflictDraft(null)
+        pushNotification('info', '已写入编辑区', '请确认后等待自动保存或继续手动编辑')
+        return
+      }
+
+      const writeResult = await window.electronAPI.file.write(targetPath, nextContent, {
+        atomic: true,
+        createDirs: true,
+      })
+
+      if (!writeResult.success) {
+        pushNotification('error', 'Diff 应用失败', writeResult.error?.message ?? '写入目标文件失败')
+        return
+      }
+
+      if (selectedFileRef.current === targetPath) {
+        setEditorContent(nextContent)
+        setSavedContentSnapshot(nextContent)
+        setSaveStatus('saved')
+        window.setTimeout(() => setSaveStatus('idle'), 800)
+      }
+
+      await refreshTree()
+      await loadTasks()
+      pushNotification('success', '修改已应用', targetPath)
+    },
+    [loadTasks, messages, openFile, pushNotification, refreshTree]
+  )
+
+  const resolveConflictBy = useCallback(
+    (strategy: 'yours' | 'theirs' | 'ai' | 'manual') => {
+      if (!conflictDraft) {
+        return
+      }
+
+      if (strategy === 'manual') {
+        setEditorMode('edit')
+        pushNotification('info', '已切换手动编辑', '你可以在编辑区手动处理冲突内容。')
+        return
+      }
+
+      const source = editorContentRef.current
+      let resolved = source
+
+      if (hasConflictMarkers(source)) {
+        resolved = resolveConflictMarkers(source, strategy)
+      } else if (strategy === 'yours') {
+        resolved = conflictDraft.yourResolvedText
+      } else if (strategy === 'theirs') {
+        resolved = conflictDraft.theirResolvedText
+      } else {
+        resolved = conflictDraft.aiResolvedText
+      }
+
+      setEditorContent(resolved)
+      setConflictDraft(null)
+      setSaveStatus('saving')
+      pushNotification('success', '冲突方案已应用', `策略：${strategy}`)
+    },
+    [conflictDraft, pushNotification]
+  )
 
   useEffect(() => {
     void refreshTree()
   }, [refreshTree])
+
+  useEffect(() => {
+    void loadTasks()
+  }, [loadTasks])
+
+  useEffect(() => {
+    if (activeTool !== 'search') {
+      return
+    }
+
+    const trimmed = searchQuery.trim()
+    if (!trimmed) {
+      setSearchResults([])
+      setIsSearching(false)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      void runSearch(trimmed)
+    }, SEARCH_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [activeTool, runSearch, searchQuery])
+
+  useEffect(() => {
+    if (!workspaceId) {
+      return
+    }
+
+    let unlistenFile: (() => void) | null = null
+    let unlistenSync: (() => void) | null = null
+    let disposed = false
+
+    const setup = async () => {
+      try {
+        const watchResult = await window.electronAPI.file.startWatching()
+        if (!watchResult.success) {
+          pushNotification('warning', '文件监听不可用', watchResult.error?.message ?? '监听启动失败')
+        }
+      } catch (error) {
+        pushNotification(
+          'warning',
+          '文件监听不可用',
+          error instanceof Error ? error.message : '监听启动失败'
+        )
+      }
+
+      if (disposed) {
+        return
+      }
+
+      unlistenFile = window.electronAPI.file.onFileChange((event: FileWatchEvent) => {
+        const changedPath = normalizePath(event.path)
+
+        void refreshTree()
+        if (changedPath.toLowerCase().endsWith('.md')) {
+          void loadTasks()
+        }
+
+        if (selectedFileRef.current === changedPath && !isDirtyRef.current && event.type === 'change') {
+          void openFile(changedPath)
+        }
+
+        if (event.type === 'unlink' && selectedFileRef.current === changedPath) {
+          setCurrentFile(null)
+          setEditorContent('')
+          setSavedContentSnapshot('')
+          setSelectedNodeId(undefined)
+        }
+      })
+
+      unlistenSync = window.electronAPI.sync.onStatusChange((data: SyncStatusData) => {
+        setSyncStatus(data)
+
+        if (data.status === 'error') {
+          pushNotification('error', '同步失败', data.message ?? '请检查网络与仓库状态')
+          return
+        }
+
+        if (data.status === 'synced') {
+          pushNotification('success', '同步完成', '工作区已与云端保持一致')
+          return
+        }
+
+        if (data.status === 'conflict') {
+          const conflictPathRaw = data.conflictFiles?.[0]
+          if (!conflictPathRaw) {
+            pushNotification('warning', '出现冲突', '检测到冲突但未返回具体文件')
+            return
+          }
+
+          const conflictPath = normalizePath(conflictPathRaw)
+          pushNotification('warning', '发现文件冲突', conflictPath)
+
+          void (async () => {
+            const readResult = await window.electronAPI.file.read(conflictPath)
+            if (!readResult.success || !readResult.data) {
+              return
+            }
+
+            const preview = buildConflictDraft(
+              conflictPath,
+              readResult.data.content,
+              selectedFileRef.current === conflictPath ? editorContentRef.current : readResult.data.content
+            )
+            setConflictDraft(preview)
+
+            if (selectedFileRef.current !== conflictPath) {
+              await openFile(conflictPath)
+            }
+          })()
+        }
+      })
+    }
+
+    void setup()
+
+    return () => {
+      disposed = true
+      unlistenFile?.()
+      unlistenSync?.()
+      void window.electronAPI.file.stopWatching().catch(() => undefined)
+    }
+  }, [loadTasks, openFile, pushNotification, refreshTree, setCurrentFile, workspaceId])
 
   useEffect(() => {
     if (!selectedFilePath || !isDirty) {
@@ -443,6 +1214,7 @@ export function WorkspaceStudioPage() {
         if (!response.success) {
           setSaveStatus('error')
           setEditorError(response.error?.message ?? '自动保存失败')
+          pushNotification('error', '自动保存失败', response.error?.message ?? '写入失败')
           return
         }
 
@@ -452,283 +1224,139 @@ export function WorkspaceStudioPage() {
       } catch (error) {
         setSaveStatus('error')
         setEditorError(error instanceof Error ? error.message : '自动保存失败')
+        pushNotification('error', '自动保存失败', error instanceof Error ? error.message : '写入失败')
       }
     }, AUTOSAVE_DELAY_MS)
 
     return () => {
       window.clearTimeout(timer)
     }
-  }, [editorContent, isDirty, selectedFilePath])
+  }, [editorContent, isDirty, pushNotification, selectedFilePath])
 
   useEffect(() => {
     return () => {
-      if (streamTimerRef.current !== null) {
-        window.clearInterval(streamTimerRef.current)
-      }
+      activeAIRequestRef.current = null
     }
   }, [])
 
   if (!currentWorkspace) {
     return (
-      <div className="sibylla-panel p-8">
-        <h2 className="text-xl font-semibold text-white">工作台未就绪</h2>
-        <p className="mt-2 text-sm text-sys-darkMuted">
-          请先在「Workspace 管理」里创建或打开一个工作区，然后再进入 TASK016/017/018 的集成视图。
-        </p>
+      <div className="flex h-full items-center justify-center bg-sys-black p-8">
+        <div className="w-full max-w-xl rounded-xl border border-sys-darkBorder bg-[#0A0A0A] p-6">
+          <h2 className="text-xl font-semibold text-white">工作台未就绪</h2>
+          <p className="mt-2 text-sm text-sys-darkMuted">
+            请先在「Workspace 管理」里创建或打开一个工作区，然后再进入 Studio 视图。
+          </p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Phase 1 工作台</h1>
-          <p className="mt-1 text-sm text-sys-darkMuted">
-            模块一完成态：文件树 + Markdown 双链编辑 + AI Streaming 对话
-          </p>
+    <div className="flex h-full min-h-0 bg-sys-black">
+      <StudioLeftPanel
+        treeNodes={treeNodes}
+        selectedNodeId={selectedNodeId}
+        defaultExpandedIds={defaultExpandedIds}
+        openFilePaths={openFilePaths}
+        dirtyFilePaths={dirtyFilePaths}
+        isTreeLoading={isTreeLoading}
+        treeError={treeError}
+        onRefresh={refreshTree}
+        onCreateFile={createFileAtPath}
+        onCreateFolder={createFolderAtPath}
+        onRename={renamePath}
+        onDelete={deleteNode}
+        onMove={moveToFolder}
+        onCopyPath={copyPath}
+        onSelect={(node) => {
+          setSelectedNodeId(node.path)
+          if (node.type === 'file') {
+            void openFile(node.path)
+          }
+        }}
+        activeTool={activeTool}
+        onChangeTool={setActiveTool}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        isSearching={isSearching}
+        searchResults={searchResults}
+        onOpenSearchResult={openSearchResult}
+        tasks={tasks}
+        isTasksLoading={isTasksLoading}
+        onToggleTask={(task) => {
+          void toggleTask(task)
+        }}
+        onOpenTask={(task) => {
+          void openTaskFile(task)
+        }}
+        notifications={notifications}
+        unreadNotificationCount={unreadNotificationCount}
+        onMarkNotificationRead={(id) => {
+          setNotifications((previous) =>
+            previous.map((item) => (item.id === id ? { ...item, read: true } : item))
+          )
+        }}
+        onClearNotifications={() => setNotifications([])}
+      />
+
+      <StudioEditorPanel
+        openFileTabs={openFileTabs}
+        selectedFilePath={selectedFilePathNormalized}
+        dirtyFilePaths={dirtyFilePaths}
+        editorMode={editorMode}
+        saveStatus={saveStatus}
+        isDirty={isDirty}
+        isFileLoading={isFileLoading}
+        editorError={editorError}
+        editorContent={editorContent}
+        onOpenTab={(path) => {
+          void openFile(path)
+        }}
+        onCloseTab={closeOpenFileTab}
+        onQuickAI={quickStartAIPrompt}
+        onChangeEditorMode={setEditorMode}
+        onEditorContentChange={setEditorContent}
+        showConflictPanel={Boolean(conflictDraft)}
+        conflictFilePath={conflictDraft?.filePath ?? ''}
+        conflictYourLines={conflictDraft?.yourLines}
+        conflictTheirLines={conflictDraft?.theirLines}
+        conflictAiMergeText={conflictDraft?.aiMergeText}
+        onConflictAcceptYours={() => resolveConflictBy('yours')}
+        onConflictAcceptTheirs={() => resolveConflictBy('theirs')}
+        onConflictAcceptAI={() => resolveConflictBy('ai')}
+        onConflictManualEdit={() => resolveConflictBy('manual')}
+      />
+
+      <StudioAIPanel
+        messages={messages}
+        isStreaming={isStreaming}
+        chatInput={chatInput}
+        onChatInputChange={setChatInput}
+        onSendMessage={() => {
+          void sendChatMessage()
+        }}
+        onStopStreaming={stopStreaming}
+        onNewSession={() => {
+          activeAIRequestRef.current = null
+          setMessages([])
+          setSessionTokenUsage(0)
+          pushNotification('info', '会话已重置', '新的 AI 上下文会从零开始。')
+        }}
+        onApplyDiffProposal={(messageId) => {
+          void applyDiffProposal(messageId, false)
+        }}
+        onEditAndApplyDiffProposal={(messageId) => {
+          void applyDiffProposal(messageId, true)
+        }}
+        focusComposerSignal={focusComposerSignal}
+      />
+
+      {syncStatus && (
+        <div className="pointer-events-none absolute bottom-10 right-6 rounded border border-sys-darkBorder bg-[#090909]/90 px-3 py-1 text-[11px] text-sys-darkMuted">
+          Sync: {syncStatus.status}
         </div>
-        <div className="rounded-lg border border-sys-darkBorder bg-sys-darkSurface/80 px-3 py-2 font-mono text-xs text-sys-darkMuted">
-          {currentWorkspace.config.name}
-        </div>
-      </div>
-
-      <div className="grid h-[calc(100vh-12.5rem)] min-h-[560px] grid-cols-[280px_minmax(0,1fr)_360px] gap-4">
-        <section className="sibylla-panel flex min-h-0 flex-col overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-white">
-              <PencilLine className="h-4 w-4" />
-              文件树
-            </div>
-            <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => void refreshTree()} title="刷新文件树">
-                <RefreshCw className={cn('h-4 w-4', isTreeLoading && 'animate-spin')} />
-              </Button>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto p-2">
-            {isTreeLoading ? (
-              <div className="flex h-full items-center justify-center text-sm text-sys-darkMuted">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                加载文件树中...
-              </div>
-            ) : treeError ? (
-              <div className="rounded-lg border border-red-700/60 bg-red-950/40 p-3 text-sm text-red-300">
-                {treeError}
-              </div>
-            ) : treeNodes.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-sys-darkBorder p-4 text-sm text-sys-darkMuted">
-                这个 workspace 里还没有可见文件，先新建一个 Markdown 文件吧。
-              </div>
-            ) : (
-              <FileTree
-                data={treeNodes}
-                selectedId={selectedNodeId}
-                defaultExpandedIds={defaultExpandedIds}
-                openPaths={openFilePaths}
-                dirtyPaths={dirtyFilePaths}
-                onRefresh={refreshTree}
-                onCreateFile={createFileAtPath}
-                onCreateFolder={createFolderAtPath}
-                onRename={renamePath}
-                onDelete={deleteNode}
-                onMove={moveToFolder}
-                onCopyPath={copyPath}
-                onSelect={(node) => {
-                  setSelectedNodeId(node.path)
-                  if (node.type === 'file') {
-                    void openFile(node.path)
-                  }
-                }}
-              />
-            )}
-          </div>
-        </section>
-
-        <section className="sibylla-panel flex min-h-0 flex-col overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-semibold text-white">
-                {currentFile?.name ?? '未打开文件'}
-                {isDirty ? ' *' : ''}
-              </h2>
-              <p className="font-mono text-[11px] text-sys-darkMuted">
-                {selectedFilePath ?? '从左侧选择文件开始编辑'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="rounded-xl border border-sys-darkBorder bg-sys-black p-1">
-                {(['edit', 'preview', 'split'] as EditorMode[]).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setEditorMode(mode)}
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium transition-colors',
-                      editorMode === mode
-                        ? 'bg-white text-black shadow-sm'
-                        : 'text-sys-darkMuted hover:text-white'
-                    )}
-                  >
-                    {mode === 'edit' ? '编辑' : mode === 'preview' ? '预览' : '分栏'}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex min-w-[88px] items-center justify-end text-xs text-sys-darkMuted">
-                {saveStatus === 'saving' && (
-                  <span className="inline-flex items-center gap-1">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> 保存中
-                  </span>
-                )}
-                {saveStatus === 'saved' && (
-                  <span className="inline-flex items-center gap-1 text-white">
-                    <Save className="h-3.5 w-3.5" /> 已保存
-                  </span>
-                )}
-                {saveStatus === 'error' && <span className="text-red-300">保存失败</span>}
-                {saveStatus === 'idle' && !isDirty && <span>已同步</span>}
-              </div>
-            </div>
-          </div>
-
-          {editorError && (
-            <div className="border-b border-red-700/40 bg-red-950/30 px-4 py-2 text-sm text-red-300">
-              {editorError}
-            </div>
-          )}
-
-          <div
-            className={cn(
-              'min-h-0 flex-1 gap-0',
-              editorMode === 'split' ? 'grid grid-cols-2' : 'grid grid-cols-1'
-            )}
-          >
-            {(editorMode === 'edit' || editorMode === 'split') && (
-              <div className="min-h-0 border-r border-white/10">
-                {isFileLoading ? (
-                  <div className="flex h-full items-center justify-center text-sm text-sys-darkMuted">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在加载文件...
-                  </div>
-                ) : (
-                  <textarea
-                    className="h-full w-full resize-none border-0 bg-sys-black/60 p-4 font-mono text-sm leading-6 text-white focus:outline-none"
-                    placeholder="打开一个 Markdown 文件后即可编辑"
-                    value={editorContent}
-                    onChange={(event) => setEditorContent(event.target.value)}
-                    disabled={!selectedFilePath}
-                  />
-                )}
-              </div>
-            )}
-
-            {(editorMode === 'preview' || editorMode === 'split') && (
-              <div className="min-h-0 overflow-auto bg-sys-black/70 p-4">
-                {selectedFilePath ? (
-                  <article className="markdown-preview prose-sm max-w-none text-sm leading-7 text-white">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {editorContent || '*空文档*'}
-                    </ReactMarkdown>
-                  </article>
-                ) : (
-                  <p className="text-sm text-sys-darkMuted">
-                    预览区：请先选择一个 Markdown 文件。
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="sibylla-panel flex min-h-0 flex-col overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <PixelOctoIcon className="h-4 w-4" />
-              AI 对话
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setMessages([])}
-                disabled={isStreaming || messages.length === 0}
-              >
-                新会话
-              </Button>
-              {isStreaming && (
-                <Button size="sm" variant="ghost" onClick={stopStreaming}>
-                  <Square className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3">
-            {messages.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-sys-darkBorder p-4 text-sm text-sys-darkMuted">
-                <p className="inline-flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  这里会展示流式回答。输入消息后按 Enter 发送。
-                </p>
-                <p className="mt-2 text-xs">支持在输入中使用 @文件名 引用额外上下文。</p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                    className={cn(
-                      'rounded-lg px-3 py-2 text-sm leading-6',
-                      message.role === 'user'
-                        ? 'ml-8 bg-white text-black'
-                        : 'mr-8 border border-white/10 bg-sys-black/70 text-white'
-                    )}
-                  >
-                  <p className="whitespace-pre-wrap">{message.content || (message.streaming ? '...' : '')}</p>
-                  {message.role === 'assistant' && message.contextSources && message.contextSources.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {message.contextSources.map((source) => (
-                        <span
-                          key={`${message.id}-${source}`}
-                          className="rounded border border-white/10 bg-sys-darkSurface px-1.5 py-0.5 font-mono text-[10px] text-sys-darkMuted"
-                        >
-                          {source}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="border-t border-white/10 p-3">
-            <div className="flex items-end gap-2">
-              <textarea
-                value={chatInput}
-                onChange={(event) => setChatInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    sendChatMessage()
-                  }
-                }}
-                className="max-h-40 min-h-[44px] flex-1 resize-y rounded-xl border border-sys-darkBorder bg-sys-black/70 px-3 py-2 text-sm text-white focus:border-white/70 focus:outline-none"
-                placeholder="输入消息，回车发送（Shift+Enter 换行）"
-              />
-              <Button
-                variant="primary"
-                onClick={sendChatMessage}
-                disabled={!chatInput.trim() || isStreaming}
-                title="发送"
-              >
-                {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
-        </section>
-      </div>
+      )}
     </div>
   )
 }

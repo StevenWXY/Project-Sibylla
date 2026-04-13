@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -12,14 +14,17 @@
   }
   
   body {
-    @apply bg-[#050505] text-gray-100;
-    background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.2) 0%, transparent 60%);
+    @apply bg-sys-black font-sans text-gray-100;
+    overflow: hidden;
+  }
+
+  ::selection {
+    @apply bg-white text-black;
   }
   
-  /* 自定义滚动条 */
-  /* WebKit browsers (Chrome, Safari, Edge) */
   ::-webkit-scrollbar {
-    @apply w-2 h-2;
+    width: 6px;
+    height: 6px;
   }
   
   ::-webkit-scrollbar-track {
@@ -27,17 +32,16 @@
   }
   
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-[#52525B];
+    @apply rounded bg-[#27272A];
   }
   
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-[#71717A];
+    @apply bg-[#A1A1AA];
   }
   
-  /* Firefox */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(82, 82, 91) transparent;
+    scrollbar-color: rgb(39, 39, 42) transparent;
   }
 }
 
@@ -116,6 +120,26 @@
 
   .sibylla-panel-subtle {
     @apply rounded-xl border border-white/10 bg-black/45;
+  }
+
+  .noise-bg {
+    position: relative;
+  }
+
+  .noise-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)" opacity="0.6"/%3E%3C/svg%3E');
+    mix-blend-mode: overlay;
+    opacity: 0.2;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .noise-bg > * {
+    position: relative;
+    z-index: 1;
   }
 }
 
