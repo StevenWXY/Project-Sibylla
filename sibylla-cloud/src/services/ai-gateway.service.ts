@@ -191,15 +191,10 @@ function interceptChatRequest(userId: string, input: GatewayChatRequest): Interc
 
   const estimatedInputTokens = estimateTokensFromMessages(sanitizedMessages)
   if (estimatedInputTokens > config.ai.maxInputTokens) {
-    throw new AiGatewayError(
-      'AI_INPUT_TOO_LARGE',
-      'Input exceeds maximum token budget',
-      413,
-      {
-        estimatedInputTokens,
-        maxInputTokens: config.ai.maxInputTokens,
-      }
-    )
+    throw new AiGatewayError('AI_INPUT_TOO_LARGE', 'Input exceeds maximum token budget', 413, {
+      estimatedInputTokens,
+      maxInputTokens: config.ai.maxInputTokens,
+    })
   }
 
   ensureUserQuota(userId, estimatedInputTokens)
@@ -474,9 +469,17 @@ export class AiGatewayService {
 
     let result: GatewayChatResponse
     if (provider === 'anthropic') {
-      result = await forwardToAnthropic(request, intercepted.sanitizedMessages, intercepted.estimatedInputTokens)
+      result = await forwardToAnthropic(
+        request,
+        intercepted.sanitizedMessages,
+        intercepted.estimatedInputTokens
+      )
     } else {
-      result = await forwardToOpenAI(request, intercepted.sanitizedMessages, intercepted.estimatedInputTokens)
+      result = await forwardToOpenAI(
+        request,
+        intercepted.sanitizedMessages,
+        intercepted.estimatedInputTokens
+      )
     }
 
     const combinedWarnings = [...intercepted.warnings, ...result.warnings]
@@ -508,7 +511,10 @@ export class AiGatewayService {
   ): Promise<GatewayEmbeddingResponse> {
     const inputs = Array.isArray(request.input) ? request.input : [request.input]
     const dimensions = request.dimensions ?? 128
-    const totalEstimatedTokens = inputs.reduce((sum, input) => sum + estimateTokensFromText(input), 0)
+    const totalEstimatedTokens = inputs.reduce(
+      (sum, input) => sum + estimateTokensFromText(input),
+      0
+    )
     ensureUserQuota(userId, totalEstimatedTokens)
 
     if (config.ai.openaiApiKey) {
