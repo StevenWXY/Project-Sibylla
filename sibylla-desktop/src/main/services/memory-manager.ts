@@ -45,7 +45,6 @@ export interface MemoryFlushResult {
 const MEMORY_FILE = 'MEMORY.md'
 const MEMORY_DAILY_DIR = '.sibylla/memory/daily'
 const MEMORY_ARCHIVE_DIR = '.sibylla/memory/archives'
-const MEMORY_MIN_TOKENS = 8000
 const MEMORY_TARGET_TOKENS = 10000
 const MEMORY_MAX_TOKENS = 12000
 

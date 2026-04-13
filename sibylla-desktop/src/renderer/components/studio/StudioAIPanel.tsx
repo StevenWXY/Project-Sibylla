@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import {
   Link2,
   Loader2,
-  MessageSquare,
   MoreVertical,
   Send,
 } from 'lucide-react'
