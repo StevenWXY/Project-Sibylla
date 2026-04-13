@@ -18,11 +18,11 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
  */
 export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
   ({ className, variant = 'default', size = 'md', dot = false, children, ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center gap-1.5 rounded-full font-medium transition-colors'
+    const baseStyles = 'inline-flex items-center gap-1.5 rounded-full border font-medium transition-colors'
     
     const variants = {
-      default: 'bg-notion-bg-secondary text-notion-text-primary dark:bg-gray-700 dark:text-gray-200',
-      primary: 'bg-notion-accent/10 text-notion-accent dark:bg-notion-accent/20',
+      default: 'border-sys-darkBorder bg-sys-darkSurface text-sys-darkMuted',
+      primary: 'border-white/20 bg-white/10 text-white',
       success: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
       warning: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
       danger: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
@@ -36,8 +36,8 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
     }
     
     const dotColors = {
-      default: 'bg-notion-text-secondary dark:bg-gray-400',
-      primary: 'bg-notion-accent',
+      default: 'bg-sys-darkMuted',
+      primary: 'bg-white',
       success: 'bg-green-600 dark:bg-green-500',
       warning: 'bg-yellow-600 dark:bg-yellow-500',
       danger: 'bg-red-600 dark:bg-red-500',

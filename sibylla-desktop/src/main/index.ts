@@ -8,6 +8,7 @@ import { WorkspaceHandler } from './ipc/handlers/workspace.handler'
 import { WindowHandler } from './ipc/handlers/window.handler'
 import { SyncHandler } from './ipc/handlers/sync.handler'
 import { AuthHandler } from './ipc/handlers/auth.handler'
+import { AIHandler } from './ipc/handlers/ai.handler'
 import { FileManager } from './services/file-manager'
 import { WorkspaceManager } from './services/workspace-manager'
 import { GitAbstraction } from './services/git-abstraction'
@@ -15,6 +16,9 @@ import { SyncManager } from './services/sync-manager'
 import { FileWatcher } from './services/file-watcher'
 import { AuthClient } from './services/auth-client'
 import { TokenStorage } from './services/token-storage'
+import { MemoryManager } from './services/memory-manager'
+import { LocalRagEngine } from './services/local-rag-engine'
+import { AiGatewayClient } from './services/ai-gateway-client'
 import type { WorkspaceInfo } from '../shared/types'
 
 // Keep reference to main window to prevent garbage collection
@@ -72,6 +76,18 @@ if (!gotTheLock) {
       const authClient = new AuthClient()
       const tokenStorage = new TokenStorage()
       const authHandler = new AuthHandler(authClient, tokenStorage)
+
+      // Create AI infrastructure
+      const memoryManager = new MemoryManager()
+      const localRagEngine = new LocalRagEngine()
+      const aiGatewayClient = new AiGatewayClient()
+      const aiHandler = new AIHandler(
+        aiGatewayClient,
+        memoryManager,
+        localRagEngine,
+        tokenStorage,
+        workspaceManager,
+      )
       
       // Create WindowHandler (window reference set after createMainWindow)
       const windowHandler = new WindowHandler()
@@ -81,7 +97,7 @@ if (!gotTheLock) {
       
       workspaceHandler.onWorkspaceOpened(async (workspaceInfo: WorkspaceInfo) => {
         const workspacePath = workspaceInfo.metadata.path
-        
+
         console.log('[Main] Initializing services for workspace', { path: workspacePath })
         
         try {
@@ -150,6 +166,11 @@ if (!gotTheLock) {
           })
           
           console.log('[Main] All services started for workspace', { path: workspacePath })
+
+          // Initialize memory + local RAG services for current workspace
+          memoryManager.setWorkspacePath(workspacePath)
+          localRagEngine.setWorkspacePath(workspacePath)
+          await localRagEngine.rebuildIndex()
         } catch (error) {
           console.error('[Main] Failed to initialize workspace services', error)
           // Non-fatal: workspace can still be used without sync
@@ -157,6 +178,9 @@ if (!gotTheLock) {
       })
       
       workspaceHandler.onWorkspaceClosed(async () => {
+        memoryManager.setWorkspacePath(null)
+        localRagEngine.setWorkspacePath(null)
+
         // Stop FileWatcher
         if (fileWatcher) {
           console.log('[Main] Stopping FileWatcher for workspace close')
@@ -179,6 +203,7 @@ if (!gotTheLock) {
         workspaceHandler,
         syncHandler,
         authHandler,
+        aiHandler,
         windowHandler,
       ]
       

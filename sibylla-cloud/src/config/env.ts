@@ -38,6 +38,15 @@ const envSchema = z.object({
   GITEA_URL: z.string().default('http://localhost:3001'),
   GITEA_ADMIN_TOKEN: z.string().default(''),
   GITEA_ADMIN_USERNAME: z.string().default('sibylla-admin'),
+
+  // AI Gateway
+  OPENAI_API_KEY: z.string().default(''),
+  OPENAI_BASE_URL: z.string().default('https://api.openai.com'),
+  ANTHROPIC_API_KEY: z.string().default(''),
+  ANTHROPIC_BASE_URL: z.string().default('https://api.anthropic.com'),
+  AI_MAX_INPUT_TOKENS: z.string().transform(Number).default('32000'),
+  AI_DAILY_TOKEN_LIMIT: z.string().transform(Number).default('300000'),
+  AI_GATEWAY_TIMEOUT_MS: z.string().transform(Number).default('30000'),
 })
 
 const parsed = envSchema.safeParse(process.env)

@@ -8,36 +8,54 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Sibylla VI - Monochrome system palette
+        sys: {
+          black: '#000000',
+          darkSurface: '#0A0A0A',
+          darkBorder: '#27272A',
+          darkMuted: '#A1A1AA',
+          white: '#FFFFFF',
+          lightBg: '#F4F4F5',
+          lightSurface: '#FFFFFF',
+          lightBorder: '#E4E4E7',
+          lightMuted: '#71717A',
+        },
         // Notion 风格配色
         notion: {
           bg: {
-            primary: '#FFFFFF',
-            secondary: '#F7F6F3',
-            tertiary: '#EDECE9',
+            primary: '#050505',
+            secondary: '#0A0A0A',
+            tertiary: '#111111',
           },
           text: {
-            primary: '#37352F',
-            secondary: '#787774',
-            placeholder: '#9B9A97',
+            primary: '#FFFFFF',
+            secondary: '#A1A1AA',
+            placeholder: '#71717A',
           },
           border: {
-            light: '#E9E9E7',
-            default: '#D3D2CE',
+            light: '#27272A',
+            default: '#27272A',
           },
-          accent: '#2383E2',
+          accent: '#FFFFFF',
+        },
+        status: {
+          success: '#10B981',
+          warning: '#F59E0B',
+          error: '#EF4444',
+          info: '#3B82F6',
         },
       },
       fontFamily: {
         sans: [
+          'Inter',
+          'Noto Sans SC',
           '-apple-system',
           'BlinkMacSystemFont',
           'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
           'sans-serif',
         ],
         mono: [
+          'JetBrains Mono',
           'SF Mono',
           'Monaco',
           'Inconsolata',
@@ -49,9 +67,19 @@ export default {
       backdropBlur: {
         xs: '2px',
       },
+      boxShadow: {
+        'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.6)',
+        'glass-light': '0 8px 32px 0 rgba(0, 0, 0, 0.05)',
+        'glow-white': '0 0 30px rgba(255, 255, 255, 0.3)',
+      },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-in-out',
         'slide-in': 'slideIn 0.3s ease-out',
+      },
+      backgroundImage: {
+        'grid-pattern': "linear-gradient(to right, rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.1) 1px, transparent 1px)",
+        'radial-glow': "radial-gradient(circle at 50% 0%, rgba(255,255,255,0.2) 0%, transparent 60%)",
+        'noise-pattern': "url('data:image/svg+xml,%3Csvg viewBox=\"0 0 200 200\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cfilter id=\"noiseFilter\"%3E%3CfeTurbulence type=\"fractalNoise\" baseFrequency=\"0.9\" numOctaves=\"3\" stitchTiles=\"stitch\"/%3E%3C/filter%3E%3Crect width=\"100%25\" height=\"100%25\" filter=\"url(%23noiseFilter)\" opacity=\"0.6\"/%3E%3C/svg%3E')",
       },
       keyframes: {
         fadeIn: {

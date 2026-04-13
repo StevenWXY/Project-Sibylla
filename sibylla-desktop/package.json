@@ -8,8 +8,8 @@
   "private": true,
   "scripts": {
     "dev": "npm run build:main && npm run build:preload && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
-    "dev:vite": "vite",
-    "dev:electron": "wait-on http://localhost:5173 && sleep 1 && cross-env NODE_ENV=development npx electron .",
+    "dev:vite": "vite --host 127.0.0.1 --port 5555",
+    "dev:electron": "wait-on http://127.0.0.1:5555 && sleep 1 && cross-env NODE_ENV=development VITE_DEV_SERVER_URL=http://127.0.0.1:5555 npx electron .",
     "build": "npm run build:renderer && npm run build:main && npm run build:preload",
     "build:renderer": "vite build",
     "build:main": "vite build --config vite.main.config.ts",
@@ -39,6 +39,8 @@
     "lucide-react": "^0.577.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
     "zustand": "^5.0.11"
   },

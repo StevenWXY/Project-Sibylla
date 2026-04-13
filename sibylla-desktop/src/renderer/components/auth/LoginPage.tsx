@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { PixelOctoIcon } from '../brand/PixelOctoIcon'
 
 /**
  * Auth mode: login or register
@@ -64,14 +65,18 @@ export function LoginPage({ onAuthSuccess }: LoginPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-notion-bg-primary dark:bg-gray-900">
-      <div className="w-full max-w-md space-y-8 rounded-2xl border border-notion-border-default bg-white p-8 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+    <div className="sibylla-shell flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-md space-y-8 rounded-2xl border border-white/10 bg-sys-darkSurface/80 p-8 text-white shadow-glass-dark backdrop-blur-xl">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-notion-text-primary dark:text-white">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+            <PixelOctoIcon className="h-4 w-4 text-white" />
+            <span className="font-mono text-xs tracking-widest text-white">&lt;SIBYLLA/&gt;</span>
+          </div>
+          <h1 className="text-3xl font-bold text-white">
             Sibylla
           </h1>
-          <p className="mt-2 text-sm text-notion-text-secondary dark:text-gray-400">
+          <p className="mt-2 text-sm text-sys-darkMuted">
             {mode === 'login' ? 'Sign in to your account' : 'Create a new account'}
           </p>
         </div>
@@ -117,7 +122,7 @@ export function LoginPage({ onAuthSuccess }: LoginPageProps) {
           {/* Error message */}
           {error && (
             <div
-              className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+              className="rounded-lg border border-red-700/50 bg-red-950/40 p-3 text-sm text-red-300"
               role="alert"
             >
               {error}
@@ -138,13 +143,13 @@ export function LoginPage({ onAuthSuccess }: LoginPageProps) {
 
         {/* Mode switch */}
         <div className="text-center text-sm">
-          <span className="text-notion-text-secondary dark:text-gray-400">
+          <span className="text-sys-darkMuted">
             {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
           </span>{' '}
           <button
             type="button"
             onClick={switchMode}
-            className="font-medium text-notion-accent hover:underline"
+            className="font-medium text-white hover:underline"
             disabled={loading}
           >
             {mode === 'login' ? 'Sign up' : 'Sign in'}
@@ -153,11 +158,11 @@ export function LoginPage({ onAuthSuccess }: LoginPageProps) {
 
         {/* Skip auth (development) */}
         {process.env.NODE_ENV === 'development' && (
-          <div className="border-t border-notion-border-default pt-4 text-center dark:border-gray-700">
+          <div className="border-t border-white/10 pt-4 text-center">
             <button
               type="button"
               onClick={onAuthSuccess}
-              className="text-sm text-notion-text-secondary hover:text-notion-text-primary dark:text-gray-500 dark:hover:text-gray-300"
+              className="text-sm text-sys-darkMuted transition-colors hover:text-white"
             >
               Skip (dev only)
             </button>

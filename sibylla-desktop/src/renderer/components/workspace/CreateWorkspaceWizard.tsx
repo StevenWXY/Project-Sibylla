@@ -232,10 +232,10 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors ${
                   step === currentStep
-                    ? 'bg-notion-accent text-white'
+                    ? 'bg-white text-black'
                     : step < currentStep
                     ? 'bg-green-500 text-white'
-                    : 'bg-notion-bg-tertiary text-notion-text-secondary dark:bg-gray-700 dark:text-gray-400'
+                    : 'bg-sys-darkSurface text-sys-darkMuted'
                 }`}
               >
                 {step}
@@ -245,7 +245,7 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
                   className={`mx-2 h-0.5 flex-1 transition-colors ${
                     step < currentStep
                       ? 'bg-green-500'
-                      : 'bg-notion-border-default dark:bg-gray-700'
+                      : 'bg-sys-darkBorder'
                   }`}
                 />
               )}
@@ -258,7 +258,7 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
           {/* Step 1: Basic Info */}
           {currentStep === 1 && (
             <div className="space-y-4">
-              <h4 className="text-sm font-medium text-notion-text-primary dark:text-white">
+              <h4 className="text-sm font-medium text-white">
                 基本信息
               </h4>
               
@@ -281,7 +281,7 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
               />
               
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-notion-text-primary dark:text-white">
+                <label className="mb-1.5 block text-sm font-medium text-white">
                   图标
                 </label>
                 <div className="flex gap-2">
@@ -292,8 +292,8 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
                       onClick={() => updateField('icon', emoji)}
                       className={`flex h-12 w-12 items-center justify-center rounded-lg text-2xl transition-all ${
                         formData.icon === emoji
-                          ? 'bg-notion-accent text-white ring-2 ring-notion-accent ring-offset-2'
-                          : 'bg-notion-bg-tertiary hover:bg-notion-border-light dark:bg-gray-700 dark:hover:bg-gray-600'
+                          ? 'bg-white text-black ring-2 ring-white ring-offset-2 ring-offset-black'
+                          : 'bg-sys-darkSurface hover:bg-black'
                       }`}
                       disabled={isCreating}
                     >
@@ -308,7 +308,7 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
           {/* Step 2: Owner Info */}
           {currentStep === 2 && (
             <div className="space-y-4">
-              <h4 className="text-sm font-medium text-notion-text-primary dark:text-white">
+              <h4 className="text-sm font-medium text-white">
                 所有者信息
               </h4>
               
@@ -336,12 +336,12 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
           {/* Step 3: Location & Settings */}
           {currentStep === 3 && (
             <div className="space-y-4">
-              <h4 className="text-sm font-medium text-notion-text-primary dark:text-white">
+              <h4 className="text-sm font-medium text-white">
                 位置和设置
               </h4>
               
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-notion-text-primary dark:text-white">
+                <label className="mb-1.5 block text-sm font-medium text-white">
                   父目录位置
                 </label>
                 <div className="flex gap-2">
@@ -363,9 +363,9 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
                   </Button>
                 </div>
                 {formData.path && formData.name && (
-                  <p className="mt-2 text-sm text-notion-text-secondary dark:text-gray-400">
+                  <p className="mt-2 text-sm text-sys-darkMuted">
                     💡 Workspace 将创建在：
-                    <code className="ml-1 rounded bg-notion-bg-tertiary px-1.5 py-0.5 dark:bg-gray-700">
+                    <code className="ml-1 rounded border border-white/10 bg-sys-black px-1.5 py-0.5">
                       {formData.path}/{formData.name}
                     </code>
                   </p>
@@ -385,7 +385,7 @@ export function CreateWorkspaceWizard({ onClose, onSuccess }: CreateWorkspaceWiz
 
         {/* Error Message */}
         {error && (
-          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+          <div className="rounded-lg border border-red-700/50 bg-red-950/40 p-3 text-sm text-red-300">
             {error}
           </div>
         )}

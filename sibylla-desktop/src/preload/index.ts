@@ -19,6 +19,10 @@ import type {
   AuthLoginInput,
   AuthRegisterInput,
   AuthSession,
+  AIChatRequest,
+  AIChatResponse,
+  AIEmbedRequest,
+  AIEmbedResponse,
 } from '../shared/types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
 
@@ -89,6 +93,13 @@ interface ElectronAPI {
     force: () => Promise<IPCResponse<SyncResult>>
     onStatusChange: (callback: (data: SyncStatusData) => void) => () => void
   }
+
+  // AI operations
+  ai: {
+    chat: (request: AIChatRequest | string) => Promise<IPCResponse<AIChatResponse>>
+    stream: (request: AIChatRequest | string) => Promise<IPCResponse<AIChatResponse>>
+    embed: (request: AIEmbedRequest | string) => Promise<IPCResponse<AIEmbedResponse>>
+  }
   
   // Auth operations
   auth: {
@@ -158,6 +169,10 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.AUTH_LOGOUT,
   IPC_CHANNELS.AUTH_GET_CURRENT_USER,
   IPC_CHANNELS.AUTH_REFRESH_TOKEN,
+  // AI operations
+  IPC_CHANNELS.AI_CHAT,
+  IPC_CHANNELS.AI_STREAM,
+  IPC_CHANNELS.AI_EMBED,
   // Window control
   IPC_CHANNELS.WINDOW_MINIMIZE,
   IPC_CHANNELS.WINDOW_MAXIMIZE,
@@ -401,6 +416,21 @@ const api: ElectronAPI = {
     
     refreshToken: async () => {
       return await safeInvoke<AuthSession>(IPC_CHANNELS.AUTH_REFRESH_TOKEN)
+    },
+  },
+
+  // AI operations
+  ai: {
+    chat: async (request: AIChatRequest | string) => {
+      return await safeInvoke<AIChatResponse>(IPC_CHANNELS.AI_CHAT, request)
+    },
+
+    stream: async (request: AIChatRequest | string) => {
+      return await safeInvoke<AIChatResponse>(IPC_CHANNELS.AI_STREAM, request)
+    },
+
+    embed: async (request: AIEmbedRequest | string) => {
+      return await safeInvoke<AIEmbedResponse>(IPC_CHANNELS.AI_EMBED, request)
     },
   },
   

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sibylla UI - Dark Mode (Monochrome)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans SC', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        sys: {
+                            black: '#000000',
+                            darkSurface: '#0A0A0A',
+                            darkBorder: '#27272A',
+                            darkMuted: '#A1A1AA',
+                        },
+                        status: {
+                            success: '#10B981',
+                            warning: '#F59E0B',
+                            error: '#EF4444',
+                            info: '#3B82F6'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #000000; color: #FFFFFF; overflow: hidden; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #27272A; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+        .noise-bg {
+            position: relative;
+        }
+        .noise-bg::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)" opacity="0.6"/%3E%3C/svg%3E');
+            mix-blend-mode: overlay;
+            opacity: 0.2;
+            pointer-events: none;
+            z-index: 0;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col font-sans text-[15px] antialiased selection:bg-white selection:text-black">
+
+    <!-- SVG Definitions -->
+    <svg class="hidden">
+        <defs>
+            <g id="pixel-octo" fill="currentColor">
+                <rect x="7" y="2" width="5" height="1"></rect><rect x="5" y="3" width="2" height="1"></rect><rect x="12" y="3" width="2" height="1"></rect>
+                <rect x="4" y="4" width="1" height="4"></rect><rect x="14" y="4" width="1" height="4"></rect><rect x="5" y="8" width="2" height="1"></rect>
+                <rect x="12" y="8" width="2" height="1"></rect><rect x="7" y="9" width="5" height="1"></rect><rect x="6" y="5" width="1" height="1"></rect>
+                <rect x="7" y="6" width="1" height="1"></rect><rect x="12" y="5" width="1" height="1"></rect><rect x="11" y="6" width="1" height="1"></rect>
+                <rect x="9" y="10" width="1" height="5"></rect><rect x="7" y="10" width="1" height="1"></rect><rect x="6" y="11" width="1" height="3"></rect>
+                <rect x="7" y="14" width="1" height="1"></rect><rect x="11" y="10" width="1" height="1"></rect><rect x="12" y="11" width="1" height="3"></rect>
+                <rect x="11" y="14" width="1" height="1"></rect><rect x="4" y="8" width="1" height="1"></rect><rect x="3" y="9" width="1" height="1"></rect>
+                <rect x="2" y="10" width="1" height="3"></rect><rect x="3" y="13" width="1" height="1"></rect><rect x="14" y="8" width="1" height="1"></rect>
+                <rect x="15" y="9" width="1" height="1"></rect><rect x="16" y="10" width="1" height="3"></rect><rect x="15" y="13" width="1" height="1"></rect>
+            </g>
+        </defs>
+    </svg>
+
+    <!-- Top Bar (48px) -->
+    <header class="h-[48px] flex items-center justify-between px-4 border-b border-sys-darkBorder bg-sys-black relative z-10">
+        <!-- Left: Logo & Workspace -->
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 text-white">
+                <svg viewBox="0 0 19 19" class="w-5 h-5"><use href="#pixel-octo"></use></svg>
+                <span class="font-bold tracking-widest font-mono text-sm">SIBYLLA</span>
+            </div>
+            <div class="h-4 w-px bg-sys-darkBorder"></div>
+            <button class="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors">
+                <span>Sibylla-Core</span>
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+        </div>
+
+        <!-- Right: Sync & Avatar -->
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 text-status-success text-xs font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                <span>Synced</span>
+            </div>
+            <div class="w-7 h-7 rounded-full bg-sys-darkBorder flex items-center justify-center overflow-hidden border border-white/10">
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=27272A" alt="Avatar" class="w-full h-full object-cover">
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden bg-sys-black">
+        
+        <!-- Left Sidebar (220px) -->
+        <aside class="w-[220px] flex flex-col border-r border-sys-darkBorder bg-[#050505]">
+            <!-- Navigation Items -->
+            <nav class="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+                <!-- Group 1 -->
+                <div class="space-y-0.5 mb-4">
+                    <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md bg-sys-darkBorder/50 text-white text-[13px] font-medium">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                        Files
+                    </button>
+                    <!-- File tree items -->
+                    <div class="pl-6 space-y-0.5 mt-1">
+                        <div class="flex items-center gap-2 px-2 py-1 rounded-md text-[13px] text-sys-darkMuted hover:bg-white/5 hover:text-gray-200 cursor-pointer">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <span class="truncate">prd.md</span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-status-warning ml-auto flex-shrink-0" title="Local changes"></span>
+                        </div>
+                        <div class="flex items-center gap-2 px-2 py-1 rounded-md text-[13px] text-black bg-white cursor-pointer font-medium shadow-[0_0_10px_rgba(255,255,255,0.1)]">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <span class="truncate">ui-ux-design.md</span>
+                        </div>
+                        <div class="flex items-center gap-2 px-2 py-1 rounded-md text-[13px] text-sys-darkMuted hover:bg-white/5 hover:text-gray-200 cursor-pointer">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                            <span class="truncate">app.ts</span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-status-success ml-auto flex-shrink-0" title="Synced"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tools -->
+                <div class="pt-2 border-t border-sys-darkBorder/50 space-y-0.5">
+                    <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sys-darkMuted hover:bg-white/5 hover:text-gray-200 text-[13px] transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        Global Search
+                        <span class="ml-auto text-[10px] font-mono bg-sys-darkBorder px-1 rounded text-gray-500">⌘⇧F</span>
+                    </button>
+                    <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sys-darkMuted hover:bg-white/5 hover:text-gray-200 text-[13px] transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                        Tasks
+                    </button>
+                    <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sys-darkMuted hover:bg-white/5 hover:text-gray-200 text-[13px] transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                        Notifications
+                        <span class="ml-auto w-4 h-4 bg-white text-black text-[10px] font-bold rounded-full flex items-center justify-center shadow-[0_0_8px_rgba(255,255,255,0.4)]">3</span>
+                    </button>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Middle Area (Editor) -->
+        <main class="flex-1 flex flex-col min-w-0 bg-sys-darkSurface noise-bg">
+            <!-- Tabs -->
+            <div class="h-[40px] flex items-center border-b border-sys-darkBorder bg-[#050505] overflow-x-auto px-2 relative z-10">
+                <div class="flex items-center gap-1">
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-sys-darkSurface border border-sys-darkBorder border-b-0 rounded-t-lg text-[13px] text-white min-w-[120px] max-w-[200px]">
+                        <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <span class="truncate">ui-ux-design.md</span>
+                        <button class="ml-auto text-gray-500 hover:text-white"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                    </div>
+                    <div class="flex items-center gap-2 px-3 py-1.5 text-[13px] text-sys-darkMuted hover:bg-white/5 rounded-t-lg min-w-[120px] max-w-[200px] cursor-pointer transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <span class="truncate">prd.md</span>
+                        <span class="w-1.5 h-1.5 rounded-full bg-status-warning ml-auto"></span>
+                    </div>
+                </div>
+                <button class="ml-2 flex items-center gap-1 px-2 py-1 text-[12px] font-medium text-white hover:bg-white/10 rounded transition-colors border border-white/20">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    AI
+                </button>
+            </div>
+
+            <!-- Editor Content -->
+            <div class="flex-1 overflow-y-auto p-8 relative z-10">
+                <div class="max-w-3xl mx-auto">
+                    <!-- Title -->
+                    <h1 class="text-[28px] leading-[36px] font-bold text-white mb-6">UI/UX Design Specification</h1>
+                    
+                    <p class="text-gray-300 text-[15px] leading-[24px] mb-6 border-l-2 border-white pl-4 py-1 bg-white/5">
+                        This document defines the interface layout, visual specifications, and interaction design principles for Sibylla.<br>
+                        All UI designs must adhere to the UI/UX baselines in CLAUDE.md.
+                    </p>
+
+                    <h2 class="text-[24px] leading-[32px] font-semibold text-white mt-8 mb-4 border-b border-sys-darkBorder pb-2">1. Design Principles</h2>
+                    
+                    <!-- Conflict UI Example -->
+                    <div class="my-8 rounded-xl border border-status-warning bg-[#1A1500] overflow-hidden shadow-lg">
+                        <div class="px-4 py-2 border-b border-status-warning/30 flex items-center gap-2 bg-status-warning/10 text-status-warning text-sm font-medium">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                            File Conflict: docs/product/prd.md
+                        </div>
+                        <div class="flex border-b border-status-warning/20">
+                            <!-- Left: Your version -->
+                            <div class="flex-1 p-4 border-r border-status-warning/20">
+                                <div class="text-xs font-mono text-gray-500 mb-3 uppercase">Your Version</div>
+                                <div class="font-mono text-[13px] text-gray-300 space-y-1">
+                                    <p>Members are divided into three tiers:</p>
+                                    <p class="text-status-error bg-status-error/10 px-1 -mx-1 rounded">- Basic Member</p>
+                                    <p>- Premium Member</p>
+                                    <p>- Enterprise Member</p>
+                                </div>
+                            </div>
+                            <!-- Right: Their version -->
+                            <div class="flex-1 p-4">
+                                <div class="text-xs font-mono text-gray-500 mb-3 uppercase">Their Version (Bob)</div>
+                                <div class="font-mono text-[13px] text-gray-300 space-y-1">
+                                    <p>Members are divided into four tiers:</p>
+                                    <p class="text-status-success bg-status-success/10 px-1 -mx-1 rounded">+ Free User</p>
+                                    <p>- Basic Member</p>
+                                    <p>- Premium Member</p>
+                                    <p>- Enterprise Member</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- AI Suggestion -->
+                        <div class="p-4 bg-sys-black/50 border-b border-status-warning/20">
+                            <div class="flex items-center gap-2 text-xs font-mono text-white mb-2">
+                                <svg viewBox="0 0 19 19" class="w-4 h-4"><use href="#pixel-octo"></use></svg>
+                                AI Suggested Merge:
+                            </div>
+                            <div class="font-mono text-[13px] text-gray-200">
+                                Members are divided into four tiers: Free User, Basic Member, Premium Member, Enterprise Member.
+                            </div>
+                        </div>
+                        <!-- Actions -->
+                        <div class="p-3 bg-[#111111] flex gap-2">
+                            <button class="px-3 py-1.5 text-xs font-medium bg-sys-darkSurface border border-sys-darkBorder rounded text-gray-300 hover:text-white hover:border-gray-500 transition-colors">Accept Yours</button>
+                            <button class="px-3 py-1.5 text-xs font-medium bg-sys-darkSurface border border-sys-darkBorder rounded text-gray-300 hover:text-white hover:border-gray-500 transition-colors">Accept Theirs</button>
+                            <button class="px-3 py-1.5 text-xs font-medium bg-white text-black rounded shadow-[0_0_15px_rgba(255,255,255,0.2)] hover:bg-gray-200 transition-colors">Accept AI Suggestion</button>
+                            <button class="px-3 py-1.5 text-xs font-medium bg-transparent border border-transparent rounded text-sys-darkMuted hover:text-white transition-colors ml-auto">Edit Manually</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar (AI Sidebar) 320px -->
+        <aside class="w-[320px] border-l border-sys-darkBorder flex flex-col bg-[#0A0A0A] relative">
+            <div class="px-4 py-3 border-b border-sys-darkBorder flex justify-between items-center bg-[#050505]">
+                <div class="flex items-center gap-2 text-white">
+                    <svg viewBox="0 0 19 19" class="w-4 h-4 text-white"><use href="#pixel-octo"></use></svg>
+                    <span class="font-semibold text-sm">Sibylla AI</span>
+                </div>
+                <button class="text-sys-darkMuted hover:text-white transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                </button>
+            </div>
+            
+            <!-- Chat Area -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-6">
+                <!-- User Message -->
+                <div class="flex flex-col items-end">
+                    <div class="px-4 py-2.5 bg-sys-darkBorder text-white rounded-2xl rounded-tr-sm text-[13px] max-w-[85%]">
+                        Help me optimize the style of the conflict resolution interface according to the latest VI guidelines.
+                    </div>
+                </div>
+
+                <!-- AI Streaming Message -->
+                <div class="flex items-start gap-3">
+                    <div class="w-6 h-6 rounded-full bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0 mt-1 shadow-[0_0_10px_rgba(255,255,255,0.1)]">
+                        <svg viewBox="0 0 19 19" class="w-3.5 h-3.5 text-white"><use href="#pixel-octo"></use></svg>
+                    </div>
+                    <div class="flex flex-col gap-2 max-w-[85%]">
+                        <div class="text-[13px] text-gray-300 space-y-2 leading-relaxed">
+                            <p>Sure, retrieved <span class="font-mono px-1 py-0.5 bg-white/10 rounded text-white text-xs">Sibylla_VI_Design_System.html</span>. It is recommended to use a dark gray panel with warning colors. I have generated a Diff preview:</p>
+                            
+                            <!-- Inline Diff UI -->
+                            <div class="rounded border border-sys-darkBorder overflow-hidden bg-sys-black font-mono text-xs">
+                                <div class="px-2 py-1 border-b border-sys-darkBorder bg-sys-darkSurface text-gray-400">ui-ux-design.md</div>
+                                <div class="p-2 space-y-1">
+                                    <div class="text-status-error bg-status-error/10 px-1 -mx-1 rounded flex"><span class="w-4 select-none">-</span><span>bg-white text-black</span></div>
+                                    <div class="text-status-success bg-status-success/10 px-1 -mx-1 rounded flex"><span class="w-4 select-none">+</span><span>bg-[#1A1500] border-status-warning</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 mt-1">
+                            <button class="px-3 py-1.5 text-xs font-medium bg-white text-black rounded hover:bg-gray-200 transition-colors shadow-[0_0_10px_rgba(255,255,255,0.2)]">Apply</button>
+                            <button class="px-3 py-1.5 text-xs font-medium bg-sys-darkSurface border border-sys-darkBorder rounded text-gray-300 hover:text-white transition-colors">Edit & Apply</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Loading Skeleton -->
+                <div class="flex items-start gap-3">
+                    <div class="w-6 h-6 rounded-full bg-sys-darkBorder flex items-center justify-center flex-shrink-0 mt-1">
+                        <svg viewBox="0 0 19 19" class="w-3.5 h-3.5 text-sys-darkMuted animate-pulse"><use href="#pixel-octo"></use></svg>
+                    </div>
+                    <div class="flex flex-col gap-2 w-[70%]">
+                        <div class="h-4 bg-sys-darkBorder rounded w-full animate-pulse mt-1.5"></div>
+                        <div class="h-4 bg-sys-darkBorder rounded w-2/3 animate-pulse"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-3 border-t border-sys-darkBorder bg-[#050505]">
+                <div class="relative flex items-end bg-[#111111] border border-[#333333] rounded-xl focus-within:border-white/50 focus-within:ring-1 focus-within:ring-white/30 transition-all p-1">
+                    <textarea rows="1" placeholder="Ask Sibylla..." class="w-full bg-transparent border-none focus:outline-none text-[13px] text-white placeholder-gray-500 resize-none py-2 pl-3 max-h-32 min-h-[36px]"></textarea>
+                    <button class="p-1.5 m-1 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-[0_0_10px_rgba(255,255,255,0.2)]">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </button>
+                </div>
+                <div class="flex justify-between items-center mt-2 px-1">
+                    <div class="flex gap-2">
+                        <button class="text-sys-darkMuted hover:text-white transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg></button>
+                    </div>
+                    <span class="text-[10px] font-mono text-gray-500">⌘ ↵ Send</span>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- Bottom Bar (32px) -->
+    <footer class="h-[32px] flex items-center justify-between px-4 border-t border-sys-darkBorder bg-[#050505] text-[12px] font-mono text-gray-400 relative z-10">
+        <!-- Left: Modes -->
+        <div class="flex items-center gap-4">
+            <button class="flex items-center gap-1.5 hover:text-white transition-colors">
+                <svg viewBox="0 0 19 19" class="w-3.5 h-3.5 text-white"><use href="#pixel-octo"></use></svg>
+                Plan <span class="text-[10px]">▾</span>
+            </button>
+            <div class="w-px h-3 bg-sys-darkBorder"></div>
+            <button class="flex items-center gap-1.5 hover:text-white transition-colors">
+                Claude 3.5 Sonnet <span class="text-[10px]">▾</span>
+            </button>
+        </div>
+
+        <!-- Right: Status -->
+        <div class="flex items-center gap-4">
+            <span class="flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Credits: 1,240
+            </span>
+            <div class="w-px h-3 bg-sys-darkBorder"></div>
+            <span class="flex items-center gap-1.5 text-status-success">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Synced 10:23
+            </span>
+        </div>
+    </footer>
+
+</body>
+</html>

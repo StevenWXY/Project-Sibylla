@@ -2,6 +2,7 @@ import React from 'react'
 import { useAppStore, selectSidebarCollapsed } from '../../store/appStore'
 import { ChevronLeft, ChevronRight, Home, FileText, Settings } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { PixelOctoIcon } from '../brand/PixelOctoIcon'
 
 /**
  * Sidebar - 侧边栏导航组件
@@ -31,7 +32,7 @@ export function Sidebar() {
     <aside 
       className={cn(
         'fixed left-0 top-0 h-full z-40',
-        'glass border-r border-notion-border-light dark:border-gray-700',
+        'glass border-r border-white/10',
         'transition-all duration-300 ease-in-out',
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
@@ -39,27 +40,31 @@ export function Sidebar() {
     >
       <div className="flex h-full flex-col">
         {/* Logo 区域 */}
-        <div className="flex h-14 items-center justify-between px-4 border-b border-notion-border-light dark:border-gray-700 shrink-0">
+        <div className="flex h-16 items-center justify-between border-b border-white/10 px-4 shrink-0">
           {!sidebarCollapsed && (
-            <span className="text-lg font-semibold text-notion-text-primary dark:text-white transition-opacity duration-200">
-              Sibylla
-            </span>
+            <div className="flex items-center gap-2 transition-opacity duration-200">
+              <PixelOctoIcon className="h-6 w-6 text-white" />
+              <span className="font-mono text-base font-bold tracking-widest text-white">
+                &lt;SIBYLLA/&gt;
+              </span>
+            </div>
           )}
+          {sidebarCollapsed && <PixelOctoIcon className="h-6 w-6 text-white" />}
           <button
             onClick={toggleSidebar}
             className={cn(
               'rounded-lg p-1.5 transition-colors',
-              'hover:bg-notion-bg-secondary dark:hover:bg-gray-800',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-notion-accent',
+              'hover:bg-sys-darkSurface',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
               sidebarCollapsed && 'mx-auto'
             )}
             aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
             title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
           >
             {sidebarCollapsed ? (
-              <ChevronRight size={20} className="text-notion-text-secondary dark:text-gray-400" />
+              <ChevronRight size={20} className="text-sys-darkMuted" />
             ) : (
-              <ChevronLeft size={20} className="text-notion-text-secondary dark:text-gray-400" />
+              <ChevronLeft size={20} className="text-sys-darkMuted" />
             )}
           </button>
         </div>
@@ -113,11 +118,11 @@ const SidebarItem = React.memo(function SidebarItem({
       onClick={onClick}
       className={cn(
         'flex w-full items-center gap-3 rounded-lg px-3 py-2 mb-1',
-        'text-notion-text-secondary dark:text-gray-400',
+        'text-sys-darkMuted',
         'transition-all duration-200',
-        'hover:bg-notion-bg-secondary dark:hover:bg-gray-800',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-notion-accent',
-        active && 'bg-notion-bg-secondary dark:bg-gray-800 text-notion-accent dark:text-notion-accent font-medium',
+        'hover:bg-sys-darkSurface hover:text-white',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
+        active && 'bg-white text-black font-semibold',
         collapsed && 'justify-center'
       )}
       title={collapsed ? label : undefined}

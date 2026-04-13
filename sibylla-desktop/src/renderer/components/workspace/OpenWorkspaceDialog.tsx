@@ -144,8 +144,8 @@ export function OpenWorkspaceDialog({ onClose, onSuccess }: OpenWorkspaceDialogP
     switch (validationStatus) {
       case 'validating':
         return (
-          <div className="flex items-center gap-2 text-sm text-notion-text-secondary dark:text-gray-400">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-notion-accent border-t-transparent" />
+          <div className="flex items-center gap-2 text-sm text-sys-darkMuted">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
             <span>验证中...</span>
           </div>
         )
@@ -180,7 +180,7 @@ export function OpenWorkspaceDialog({ onClose, onSuccess }: OpenWorkspaceDialogP
       <div className="space-y-6">
         {/* Path Selection */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-notion-text-primary dark:text-white">
+          <label className="mb-1.5 block text-sm font-medium text-white">
             Workspace 位置
           </label>
           <div className="flex gap-2">
@@ -205,22 +205,22 @@ export function OpenWorkspaceDialog({ onClose, onSuccess }: OpenWorkspaceDialogP
 
         {/* Validation Status */}
         {validationStatus !== 'idle' && (
-          <div className="rounded-lg border border-notion-border-default bg-notion-bg-secondary p-3 dark:border-gray-700 dark:bg-gray-800">
+          <div className="rounded-lg border border-sys-darkBorder bg-sys-darkSurface p-3">
             {getValidationIndicator()}
           </div>
         )}
 
         {/* Error Message */}
         {error && (
-          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+          <div className="rounded-lg border border-red-700/50 bg-red-950/40 p-3 text-sm text-red-300">
             {error}
           </div>
         )}
 
         {/* Help Text */}
-        <div className="rounded-lg border border-notion-border-default bg-notion-bg-secondary p-3 dark:border-gray-700 dark:bg-gray-800">
-          <p className="text-sm text-notion-text-secondary dark:text-gray-400">
-            💡 提示：有效的 Workspace 目录应包含 <code className="rounded bg-notion-bg-tertiary px-1 py-0.5 dark:bg-gray-700">.sibylla</code> 配置文件夹
+        <div className="rounded-lg border border-sys-darkBorder bg-sys-darkSurface p-3">
+          <p className="text-sm text-sys-darkMuted">
+            💡 提示：有效的 Workspace 目录应包含 <code className="rounded border border-white/10 bg-sys-black px-1 py-0.5">.sibylla</code> 配置文件夹
           </p>
         </div>
 

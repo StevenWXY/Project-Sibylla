@@ -23,9 +23,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     const baseStyles = 'rounded-xl transition-all duration-200'
     
     const variants = {
-      default: 'bg-white dark:bg-gray-800 border border-notion-border-light dark:border-gray-700',
+      default: 'border border-sys-darkBorder bg-sys-darkSurface text-white',
       glass: 'glass',
-      bordered: 'bg-transparent border-2 border-notion-border-default dark:border-gray-600',
+      bordered: 'border-2 border-sys-darkBorder bg-transparent text-white',
     }
     
     const paddings = {
@@ -36,7 +36,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     }
     
     const hoverStyles = hoverable
-      ? 'cursor-pointer hover:shadow-lg hover:scale-[1.02] hover:border-notion-accent/50 dark:hover:border-notion-accent/50'
+      ? 'cursor-pointer hover:scale-[1.02] hover:border-white/30 hover:bg-black'
       : ''
     
     return (
@@ -66,12 +66,12 @@ export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(
     return (
       <div ref={ref} className={cn('mb-4', className)} {...props}>
         {title && (
-          <h3 className="text-lg font-semibold text-notion-text-primary dark:text-white">
+          <h3 className="text-lg font-semibold text-white">
             {title}
           </h3>
         )}
         {description && (
-          <p className="mt-1 text-sm text-notion-text-secondary dark:text-gray-400">
+          <p className="mt-1 text-sm text-sys-darkMuted">
             {description}
           </p>
         )}
@@ -91,7 +91,7 @@ export interface CardContentProps extends React.HTMLAttributes<HTMLDivElement> {
 export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
   ({ className, children, ...props }, ref) => {
     return (
-      <div ref={ref} className={cn('text-notion-text-primary dark:text-gray-200', className)} {...props}>
+      <div ref={ref} className={cn('text-white', className)} {...props}>
         {children}
       </div>
     )

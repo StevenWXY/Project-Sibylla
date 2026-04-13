@@ -16,7 +16,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label 
             htmlFor={inputId}
-            className="mb-1.5 block text-sm font-medium text-notion-text-primary dark:text-white"
+            className="mb-1.5 block text-sm font-medium text-white"
           >
             {label}
           </label>
@@ -25,13 +25,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           ref={ref}
           className={cn(
-            'w-full rounded-lg border border-notion-border-default bg-white px-3 py-2 text-sm',
-            'placeholder:text-notion-text-placeholder',
-            'focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20',
+            'w-full rounded-xl border border-sys-darkBorder bg-sys-black px-3 py-2 text-sm text-white',
+            'placeholder:text-sys-darkMuted',
+            'focus:border-white/60 focus:outline-none focus:ring-1 focus:ring-white/30',
             'disabled:cursor-not-allowed disabled:opacity-50',
-            'dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500',
             'transition-colors duration-200',
-            error && 'border-red-500 focus:border-red-500 focus:ring-red-500/20',
+            error && 'border-red-500 focus:border-red-500 focus:ring-red-500/30',
             className
           )}
           aria-invalid={!!error}
@@ -44,7 +43,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           </p>
         )}
         {!error && helperText && (
-          <p id={`${inputId}-helper`} className="mt-1.5 text-sm text-notion-text-secondary dark:text-gray-400">
+          <p id={`${inputId}-helper`} className="mt-1.5 text-sm text-sys-darkMuted">
             {helperText}
           </p>
         )}

@@ -9,15 +9,24 @@ type ThemeContextType = {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
+function getPrefersDark(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return true
+  }
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  } catch {
+    return true
+  }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useAppStore(selectTheme)
   const setTheme = useAppStore((state) => state.setTheme)
   
   const resolvedTheme = useMemo(() => {
     if (theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches 
-        ? 'dark' 
-        : 'light'
+      return getPrefersDark() ? 'dark' : 'light'
     }
     return theme
   }, [theme])
@@ -30,15 +39,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   
   useEffect(() => {
     if (theme === 'system') {
+      if (typeof window.matchMedia !== 'function') {
+        return
+      }
+
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
       const handleChange = () => {
         const root = window.document.documentElement
         root.classList.remove('light', 'dark')
         root.classList.add(mediaQuery.matches ? 'dark' : 'light')
       }
-      
-      mediaQuery.addEventListener('change', handleChange)
-      return () => mediaQuery.removeEventListener('change', handleChange)
+
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleChange)
+        return () => mediaQuery.removeEventListener('change', handleChange)
+      }
+
+      // Older Electron/Chromium fallback
+      if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(handleChange)
+        return () => mediaQuery.removeListener(handleChange)
+      }
     }
   }, [theme])
   
