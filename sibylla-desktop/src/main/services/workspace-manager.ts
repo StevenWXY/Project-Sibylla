@@ -649,12 +649,26 @@ export class WorkspaceManager {
         )
       }
 
-      // Load workspace info
-      const workspaceInfo = await this.loadWorkspaceInfo(workspacePath)
-
-      // Update FileManager workspace root
+      // Update FileManager workspace root BEFORE loading workspace info,
+      // because loadWorkspaceInfo() uses FileManager to read config files
+      // relative to the workspace root (same pattern as createWorkspace)
+      const originalRoot = this.fileManager.getWorkspaceRoot()
       await this.fileManager.updateWorkspaceRoot(workspacePath)
       logger.info('Updated FileManager workspace root', { path: workspacePath })
+
+      // Load workspace info (uses FileManager which now points to the correct root)
+      let workspaceInfo: WorkspaceInfo
+      try {
+        workspaceInfo = await this.loadWorkspaceInfo(workspacePath)
+      } catch (loadError) {
+        // Restore original root on failure
+        await this.fileManager.updateWorkspaceRoot(originalRoot)
+        logger.error('Failed to load workspace info, restored FileManager root', {
+          path: workspacePath,
+          originalRoot,
+        })
+        throw loadError
+      }
 
       // Set as current workspace
       this.currentWorkspace = workspaceInfo
