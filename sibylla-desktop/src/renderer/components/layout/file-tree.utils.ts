@@ -7,6 +7,7 @@ export interface FileTreeNode {
   children?: FileTreeNode[]
   path: string
   depth?: number
+  isLoaded?: boolean
 }
 
 export interface VisibleTreeNode {
@@ -170,4 +171,113 @@ export function isCircularDrop(sourcePath: string, targetPath: string): boolean 
 
 export function toDepthPadding(depth: number): number {
   return depth * 16 + 8
+}
+
+export function expandNodeInTree(
+  nodes: FileTreeNode[],
+  targetPath: string,
+  children: FileTreeNode[]
+): FileTreeNode[] {
+  return nodes.map((node) => {
+    if (node.path === targetPath && node.type === 'folder') {
+      return { ...node, children, isLoaded: true }
+    }
+    if (node.children && node.children.length > 0) {
+      return {
+        ...node,
+        children: expandNodeInTree(node.children, targetPath, children),
+      }
+    }
+    return node
+  })
+}
+
+export function removeNodeFromTree(
+  nodes: FileTreeNode[],
+  targetPath: string
+): FileTreeNode[] {
+  return nodes
+    .filter((node) => node.path !== targetPath)
+    .map((node) => {
+      if (node.children && node.children.length > 0) {
+        return {
+          ...node,
+          children: removeNodeFromTree(node.children, targetPath),
+        }
+      }
+      return node
+    })
+}
+
+export function insertNodeToTree(
+  nodes: FileTreeNode[],
+  parentPath: string,
+  newNode: FileTreeNode
+): FileTreeNode[] {
+  if (parentPath === '') {
+    return sortTreeNodes([...nodes, newNode])
+  }
+
+  return nodes.map((node) => {
+    if (node.path === parentPath && node.type === 'folder') {
+      const updatedChildren = node.children
+        ? sortTreeNodes([...node.children, newNode])
+        : [newNode]
+      return { ...node, children: updatedChildren }
+    }
+    if (node.children && node.children.length > 0) {
+      return {
+        ...node,
+        children: insertNodeToTree(node.children, parentPath, newNode),
+      }
+    }
+    return node
+  })
+}
+
+export function renameNodeInTree(
+  nodes: FileTreeNode[],
+  oldPath: string,
+  newPath: string,
+  newName: string
+): FileTreeNode[] {
+  return nodes.map((node) => {
+    if (node.path === oldPath) {
+      return {
+        ...node,
+        id: newPath,
+        name: newName,
+        path: newPath,
+        children: updateChildPaths(node.children, oldPath, newPath),
+      }
+    }
+    if (node.children && node.children.length > 0) {
+      return {
+        ...node,
+        children: renameNodeInTree(node.children, oldPath, newPath, newName),
+      }
+    }
+    return node
+  })
+}
+
+function updateChildPaths(
+  children: FileTreeNode[] | undefined,
+  oldParentPath: string,
+  newParentPath: string
+): FileTreeNode[] | undefined {
+  if (!children) return undefined
+  return children.map((child) => {
+    const updatedPath = newParentPath + child.path.slice(oldParentPath.length)
+    return {
+      ...child,
+      id: updatedPath,
+      path: updatedPath,
+      children: updateChildPaths(child.children, oldParentPath, newParentPath),
+    }
+  })
+}
+
+export function cloneTree(nodes: FileTreeNode[]): FileTreeNode[] {
+  return JSON.parse(JSON.stringify(nodes)) as FileTreeNode[]
 }

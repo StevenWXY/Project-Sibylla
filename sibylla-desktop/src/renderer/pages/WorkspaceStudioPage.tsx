@@ -7,12 +7,12 @@ import {
   selectOpenFiles,
 } from '../store/appStore'
 import {
-  buildTreeFromFiles,
   getBaseName,
   joinPath,
   normalizePath,
   type FileTreeNode,
 } from '../components/layout/file-tree.utils'
+import { useFileTreeStore } from '../store/fileTreeStore'
 import {
   StudioAIPanel,
   StudioEditorPanel,
@@ -70,13 +70,6 @@ const TASK_LINE_REGEX = /^(\s*[-*]\s\[)( |x|X)(\]\s+)(.*)$/
 
 function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function buildDefaultExpandedIds(nodes: FileTreeNode[]): string[] {
-  return nodes
-    .filter((node) => node.type === 'folder')
-    .slice(0, 6)
-    .map((node) => node.path)
 }
 
 function extractMentionedFiles(input: string): string[] {
@@ -268,19 +261,19 @@ export function WorkspaceStudioPage() {
   const setCurrentFile = useAppStore((state) => state.setCurrentFile)
   const removeOpenFile = useAppStore((state) => state.removeOpenFile)
 
-  const [treeNodes, setTreeNodes] = useState<FileTreeNode[]>([])
   const [workspaceFiles, setWorkspaceFiles] = useState<FileInfo[]>([])
-  const [defaultExpandedIds, setDefaultExpandedIds] = useState<string[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(undefined)
+
+  const storeTree = useFileTreeStore((s) => s.tree)
+  const storeIsLoading = useFileTreeStore((s) => s.isLoading)
+  const storeError = useFileTreeStore((s) => s.error)
 
   const [editorMode, setEditorMode] = useState<EditorMode>('split')
   const [editorContent, setEditorContent] = useState('')
   const [savedContentSnapshot, setSavedContentSnapshot] = useState('')
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
 
-  const [isTreeLoading, setIsTreeLoading] = useState(false)
   const [isFileLoading, setIsFileLoading] = useState(false)
-  const [treeError, setTreeError] = useState<string | null>(null)
   const [editorError, setEditorError] = useState<string | null>(null)
 
   const [activeTool, setActiveTool] = useState<LeftToolMode>(null)
@@ -390,14 +383,14 @@ export function WorkspaceStudioPage() {
 
   const refreshTree = useCallback(async () => {
     if (!currentWorkspace) {
-      setTreeNodes([])
+      useFileTreeStore.getState().setTree([])
       setWorkspaceFiles([])
-      setDefaultExpandedIds([])
       return
     }
 
-    setIsTreeLoading(true)
-    setTreeError(null)
+    const store = useFileTreeStore.getState()
+    store.setError(null)
+    useFileTreeStore.setState({ isLoading: true })
 
     try {
       const response = await window.electronAPI.file.list('', {
@@ -406,17 +399,15 @@ export function WorkspaceStudioPage() {
       })
 
       if (!response.success || !response.data) {
-        setTreeError(response.error?.message ?? '文件树加载失败')
-        setTreeNodes([])
+        store.setError(response.error?.message ?? '文件树加载失败')
         setWorkspaceFiles([])
-        setDefaultExpandedIds([])
         return
       }
 
+      const { buildTreeFromFiles } = await import('../components/layout/file-tree.utils')
       const tree = buildTreeFromFiles(response.data)
-      setTreeNodes(tree)
+      useFileTreeStore.getState().setTree(tree)
       setWorkspaceFiles(response.data)
-      setDefaultExpandedIds(buildDefaultExpandedIds(tree))
 
       if (selectedFileRef.current) {
         const stillExists = response.data.some(
@@ -431,12 +422,10 @@ export function WorkspaceStudioPage() {
         }
       }
     } catch (error) {
-      setTreeError(error instanceof Error ? error.message : '文件树加载失败')
-      setTreeNodes([])
+      store.setError(error instanceof Error ? error.message : '文件树加载失败')
       setWorkspaceFiles([])
-      setDefaultExpandedIds([])
     } finally {
-      setIsTreeLoading(false)
+      useFileTreeStore.setState({ isLoading: false })
     }
   }, [currentWorkspace, setCurrentFile])
 
@@ -543,7 +532,7 @@ export function WorkspaceStudioPage() {
         })
 
         if (!response.success) {
-          setTreeError(response.error?.message ?? '创建文件失败')
+          useFileTreeStore.getState().setError(response.error?.message ?? '创建文件失败')
           return
         }
 
@@ -551,7 +540,7 @@ export function WorkspaceStudioPage() {
         await loadTasks()
         await openFile(targetPath)
       } catch (error) {
-        setTreeError(error instanceof Error ? error.message : '创建文件失败')
+        useFileTreeStore.getState().setError(error instanceof Error ? error.message : '创建文件失败')
       }
     },
     [loadTasks, openFile, refreshTree]
@@ -562,12 +551,12 @@ export function WorkspaceStudioPage() {
       try {
         const response = await window.electronAPI.file.createDir(targetPath, true)
         if (!response.success) {
-          setTreeError(response.error?.message ?? '创建文件夹失败')
+          useFileTreeStore.getState().setError(response.error?.message ?? '创建文件夹失败')
           return
         }
         await refreshTree()
       } catch (error) {
-        setTreeError(error instanceof Error ? error.message : '创建文件夹失败')
+        useFileTreeStore.getState().setError(error instanceof Error ? error.message : '创建文件夹失败')
       }
     },
     [refreshTree]
@@ -592,7 +581,7 @@ export function WorkspaceStudioPage() {
           })
         }
       } catch (error) {
-        setTreeError(error instanceof Error ? error.message : '重命名失败')
+        useFileTreeStore.getState().setError(error instanceof Error ? error.message : '重命名失败')
         throw error
       }
     },
@@ -621,7 +610,7 @@ export function WorkspaceStudioPage() {
           setSelectedNodeId(undefined)
         }
       } catch (error) {
-        setTreeError(error instanceof Error ? error.message : '删除失败')
+        useFileTreeStore.getState().setError(error instanceof Error ? error.message : '删除失败')
         throw error
       }
     },
@@ -647,7 +636,7 @@ export function WorkspaceStudioPage() {
           })
         }
       } catch (error) {
-        setTreeError(error instanceof Error ? error.message : '移动失败')
+        useFileTreeStore.getState().setError(error instanceof Error ? error.message : '移动失败')
         throw error
       }
     },
@@ -660,7 +649,7 @@ export function WorkspaceStudioPage() {
         await navigator.clipboard.writeText(path)
       }
     } catch (error) {
-      setTreeError(error instanceof Error ? error.message : '复制路径失败')
+      useFileTreeStore.getState().setError(error instanceof Error ? error.message : '复制路径失败')
       throw error
     }
   }, [])
@@ -1255,13 +1244,12 @@ export function WorkspaceStudioPage() {
   return (
     <div className="flex h-full min-h-0 bg-sys-black">
       <StudioLeftPanel
-        treeNodes={treeNodes}
+        treeNodes={storeTree}
         selectedNodeId={selectedNodeId}
-        defaultExpandedIds={defaultExpandedIds}
         openFilePaths={openFilePaths}
         dirtyFilePaths={dirtyFilePaths}
-        isTreeLoading={isTreeLoading}
-        treeError={treeError}
+        isTreeLoading={storeIsLoading}
+        treeError={storeError}
         onRefresh={refreshTree}
         onCreateFile={createFileAtPath}
         onCreateFolder={createFolderAtPath}

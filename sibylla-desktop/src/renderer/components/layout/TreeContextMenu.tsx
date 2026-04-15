@@ -115,14 +115,14 @@ export function TreeContextMenu({
 
   return (
     <div
-      className="fixed z-50 w-52 rounded-lg border border-white/10 bg-sys-black/95 p-1 shadow-2xl backdrop-blur"
+      className="fixed z-50 w-52 rounded-lg border border-gray-200 bg-white/95 p-1 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-sys-black/95"
       style={{ left: nextLeft, top: nextTop }}
       role="menu"
       aria-label="文件树操作菜单"
     >
       {items.map((item) =>
         item.separator ? (
-          <div key={item.key} className="my-1 h-px bg-white/10" />
+          <div key={item.key} className="my-1 h-px bg-gray-200 dark:bg-white/10" />
         ) : (
           <button
             key={item.key}
@@ -130,8 +130,8 @@ export function TreeContextMenu({
             className={cn(
               'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors',
               item.danger
-                ? 'text-red-300 hover:bg-red-900/30 hover:text-red-200'
-                : 'text-sys-darkMuted hover:bg-sys-darkSurface hover:text-white'
+                ? 'text-red-600 hover:bg-red-100 hover:text-red-700 dark:text-red-300 dark:hover:bg-red-900/30 dark:hover:text-red-200'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-sys-darkMuted dark:hover:bg-sys-darkSurface dark:hover:text-white'
             )}
             onClick={(event) => {
               event.stopPropagation()

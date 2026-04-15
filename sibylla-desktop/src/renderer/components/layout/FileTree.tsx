@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { FilePlus2, FolderPlus, RefreshCw } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
@@ -17,9 +17,10 @@ import {
   type VisibleTreeNode,
   validateFilename,
 } from './file-tree.utils'
+import { useFileTreeStore } from '../../store/fileTreeStore'
 
 interface FileTreeProps {
-  data: FileTreeNode[]
+  data?: FileTreeNode[]
   selectedId?: string
   defaultExpandedIds?: string[]
   onSelect?: (node: FileTreeNode) => void
@@ -30,6 +31,7 @@ interface FileTreeProps {
   onMove?: (sourcePath: string, targetFolderPath: string) => Promise<void> | void
   onRefresh?: () => Promise<void> | void
   onCopyPath?: (path: string) => Promise<void> | void
+  onFolderExpand?: (folderPath: string) => Promise<void> | void
   openPaths?: string[]
   dirtyPaths?: string[]
   className?: string
@@ -60,20 +62,9 @@ async function copyToClipboard(input: string): Promise<void> {
   document.body.removeChild(textArea)
 }
 
-function getDefaultExpandedIds(
-  defaultExpandedIds: string[],
-  inputNodes: FileTreeNode[]
-): Set<string> {
-  if (defaultExpandedIds.length > 0) {
-    return new Set(defaultExpandedIds)
-  }
-  const folders = inputNodes.filter((node) => node.type === 'folder').slice(0, 6)
-  return new Set(folders.map((node) => node.path))
-}
-
 export function FileTree({
-  data,
-  selectedId,
+  data: dataProp,
+  selectedId: selectedIdProp,
   defaultExpandedIds = [],
   onSelect,
   onCreateFile,
@@ -83,30 +74,51 @@ export function FileTree({
   onMove,
   onRefresh,
   onCopyPath,
+  onFolderExpand,
   openPaths = [],
   dirtyPaths = [],
   className,
 }: FileTreeProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(
-    () => getDefaultExpandedIds(defaultExpandedIds, data)
-  )
-  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(selectedId ?? null)
+  const storeTree = useFileTreeStore((s) => s.tree)
+  const storeExpandedIds = useFileTreeStore((s) => s.expandedIds)
+  const storeSelectedPath = useFileTreeStore((s) => s.selectedPath)
+  const storeRenamingPath = useFileTreeStore((s) => s.renamingPath)
+  const storeError = useFileTreeStore((s) => s.error)
+  const storeToggleExpand = useFileTreeStore((s) => s.toggleExpand)
+  const storeSelectNode = useFileTreeStore((s) => s.selectNode)
+  const storeStartRename = useFileTreeStore((s) => s.startRename)
+  const storeCancelRename = useFileTreeStore((s) => s.cancelRename)
+  const storeSetExpandedIds = useFileTreeStore((s) => s.setExpandedIds)
+
+  const useStore = dataProp === undefined
+
+  const data = useStore ? storeTree : dataProp
+
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
-  const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [pendingCreate, setPendingCreate] = useState<PendingCreateState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<FileTreeNode | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [localExpandedIds, setLocalExpandedIds] = useState<Set<string>>(
+    () => new Set(defaultExpandedIds)
+  )
+  const [localSelectedId, setLocalSelectedId] = useState<string | null>(selectedIdProp ?? null)
+  const [localRenamingPath, setLocalRenamingPath] = useState<string | null>(null)
+
+  const effectiveExpandedIds = useStore ? storeExpandedIds : localExpandedIds
+  const effectiveSelectedId = useStore
+    ? (selectedIdProp ?? storeSelectedPath)
+    : (selectedIdProp ?? localSelectedId)
+  const effectiveRenamingPath = useStore ? storeRenamingPath : localRenamingPath
 
   const dragSourcePathRef = useRef<string | null>(null)
   const expandTimerRef = useRef<number | null>(null)
 
-  const activeSelectedId = selectedId ?? internalSelectedId
   const openPathSet = useMemo(() => new Set(openPaths), [openPaths])
   const dirtyPathSet = useMemo(() => new Set(dirtyPaths), [dirtyPaths])
 
   const visibleNodes = useMemo<VisibleTreeNode[]>(
-    () => flattenVisibleNodes(data, expandedIds),
-    [data, expandedIds]
+    () => flattenVisibleNodes(data, effectiveExpandedIds),
+    [data, effectiveExpandedIds]
   )
 
   const nodeMap = useMemo(() => {
@@ -124,21 +136,6 @@ export function FileTree({
   }, [data])
 
   useEffect(() => {
-    if (selectedId !== undefined) {
-      setInternalSelectedId(selectedId ?? null)
-    }
-  }, [selectedId])
-
-  useEffect(() => {
-    setExpandedIds((prev) => {
-      if (prev.size > 0) {
-        return prev
-      }
-      return getDefaultExpandedIds(defaultExpandedIds, data)
-    })
-  }, [data, defaultExpandedIds])
-
-  useEffect(() => {
     return () => {
       if (expandTimerRef.current !== null) {
         window.clearTimeout(expandTimerRef.current)
@@ -146,52 +143,89 @@ export function FileTree({
     }
   }, [])
 
-  const handleSelect = (node: FileTreeNode): void => {
-    setActionError(null)
-    setInternalSelectedId(node.path)
-    onSelect?.(node)
-  }
-
-  const toggleExpand = (path: string): void => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(path)) {
-        next.delete(path)
+  useEffect(() => {
+    if (defaultExpandedIds.length > 0 && effectiveExpandedIds.size === 0) {
+      if (useStore) {
+        storeSetExpandedIds(new Set(defaultExpandedIds))
       } else {
-        next.add(path)
+        setLocalExpandedIds(new Set(defaultExpandedIds))
       }
-      return next
-    })
-  }
+    }
+  }, [defaultExpandedIds, effectiveExpandedIds.size, useStore, storeSetExpandedIds])
 
-  const closeContextMenu = (): void => {
-    setContextMenu(null)
-  }
-
-  const beginCreate = (type: 'file' | 'folder', parentPath: string): void => {
+  const handleSelect = useCallback((node: FileTreeNode): void => {
     setActionError(null)
-    setRenamingPath(null)
-    if (parentPath) {
-      setExpandedIds((prev) => {
+    if (useStore) {
+      storeSelectNode(node.path)
+    } else {
+      setLocalSelectedId(node.path)
+    }
+    onSelect?.(node)
+  }, [useStore, storeSelectNode, onSelect])
+
+  const toggleExpand = useCallback((path: string): void => {
+    const node = findNodeByPath(data, path)
+    if (node?.type === 'folder' && !node.isLoaded) {
+      onFolderExpand?.(path)
+    }
+
+    if (useStore) {
+      storeToggleExpand(path)
+    } else {
+      setLocalExpandedIds((prev) => {
         const next = new Set(prev)
-        next.add(parentPath)
+        if (next.has(path)) {
+          next.delete(path)
+        } else {
+          next.add(path)
+        }
         return next
       })
+    }
+  }, [useStore, storeToggleExpand, data, onFolderExpand])
+
+  const closeContextMenu = useCallback((): void => {
+    setContextMenu(null)
+  }, [])
+
+  const beginCreate = useCallback((type: 'file' | 'folder', parentPath: string): void => {
+    setActionError(null)
+    if (useStore) {
+      storeCancelRename()
+    } else {
+      setLocalRenamingPath(null)
+    }
+    if (parentPath) {
+      if (useStore) {
+        const next = new Set(effectiveExpandedIds)
+        next.add(parentPath)
+        storeSetExpandedIds(next)
+      } else {
+        setLocalExpandedIds((prev) => {
+          const next = new Set(prev)
+          next.add(parentPath)
+          return next
+        })
+      }
     }
     setPendingCreate({
       parentPath,
       type,
       defaultName: type === 'file' ? 'untitled.md' : 'new-folder',
     })
-  }
+  }, [useStore, storeCancelRename, storeSetExpandedIds, effectiveExpandedIds])
 
-  const beginRename = (path: string): void => {
+  const beginRename = useCallback((path: string): void => {
     setActionError(null)
     setPendingCreate(null)
-    setRenamingPath(path)
-  }
+    if (useStore) {
+      storeStartRename(path)
+    } else {
+      setLocalRenamingPath(path)
+    }
+  }, [useStore, storeStartRename])
 
-  const submitCreate = async (nextName: string): Promise<void> => {
+  const submitCreate = useCallback(async (nextName: string): Promise<void> => {
     if (!pendingCreate) {
       return
     }
@@ -217,13 +251,17 @@ export function FileTree({
       }
       setPendingCreate(null)
       setActionError(null)
-      setInternalSelectedId(targetPath)
+      if (useStore) {
+        storeSelectNode(targetPath)
+      } else {
+        setLocalSelectedId(targetPath)
+      }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '创建失败')
     }
-  }
+  }, [pendingCreate, onCreateFile, onCreateFolder, useStore, storeSelectNode])
 
-  const submitRename = async (sourcePath: string, nextName: string): Promise<void> => {
+  const submitRename = useCallback(async (sourcePath: string, nextName: string): Promise<void> => {
     const validationError = validateFilename(nextName)
     if (validationError) {
       setActionError(validationError)
@@ -233,7 +271,11 @@ export function FileTree({
     const parentPath = getParentPath(sourcePath)
     const targetPath = joinPath(parentPath, nextName.trim())
     if (targetPath === sourcePath) {
-      setRenamingPath(null)
+      if (useStore) {
+        storeCancelRename()
+      } else {
+        setLocalRenamingPath(null)
+      }
       return
     }
 
@@ -242,17 +284,25 @@ export function FileTree({
         throw new Error('当前不支持重命名')
       }
       await onRename(sourcePath, targetPath)
-      setRenamingPath(null)
+      if (useStore) {
+        storeCancelRename()
+      } else {
+        setLocalRenamingPath(null)
+      }
       setActionError(null)
-      if (activeSelectedId === sourcePath) {
-        setInternalSelectedId(targetPath)
+      if (effectiveSelectedId === sourcePath) {
+        if (useStore) {
+          storeSelectNode(targetPath)
+        } else {
+          setLocalSelectedId(targetPath)
+        }
       }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '重命名失败')
     }
-  }
+  }, [useStore, storeCancelRename, storeSelectNode, onRename, effectiveSelectedId])
 
-  const confirmDelete = async (): Promise<void> => {
+  const confirmDelete = useCallback(async (): Promise<void> => {
     if (!deleteTarget) {
       return
     }
@@ -264,15 +314,19 @@ export function FileTree({
       await onDelete(deleteTarget)
       setDeleteTarget(null)
       setActionError(null)
-      if (activeSelectedId === deleteTarget.path) {
-        setInternalSelectedId(null)
+      if (effectiveSelectedId === deleteTarget.path) {
+        if (useStore) {
+          storeSelectNode(null)
+        } else {
+          setLocalSelectedId(null)
+        }
       }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '删除失败')
     }
-  }
+  }, [deleteTarget, onDelete, useStore, storeSelectNode, effectiveSelectedId])
 
-  const handleCopyPath = async (path: string): Promise<void> => {
+  const handleCopyPath = useCallback(async (path: string): Promise<void> => {
     try {
       if (onCopyPath) {
         await onCopyPath(path)
@@ -283,14 +337,14 @@ export function FileTree({
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '复制路径失败')
     }
-  }
+  }, [onCopyPath])
 
-  const handleKeyNavigation = async (event: React.KeyboardEvent): Promise<void> => {
-    if (renamingPath || pendingCreate) {
+  const handleKeyNavigation = useCallback(async (event: React.KeyboardEvent): Promise<void> => {
+    if (effectiveRenamingPath || pendingCreate) {
       return
     }
 
-    const selectedPath = activeSelectedId
+    const selectedPath = effectiveSelectedId
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       if (visibleNodes.length === 0) {
@@ -322,7 +376,7 @@ export function FileTree({
 
     if (event.key === 'ArrowRight') {
       event.preventDefault()
-      if (currentNode.type === 'folder' && !expandedIds.has(currentNode.path)) {
+      if (currentNode.type === 'folder' && !effectiveExpandedIds.has(currentNode.path)) {
         toggleExpand(currentNode.path)
       }
       return
@@ -330,7 +384,7 @@ export function FileTree({
 
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
-      if (currentNode.type === 'folder' && expandedIds.has(currentNode.path)) {
+      if (currentNode.type === 'folder' && effectiveExpandedIds.has(currentNode.path)) {
         toggleExpand(currentNode.path)
         return
       }
@@ -372,39 +426,45 @@ export function FileTree({
       const basePath = currentNode.type === 'folder' ? currentNode.path : getParentPath(currentNode.path)
       beginCreate('file', basePath)
     }
-  }
+  }, [effectiveRenamingPath, pendingCreate, effectiveSelectedId, visibleNodes, nodeMap, data, effectiveExpandedIds, handleSelect, toggleExpand, beginCreate, beginRename])
 
-  const handleDragStart = (event: React.DragEvent, node: FileTreeNode): void => {
+  const handleDragStart = useCallback((event: React.DragEvent, node: FileTreeNode): void => {
     dragSourcePathRef.current = node.path
     event.dataTransfer.setData('text/plain', node.path)
     event.dataTransfer.effectAllowed = 'move'
-  }
+  }, [])
 
-  const handleDragOver = (event: React.DragEvent, node: FileTreeNode): void => {
+  const handleDragOver = useCallback((event: React.DragEvent, node: FileTreeNode): void => {
     if (node.type !== 'folder') {
       return
     }
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
-  }
+  }, [])
 
-  const handleDragEnter = (_event: React.DragEvent, node: FileTreeNode): void => {
-    if (node.type !== 'folder' || expandedIds.has(node.path)) {
+  const handleDragEnter = useCallback((_event: React.DragEvent, node: FileTreeNode): void => {
+    if (node.type !== 'folder' || effectiveExpandedIds.has(node.path)) {
       return
     }
     if (expandTimerRef.current !== null) {
       window.clearTimeout(expandTimerRef.current)
     }
     expandTimerRef.current = window.setTimeout(() => {
-      setExpandedIds((prev) => {
-        const next = new Set(prev)
+      if (useStore) {
+        const next = new Set(useFileTreeStore.getState().expandedIds)
         next.add(node.path)
-        return next
-      })
+        storeSetExpandedIds(next)
+      } else {
+        setLocalExpandedIds((prev) => {
+          const next = new Set(prev)
+          next.add(node.path)
+          return next
+        })
+      }
     }, AUTO_EXPAND_DELAY_MS)
-  }
+  }, [effectiveExpandedIds, useStore, storeSetExpandedIds])
 
-  const handleDrop = async (event: React.DragEvent, node: FileTreeNode): Promise<void> => {
+  const handleDrop = useCallback(async (event: React.DragEvent, node: FileTreeNode): Promise<void> => {
     if (node.type !== 'folder') {
       return
     }
@@ -426,13 +486,20 @@ export function FileTree({
       }
       await onMove(sourcePath, node.path)
       setActionError(null)
-      setInternalSelectedId(joinPath(node.path, getBaseName(sourcePath)))
+      const newPath = joinPath(node.path, getBaseName(sourcePath))
+      if (useStore) {
+        storeSelectNode(newPath)
+      } else {
+        setLocalSelectedId(newPath)
+      }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '移动失败')
     }
-  }
+  }, [onMove, useStore, storeSelectNode])
 
   const rootCreateActive = pendingCreate && pendingCreate.parentPath === ''
+
+  const displayError = actionError ?? (useStore ? storeError : null)
 
   return (
     <div
@@ -475,17 +542,17 @@ export function FileTree({
         </Button>
       </div>
 
-      {actionError && (
-        <div className="mb-2 rounded-md border border-red-700/60 bg-red-950/30 px-2 py-1 text-xs text-red-300">
-          {actionError}
+      {displayError && (
+        <div className="mb-2 rounded-md border border-red-700/60 bg-red-950/30 px-2 py-1 text-xs text-red-300 dark:border-red-500/40 dark:bg-red-900/20 dark:text-red-400">
+          {displayError}
         </div>
       )}
 
       {rootCreateActive && pendingCreate && (
-        <div className="mb-2 rounded-md border border-white/10 bg-sys-black/60 px-2 py-1">
+        <div className="mb-2 rounded-md border border-gray-200 bg-white px-2 py-1 dark:border-white/10 dark:bg-sys-black/60">
           <InlineRenameInput
             initialValue={pendingCreate.defaultName}
-            className="h-7 border-white/20 bg-sys-darkSurface px-2 py-1 text-xs"
+            className="h-7 border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 dark:border-white/20 dark:bg-sys-darkSurface dark:text-white"
             onCancel={() => setPendingCreate(null)}
             onSubmit={(value) => void submitCreate(value)}
           />
@@ -498,17 +565,23 @@ export function FileTree({
             key={node.path}
             node={node}
             level={0}
-            selectedId={activeSelectedId}
-            expandedIds={expandedIds}
+            selectedId={effectiveSelectedId}
+            expandedIds={effectiveExpandedIds}
             openPaths={openPathSet}
             dirtyPaths={dirtyPathSet}
-            renamingPath={renamingPath}
+            renamingPath={effectiveRenamingPath}
             pendingCreate={pendingCreate}
             onSelect={handleSelect}
             onToggle={toggleExpand}
             onStartRename={beginRename}
             onSubmitRename={(path, nextName) => void submitRename(path, nextName)}
-            onCancelRename={() => setRenamingPath(null)}
+            onCancelRename={() => {
+              if (useStore) {
+                storeCancelRename()
+              } else {
+                setLocalRenamingPath(null)
+              }
+            }}
             onStartCreateFile={(parentPath) => beginCreate('file', parentPath)}
             onStartCreateFolder={(parentPath) => beginCreate('folder', parentPath)}
             onSubmitCreate={(nextName) => void submitCreate(nextName)}
@@ -520,8 +593,7 @@ export function FileTree({
                 y: event.clientY,
                 node: targetNode,
               })
-              setInternalSelectedId(targetNode.path)
-              onSelect?.(targetNode)
+              handleSelect(targetNode)
             }}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}

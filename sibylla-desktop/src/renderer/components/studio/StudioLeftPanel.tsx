@@ -34,7 +34,6 @@ import type {
 interface StudioLeftPanelProps {
   treeNodes: FileTreeNode[]
   selectedNodeId?: string
-  defaultExpandedIds: string[]
   openFilePaths: string[]
   dirtyFilePaths: string[]
   isTreeLoading: boolean
@@ -103,7 +102,6 @@ function sortNodesForSidebar(nodes: FileTreeNode[]): FileTreeNode[] {
 export function StudioLeftPanel({
   treeNodes,
   selectedNodeId,
-  defaultExpandedIds,
   openFilePaths,
   dirtyFilePaths,
   isTreeLoading,
@@ -128,7 +126,14 @@ export function StudioLeftPanel({
   onMarkNotificationRead,
   onClearNotifications,
 }: StudioLeftPanelProps) {
-  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() => new Set(defaultExpandedIds))
+  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() => {
+    const initial = new Set<string>()
+    collectFolderIds(treeNodes, initial)
+    for (const node of treeNodes.filter((n) => n.type === 'folder').slice(0, 6)) {
+      initial.add(node.path)
+    }
+    return initial
+  })
   const sortedTree = React.useMemo(() => sortNodesForSidebar(treeNodes), [treeNodes])
 
   React.useEffect(() => {
@@ -136,14 +141,14 @@ export function StudioLeftPanel({
       const next = new Set(prev)
       const existingFolders = new Set<string>()
       collectFolderIds(sortedTree, existingFolders)
-      for (const folderId of defaultExpandedIds) {
-        if (existingFolders.has(folderId)) {
-          next.add(folderId)
+      for (const node of sortedTree.filter((n) => n.type === 'folder').slice(0, 6)) {
+        if (existingFolders.has(node.path)) {
+          next.add(node.path)
         }
       }
       return next
     })
-  }, [defaultExpandedIds, sortedTree])
+  }, [sortedTree])
 
   React.useEffect(() => {
     if (!selectedNodeId) {

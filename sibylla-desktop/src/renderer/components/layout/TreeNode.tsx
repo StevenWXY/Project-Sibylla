@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import {
   ChevronDown,
   ChevronRight,
@@ -74,13 +74,18 @@ export const TreeNode = memo(function TreeNode({
   const hasChildren = Boolean(node.children && node.children.length > 0)
   const isRenaming = renamingPath === node.path
 
+  const [isDragOver, setIsDragOver] = useState(false)
+
   return (
     <div className="space-y-0.5" role="treeitem" aria-expanded={isFolder ? isExpanded : undefined}>
       <div
         className={cn(
           'group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors',
-          'hover:bg-sys-darkSurface',
-          isSelected ? 'bg-white text-black font-semibold' : 'text-white'
+          'hover:bg-gray-100 dark:hover:bg-sys-darkSurface',
+          isSelected
+            ? 'bg-indigo-50 font-semibold text-gray-900 dark:bg-white dark:text-black'
+            : 'text-gray-700 dark:text-white',
+          isDragOver && isFolder && 'ring-1 ring-indigo-500/50 bg-indigo-500/10'
         )}
         style={{ paddingLeft: `${toDepthPadding(level)}px` }}
         onClick={() => {
@@ -97,16 +102,33 @@ export const TreeNode = memo(function TreeNode({
         onContextMenu={(event) => onContextMenu(event, node)}
         draggable
         onDragStart={(event) => onDragStart(event, node)}
-        onDragOver={(event) => onDragOver(event, node)}
-        onDragEnter={(event) => onDragEnter(event, node)}
-        onDrop={(event) => onDrop(event, node)}
-        title={node.path}
+        onDragOver={(event) => {
+          onDragOver(event, node)
+          if (isFolder && event.dataTransfer.dropEffect === 'move') {
+            setIsDragOver(true)
+          }
+        }}
+        onDragEnter={(event) => {
+          setIsDragOver(true)
+          onDragEnter(event, node)
+        }}
+        onDragLeave={() => {
+          setIsDragOver(false)
+        }}
+        onDrop={(event) => {
+          setIsDragOver(false)
+          onDrop(event, node)
+        }}
+        onDragEnd={() => {
+          setIsDragOver(false)
+        }}
+        title={node.name}
         data-path={node.path}
       >
         {isFolder ? (
           <button
             type="button"
-            className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-black/15"
+            className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-black/10 dark:hover:bg-black/15"
             onClick={(event) => {
               event.stopPropagation()
               onToggle(node.path)
@@ -114,9 +136,9 @@ export const TreeNode = memo(function TreeNode({
             aria-label={isExpanded ? '折叠文件夹' : '展开文件夹'}
           >
             {isExpanded ? (
-              <ChevronDown className={cn('h-3.5 w-3.5', isSelected ? 'text-black' : 'text-sys-darkMuted')} />
+              <ChevronDown className={cn('h-3.5 w-3.5', isSelected ? 'text-gray-700 dark:text-black' : 'text-gray-400 dark:text-sys-darkMuted')} />
             ) : (
-              <ChevronRight className={cn('h-3.5 w-3.5', isSelected ? 'text-black' : 'text-sys-darkMuted')} />
+              <ChevronRight className={cn('h-3.5 w-3.5', isSelected ? 'text-gray-700 dark:text-black' : 'text-gray-400 dark:text-sys-darkMuted')} />
             )}
           </button>
         ) : (
@@ -126,26 +148,26 @@ export const TreeNode = memo(function TreeNode({
         <span className="shrink-0">
           {isFolder ? (
             isExpanded ? (
-              <FolderOpen className={cn('h-4 w-4', isSelected ? 'text-black' : 'text-white')} />
+              <FolderOpen className={cn('h-4 w-4', isSelected ? 'text-indigo-600 dark:text-black' : 'text-indigo-500 dark:text-white')} />
             ) : (
-              <Folder className={cn('h-4 w-4', isSelected ? 'text-black' : 'text-sys-darkMuted')} />
+              <Folder className={cn('h-4 w-4', isSelected ? 'text-indigo-600 dark:text-black' : 'text-indigo-500 dark:text-sys-darkMuted')} />
             )
           ) : (
-            <File className={cn('h-4 w-4', isSelected ? 'text-black' : 'text-sys-darkMuted')} />
+            <File className={cn('h-4 w-4', isSelected ? 'text-gray-500 dark:text-black' : 'text-gray-400 dark:text-sys-darkMuted')} />
           )}
         </span>
 
         {isRenaming ? (
           <InlineRenameInput
             initialValue={node.name}
-            className="h-7 border-white/20 bg-sys-darkSurface px-2 py-1 text-xs"
+            className="h-7 border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 dark:border-white/20 dark:bg-sys-darkSurface dark:text-white"
             onCancel={onCancelRename}
             onSubmit={(nextValue) => onSubmitRename(node.path, nextValue)}
           />
         ) : (
           <span className="flex min-w-0 flex-1 items-center gap-1">
             <span className="truncate">{node.name}</span>
-            {isDirty && <span className="text-amber-400">*</span>}
+            {isDirty && <span className="text-amber-500 dark:text-amber-400">*</span>}
             {isOpen && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
           </span>
         )}
@@ -155,7 +177,7 @@ export const TreeNode = memo(function TreeNode({
             <button
               type="button"
               className={cn(
-                'rounded px-1 py-0.5 text-[10px] text-sys-darkMuted hover:bg-black/15 hover:text-white',
+                'rounded px-1 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:text-sys-darkMuted dark:hover:bg-black/15 dark:hover:text-white',
                 !isFolder && 'hidden'
               )}
               onClick={(event) => {
@@ -169,7 +191,7 @@ export const TreeNode = memo(function TreeNode({
             <button
               type="button"
               className={cn(
-                'rounded px-1 py-0.5 text-[10px] text-sys-darkMuted hover:bg-black/15 hover:text-white',
+                'rounded px-1 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:text-sys-darkMuted dark:hover:bg-black/15 dark:hover:text-white',
                 !isFolder && 'hidden'
               )}
               onClick={(event) => {
@@ -182,7 +204,7 @@ export const TreeNode = memo(function TreeNode({
             </button>
             <button
               type="button"
-              className="rounded px-1 py-0.5 text-[10px] text-sys-darkMuted hover:bg-black/15 hover:text-white"
+              className="rounded px-1 py-0.5 text-[10px] text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:text-sys-darkMuted dark:hover:bg-black/15 dark:hover:text-white"
               onClick={(event) => {
                 event.stopPropagation()
                 onStartRename(node.path)
@@ -198,17 +220,17 @@ export const TreeNode = memo(function TreeNode({
       {isFolder && isExpanded && pendingCreate?.parentPath === node.path && (
         <div className="pr-2">
           <div
-            className="flex items-center gap-1 rounded-md border border-white/10 bg-sys-black/60 px-2 py-1"
+            className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 dark:border-white/10 dark:bg-sys-black/60"
             style={{ marginLeft: `${toDepthPadding(level + 1)}px` }}
           >
             {pendingCreate.type === 'file' ? (
-              <File className="h-4 w-4 text-sys-darkMuted" />
+              <File className="h-4 w-4 text-gray-400 dark:text-sys-darkMuted" />
             ) : (
-              <Folder className="h-4 w-4 text-sys-darkMuted" />
+              <Folder className="h-4 w-4 text-gray-400 dark:text-sys-darkMuted" />
             )}
             <InlineRenameInput
               initialValue={pendingCreate.defaultName}
-              className="h-7 border-white/20 bg-sys-darkSurface px-2 py-1 text-xs"
+              className="h-7 border-gray-300 bg-gray-50 px-2 py-1 text-xs text-gray-900 dark:border-white/20 dark:bg-sys-darkSurface dark:text-white"
               onCancel={onCancelCreate}
               onSubmit={onSubmitCreate}
             />
