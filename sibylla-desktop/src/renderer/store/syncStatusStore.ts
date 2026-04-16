@@ -29,7 +29,7 @@ export const useSyncStatusStore = create<SyncStatusStore>()(
       ...initialState,
 
       setState: (data) =>
-        set((state) => ({
+        set((_state) => ({
           status: data.status,
           lastSyncedAt: data.status === 'synced' ? data.timestamp : null,
           errorMessage: data.message ?? null,
