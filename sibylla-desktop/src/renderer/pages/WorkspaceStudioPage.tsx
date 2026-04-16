@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AIChatResponse, FileInfo, FileWatchEvent, SyncStatusData } from '../../shared/types'
+import type { AIChatResponse, FileWatchEvent, SyncStatusData } from '../../shared/types'
 import {
   useAppStore,
-  selectCurrentFile,
   selectCurrentWorkspace,
-  selectOpenFiles,
 } from '../store/appStore'
+import type { FileInfo } from '../store/appStore'
 import {
   getBaseName,
   joinPath,
@@ -13,13 +12,13 @@ import {
   type FileTreeNode,
 } from '../components/layout/file-tree.utils'
 import { useFileTreeStore } from '../store/fileTreeStore'
+import { useTabStore } from '../store/tabStore'
 import {
   StudioAIPanel,
   StudioEditorPanel,
   StudioLeftPanel,
   type ChatMessage,
   type EditorMode,
-  type OpenFileTab,
   type SaveStatus,
 } from '../components/studio'
 import type {
@@ -256,10 +255,9 @@ function applyProposalToContent(currentContent: string, proposal: DiffProposal):
 
 export function WorkspaceStudioPage() {
   const currentWorkspace = useAppStore(selectCurrentWorkspace)
-  const currentFile = useAppStore(selectCurrentFile)
-  const openFiles = useAppStore(selectOpenFiles)
-  const setCurrentFile = useAppStore((state) => state.setCurrentFile)
-  const removeOpenFile = useAppStore((state) => state.removeOpenFile)
+  const tabState = useTabStore()
+  const activeTabId = tabState.activeTabId
+  const tabs = tabState.tabs
 
   const [workspaceFiles, setWorkspaceFiles] = useState<FileInfo[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(undefined)
@@ -302,7 +300,7 @@ export function WorkspaceStudioPage() {
 
   const workspaceId = currentWorkspace?.config.workspaceId ?? null
 
-  const selectedFilePath = useMemo(() => currentFile?.path ?? null, [currentFile?.path])
+  const selectedFilePath = useMemo(() => activeTabId ?? null, [activeTabId])
   const selectedFilePathNormalized = useMemo(
     () => (selectedFilePath ? normalizePath(selectedFilePath) : null),
     [selectedFilePath]
@@ -316,33 +314,14 @@ export function WorkspaceStudioPage() {
   }, [editorContent, savedContentSnapshot, selectedFilePath])
 
   const openFilePaths = useMemo(
-    () => openFiles.map((file) => normalizePath(file.path)),
-    [openFiles]
+    () => tabs.map((tab) => tab.filePath),
+    [tabs]
   )
 
-  const dirtyFilePaths = useMemo(() => {
-    if (!isDirty || !selectedFilePath) {
-      return []
-    }
-    return [normalizePath(selectedFilePath)]
-  }, [isDirty, selectedFilePath])
-
-  const openFileTabs = useMemo(() => {
-    const map = new Map<string, OpenFileTab>()
-    for (const file of openFiles) {
-      map.set(normalizePath(file.path), {
-        path: normalizePath(file.path),
-        name: file.name,
-      })
-    }
-    if (currentFile) {
-      map.set(normalizePath(currentFile.path), {
-        path: normalizePath(currentFile.path),
-        name: currentFile.name,
-      })
-    }
-    return Array.from(map.values())
-  }, [currentFile, openFiles])
+  const dirtyFilePaths = useMemo(
+    () => tabs.filter((t) => t.isDirty).map((t) => t.filePath),
+    [tabs]
+  )
 
   const unreadNotificationCount = useMemo(
     () => notifications.filter((item) => !item.read).length,
@@ -414,7 +393,7 @@ export function WorkspaceStudioPage() {
           (file) => !file.isDirectory && normalizePath(file.path) === selectedFileRef.current
         )
         if (!stillExists) {
-          setCurrentFile(null)
+          useTabStore.getState().markTabDeleted(selectedFileRef.current)
           setSelectedNodeId(undefined)
           setEditorContent('')
           setSavedContentSnapshot('')
@@ -427,7 +406,7 @@ export function WorkspaceStudioPage() {
     } finally {
       useFileTreeStore.setState({ isLoading: false })
     }
-  }, [currentWorkspace, setCurrentFile])
+  }, [currentWorkspace])
 
   const openFile = useCallback(
     async (filePath: string) => {
@@ -450,18 +429,14 @@ export function WorkspaceStudioPage() {
         setSavedContentSnapshot(content)
         setSaveStatus('idle')
 
-        setCurrentFile({
-          path: normalizedPath,
-          name: filename,
-          lastModified: Date.now(),
-        })
+        useTabStore.getState().openTab(normalizedPath, filename)
       } catch (error) {
         setEditorError(error instanceof Error ? error.message : '文件读取失败')
       } finally {
         setIsFileLoading(false)
       }
     },
-    [setCurrentFile]
+    []
   )
 
   const loadTasks = useCallback(async () => {
@@ -574,18 +549,16 @@ export function WorkspaceStudioPage() {
 
         if (selectedFilePath === sourcePath) {
           const updatedName = getBaseName(targetPath)
-          setCurrentFile({
-            path: targetPath,
-            name: updatedName,
-            lastModified: Date.now(),
-          })
+          const tabStore = useTabStore.getState()
+          tabStore.closeTab(normalizePath(sourcePath), true)
+          tabStore.openTab(normalizePath(targetPath), updatedName)
         }
       } catch (error) {
         useFileTreeStore.getState().setError(error instanceof Error ? error.message : '重命名失败')
         throw error
       }
     },
-    [loadTasks, refreshTree, selectedFilePath, setCurrentFile]
+    [loadTasks, refreshTree, selectedFilePath]
   )
 
   const deleteNode = useCallback(
@@ -604,7 +577,7 @@ export function WorkspaceStudioPage() {
         await loadTasks()
 
         if (selectedFilePath === node.path) {
-          setCurrentFile(null)
+          useTabStore.getState().markTabDeleted(node.path)
           setEditorContent('')
           setSavedContentSnapshot('')
           setSelectedNodeId(undefined)
@@ -614,7 +587,7 @@ export function WorkspaceStudioPage() {
         throw error
       }
     },
-    [loadTasks, refreshTree, selectedFilePath, setCurrentFile]
+    [loadTasks, refreshTree, selectedFilePath]
   )
 
   const moveToFolder = useCallback(
@@ -629,18 +602,16 @@ export function WorkspaceStudioPage() {
         await refreshTree()
         await loadTasks()
         if (selectedFilePath === sourcePath) {
-          setCurrentFile({
-            path: nextPath,
-            name: getBaseName(nextPath),
-            lastModified: Date.now(),
-          })
+          const tabStore = useTabStore.getState()
+          tabStore.closeTab(normalizePath(sourcePath), true)
+          tabStore.openTab(normalizePath(nextPath), getBaseName(nextPath))
         }
       } catch (error) {
         useFileTreeStore.getState().setError(error instanceof Error ? error.message : '移动失败')
         throw error
       }
     },
-    [loadTasks, refreshTree, selectedFilePath, setCurrentFile]
+    [loadTasks, refreshTree, selectedFilePath]
   )
 
   const copyPath = useCallback(async (path: string) => {
@@ -657,28 +628,22 @@ export function WorkspaceStudioPage() {
   const closeOpenFileTab = useCallback(
     (path: string) => {
       const normalizedPath = normalizePath(path)
-      const matchedPath = openFiles.find((file) => normalizePath(file.path) === normalizedPath)?.path ?? path
-      removeOpenFile(matchedPath)
-      if (normalizePath(selectedFilePath ?? '') !== normalizedPath) {
-        return
+      useTabStore.getState().closeTab(normalizedPath, true)
+
+      const remainingTabs = useTabStore.getState().tabs
+      if (remainingTabs.length > 0) {
+        const nextActive = useTabStore.getState().activeTabId
+        if (nextActive) {
+          void openFile(nextActive)
+        }
+      } else {
+        setEditorContent('')
+        setSavedContentSnapshot('')
+        setSelectedNodeId(undefined)
+        setSaveStatus('idle')
       }
-
-      const nextTabs = openFiles
-        .map((file) => normalizePath(file.path))
-        .filter((item) => item !== normalizedPath)
-
-      if (nextTabs.length > 0) {
-        void openFile(nextTabs[0]!)
-        return
-      }
-
-      setCurrentFile(null)
-      setEditorContent('')
-      setSavedContentSnapshot('')
-      setSelectedNodeId(undefined)
-      setSaveStatus('idle')
     },
-    [openFile, openFiles, removeOpenFile, selectedFilePath, setCurrentFile]
+    [openFile]
   )
 
   const runSearch = useCallback(
@@ -1125,7 +1090,7 @@ export function WorkspaceStudioPage() {
         }
 
         if (event.type === 'unlink' && selectedFileRef.current === changedPath) {
-          setCurrentFile(null)
+          useTabStore.getState().markTabDeleted(changedPath)
           setEditorContent('')
           setSavedContentSnapshot('')
           setSelectedNodeId(undefined)
@@ -1184,7 +1149,7 @@ export function WorkspaceStudioPage() {
       unlistenSync?.()
       void window.electronAPI.file.stopWatching().catch(() => undefined)
     }
-  }, [loadTasks, openFile, pushNotification, refreshTree, setCurrentFile, workspaceId])
+  }, [loadTasks, openFile, pushNotification, refreshTree, workspaceId])
 
   useEffect(() => {
     if (!selectedFilePath || !isDirty) {
@@ -1289,22 +1254,39 @@ export function WorkspaceStudioPage() {
       />
 
       <StudioEditorPanel
-        openFileTabs={openFileTabs}
-        selectedFilePath={selectedFilePathNormalized}
-        dirtyFilePaths={dirtyFilePaths}
         editorMode={editorMode}
         saveStatus={saveStatus}
         isDirty={isDirty}
         isFileLoading={isFileLoading}
         editorError={editorError}
         editorContent={editorContent}
-        onOpenTab={(path) => {
-          void openFile(path)
-        }}
-        onCloseTab={closeOpenFileTab}
         onQuickAI={quickStartAIPrompt}
         onChangeEditorMode={setEditorMode}
         onEditorContentChange={setEditorContent}
+        onOpenFile={(path) => {
+          void openFile(path)
+        }}
+        onCloseFile={(path) => {
+          closeOpenFileTab(path)
+        }}
+        onSaveFile={async (filePath) => {
+          try {
+            const response = await window.electronAPI.file.write(filePath, editorContentRef.current, {
+              atomic: true,
+              createDirs: true,
+            })
+            if (!response.success) {
+              throw new Error(response.error?.message ?? '保存失败')
+            }
+          } catch (error) {
+            pushNotification('error', '保存失败', error instanceof Error ? error.message : '保存失败')
+            throw error
+          }
+        }}
+        onRevealInTree={(filePath) => {
+          setSelectedNodeId(filePath)
+          useFileTreeStore.getState().selectNode(filePath)
+        }}
         showConflictPanel={Boolean(conflictDraft)}
         conflictFilePath={conflictDraft?.filePath ?? ''}
         conflictYourLines={conflictDraft?.yourLines}

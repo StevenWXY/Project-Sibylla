@@ -10,6 +10,7 @@ import { SyncHandler } from './ipc/handlers/sync.handler'
 import { AuthHandler } from './ipc/handlers/auth.handler'
 import { AIHandler } from './ipc/handlers/ai.handler'
 import { FileManager } from './services/file-manager'
+import { ImportManager } from './services/import-manager'
 import { WorkspaceManager } from './services/workspace-manager'
 import { GitAbstraction } from './services/git-abstraction'
 import { SyncManager } from './services/sync-manager'
@@ -130,6 +131,10 @@ if (!gotTheLock) {
           // Update FileManager root to workspace path and inject into FileHandler
           await fileManager.updateWorkspaceRoot(workspacePath)
           fileHandler.setFileManager(fileManager)
+          
+          // Create and inject ImportManager
+          const importManager = new ImportManager(fileManager)
+          fileHandler.setImportManager(importManager)
           
           // Create and start SyncManager
           const syncInterval = workspaceInfo.config.syncInterval ?? 30

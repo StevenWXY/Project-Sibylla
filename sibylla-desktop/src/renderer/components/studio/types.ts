@@ -44,6 +44,7 @@ export interface ChatMessage {
   diffProposal?: DiffProposal | null
 }
 
+/** @deprecated 使用 tabStore.TabInfo 替代 */
 export interface OpenFileTab {
   path: string
   name: string

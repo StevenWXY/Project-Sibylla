@@ -46,11 +46,17 @@ interface AppState {
   clearRecentWorkspaces: () => void
   
   // ========== File ==========
+  /** @deprecated 使用 useTabStore.openTab() 替代 */
   currentFile: FileInfo | null
+  /** @deprecated 使用 useTabStore.tabs 替代 */
   openFiles: FileInfo[]
+  /** @deprecated 使用 useTabStore.switchTab() 替代 */
   setCurrentFile: (file: FileInfo | null) => void
+  /** @deprecated 使用 useTabStore.openTab() 替代 */
   addOpenFile: (file: FileInfo) => void
+  /** @deprecated 使用 useTabStore.closeTab() 替代 */
   removeOpenFile: (path: string) => void
+  /** @deprecated 使用 useTabStore.closeAllTabs() 替代 */
   clearOpenFiles: () => void
   
   // ========== Loading State ==========
@@ -308,9 +314,11 @@ export const useAppStore = create<AppState>()(
 export const selectTheme = (state: AppState) => state.theme
 export const selectSidebarCollapsed = (state: AppState) => state.sidebarCollapsed
 export const selectCurrentWorkspace = (state: AppState) => state.currentWorkspace
+/** @deprecated 使用 useTabStore(selectActiveTab) 替代 */
 export const selectCurrentFile = (state: AppState) => state.currentFile
 export const selectIsLoading = (state: AppState) => state.isLoading
 export const selectError = (state: AppState) => state.error
+/** @deprecated 使用 useTabStore(selectTabs) 替代 */
 export const selectOpenFiles = (state: AppState) => state.openFiles
 export const selectRecentWorkspaces = (state: AppState) => state.recentWorkspaces
 export const selectIsAuthenticated = (state: AppState) => state.isAuthenticated

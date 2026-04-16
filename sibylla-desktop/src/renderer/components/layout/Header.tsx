@@ -3,6 +3,7 @@ import { Sun, Moon, Monitor } from 'lucide-react'
 import { useTheme } from '../providers/ThemeProvider'
 import { cn } from '../../utils/cn'
 import { useAppStore } from '../../store/appStore'
+import { useTabStore, selectActiveTab } from '../../store/tabStore'
 
 /**
  * Header - 顶部导航栏组件
@@ -25,7 +26,8 @@ import { useAppStore } from '../../store/appStore'
 export const Header = React.memo(function Header() {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const currentWorkspace = useAppStore((state) => state.currentWorkspace)
-  const currentFile = useAppStore((state) => state.currentFile)
+  /* [S1-FIX] Use memoized selector to avoid re-renders when unrelated tabs change */
+  const activeTab = useTabStore(selectActiveTab)
   
   /**
    * 三态主题切换：light → dark → system → light
@@ -88,9 +90,9 @@ export const Header = React.memo(function Header() {
             {currentWorkspace.config.name}
           </span>
         )}
-        {currentFile && (
+        {activeTab && (
           <span className="max-w-[220px] truncate text-xs text-sys-darkMuted">
-            {currentFile.name}
+            {activeTab.fileName}
           </span>
         )}
       </div>

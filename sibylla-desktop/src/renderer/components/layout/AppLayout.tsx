@@ -12,7 +12,10 @@ import {
 import { useAppStore, selectCurrentWorkspace } from '../../store/appStore'
 import { MainContent } from './MainContent'
 import { PixelOctoIcon } from '../brand/PixelOctoIcon'
-import type { SyncStatus, SyncStatusData } from '../../../shared/types'
+import { DropZoneOverlay } from '../import/DropZoneOverlay'
+import { ImportSummaryDialog } from '../import/ImportSummaryDialog'
+import { useDropZone } from '../../hooks/useDropZone'
+import type { ImportResult, SyncStatus, SyncStatusData } from '../../../shared/types'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -89,14 +92,23 @@ export function AppLayout({
     new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   )
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = React.useState(false)
+  const [importResult, setImportResult] = React.useState<ImportResult | null>(null)
   const workspaceMenuRef = React.useRef<HTMLDivElement | null>(null)
 
-  const avatarSeed = encodeURIComponent(currentUser?.name ?? currentUser?.email ?? 'Sibylla')
   const avatarUrl =
     currentUser?.avatarUrl && currentUser.avatarUrl.trim().length > 0
       ? currentUser.avatarUrl
-      : `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}&backgroundColor=27272A`
+      : undefined /* [C2-FIX] Removed DiceBear external API — offline fallback handled by initials in JSX */
   const syncApi = window.electronAPI?.sync
+
+  const handleDrop = React.useCallback(async (filePaths: string[]) => {
+    const result = await window.electronAPI.file.import(filePaths)
+    if (result.success && result.data) {
+      setImportResult(result.data)
+    }
+  }, [])
+
+  const { isDragging } = useDropZone(handleDrop)
 
   React.useEffect(() => {
     if (!syncApi?.onStatusChange) {
@@ -139,6 +151,13 @@ export function AppLayout({
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-sys-black text-white">
+      <DropZoneOverlay isDragging={isDragging} />
+      {importResult && (
+        <ImportSummaryDialog
+          result={importResult}
+          onClose={() => setImportResult(null)}
+        />
+      )}
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-sys-darkBorder bg-sys-black px-4">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-white">
@@ -252,7 +271,13 @@ export function AppLayout({
             className="h-7 w-7 overflow-hidden rounded-full border border-white/10 bg-sys-darkBorder transition-opacity hover:opacity-90"
             title="Open Profile"
           >
-            <img src={avatarUrl} alt="User avatar" className="h-full w-full object-cover" />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="User avatar" className="h-full w-full object-cover" />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center text-[11px] font-semibold uppercase text-gray-300">
+                {(currentUser?.name ?? 'S')[0]}
+              </span>
+            )}
           </button>
         </div>
       </header>

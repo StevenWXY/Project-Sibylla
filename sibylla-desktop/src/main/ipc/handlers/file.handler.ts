@@ -6,9 +6,10 @@
  * including file watching.
  */
 
-import { ipcMain, IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
 import { IpcHandler } from '../handler'
 import { FileManager } from '../../services/file-manager'
+import { ImportManager } from '../../services/import-manager'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
   FileContent,
@@ -17,6 +18,9 @@ import type {
   ListFilesOptions,
   FileInfo,
   FileWatchEvent,
+  ImportOptions,
+  ImportResult,
+  ImportProgress,
 } from '../../../shared/types'
 import type {
   ReadFileOptions as ManagerReadOptions,
@@ -24,6 +28,7 @@ import type {
   ListFilesOptions as ManagerListOptions,
   FileInfo as ManagerFileInfo,
 } from '../../services/types/file-manager.types'
+import type { InternalImportOptions } from '../../services/types/import-manager.types'
 
 /**
  * FileHandler class
@@ -34,6 +39,7 @@ import type {
 export class FileHandler extends IpcHandler {
   readonly namespace = 'file'
   private fileManager: FileManager | null = null
+  private importManager: ImportManager | null = null
   
   /**
    * Set FileManager instance
@@ -43,6 +49,16 @@ export class FileHandler extends IpcHandler {
   setFileManager(fileManager: FileManager): void {
     this.fileManager = fileManager
     console.log('[FileHandler] FileManager instance set')
+  }
+
+  /**
+   * Set ImportManager instance
+   *
+   * @param importManager - ImportManager instance for file import operations
+   */
+  setImportManager(importManager: ImportManager): void {
+    this.importManager = importManager
+    console.log('[FileHandler] ImportManager instance set')
   }
   
   /**
@@ -69,6 +85,9 @@ export class FileHandler extends IpcHandler {
     ipcMain.handle(IPC_CHANNELS.FILE_WATCH_START, this.safeHandle(this.startWatching.bind(this)))
     ipcMain.handle(IPC_CHANNELS.FILE_WATCH_STOP, this.safeHandle(this.stopWatching.bind(this)))
     
+    // File import
+    ipcMain.handle(IPC_CHANNELS.FILE_IMPORT, this.safeHandle(this.importFiles.bind(this)))
+    
     console.log('[FileHandler] All handlers registered')
   }
   
@@ -89,6 +108,7 @@ export class FileHandler extends IpcHandler {
     ipcMain.removeHandler(IPC_CHANNELS.DIR_DELETE)
     ipcMain.removeHandler(IPC_CHANNELS.FILE_WATCH_START)
     ipcMain.removeHandler(IPC_CHANNELS.FILE_WATCH_STOP)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_IMPORT)
     
     if (this.fileManager) {
       // Stop file watching
@@ -323,6 +343,33 @@ export class FileHandler extends IpcHandler {
     console.log('[FileHandler] File watching stopped')
   }
   
+  /**
+   * Import files from external paths into the workspace
+   */
+  private async importFiles(
+    _event: IpcMainInvokeEvent,
+    sourcePaths: string[],
+    options?: ImportOptions
+  ): Promise<ImportResult> {
+    if (!this.importManager) {
+      throw new Error('ImportManager not initialized')
+    }
+
+    const internalOptions: InternalImportOptions = {
+      ...options,
+      onProgress: (current, total, fileName) => {
+        const payload: ImportProgress = { current, total, fileName }
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) {
+            win.webContents.send(IPC_CHANNELS.FILE_IMPORT_PROGRESS, payload)
+          }
+        })
+      },
+    }
+
+    return this.importManager.importFiles(sourcePaths, internalOptions)
+  }
+
   /**
    * Convert FileInfo from manager format to shared format
    * 

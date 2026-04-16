@@ -120,6 +120,10 @@ export const IPC_CHANNELS = {
   /** Refresh the access token using stored refresh token */
   AUTH_REFRESH_TOKEN: 'auth:refresh-token',
 
+  // File import operations
+  FILE_IMPORT: 'file:import',
+  FILE_IMPORT_PROGRESS: 'file:importProgress',
+
   // Event notifications (main process → renderer process)
   NOTIFICATION: 'notification',
   LOG_MESSAGE: 'log:message',
@@ -241,6 +245,9 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.LOG_MESSAGE]: { params: [message: string]; return: void }
   [IPC_CHANNELS.FILE_CHANGED]: { params: [event: FileWatchEvent]; return: void }
   [IPC_CHANNELS.GIT_STATUS_CHANGED]: { params: [status: unknown]; return: void }
+
+  // File import operations
+  [IPC_CHANNELS.FILE_IMPORT]: { params: [sourcePaths: string[], options?: ImportOptions]; return: ImportResult }
 }
 
 /**
@@ -779,4 +786,62 @@ export interface AuthSession {
   readonly isAuthenticated: boolean
   /** Currently authenticated user (null if not authenticated) */
   readonly user: AuthUser | null
+}
+
+/**
+ * Import Types
+ *
+ * Shared types for file import functionality.
+ * All imported content is stored as Markdown (CLAUDE.md "file as truth" principle).
+ */
+
+/** Supported import file extensions */
+export type ImportableFileType = '.md' | '.docx' | '.pdf' | '.csv' | '.txt'
+
+/** Single file import result */
+export interface ImportFileResult {
+  /** Original absolute file path */
+  readonly sourcePath: string
+  /** Destination path in workspace (relative) */
+  readonly destPath: string
+  /** How the file was processed */
+  readonly action: 'copied' | 'converted' | 'skipped' | 'failed'
+  /** Original file extension */
+  readonly sourceType: ImportableFileType
+  /** Error message (only present when action is 'failed') */
+  readonly error?: string
+}
+
+/** Batch import result summary */
+export interface ImportResult {
+  /** Successfully imported (copied as-is) */
+  readonly imported: ImportFileResult[]
+  /** Successfully converted and imported */
+  readonly converted: ImportFileResult[]
+  /** Skipped (unsupported format) */
+  readonly skipped: ImportFileResult[]
+  /** Failed imports */
+  readonly failed: ImportFileResult[]
+  /** Total processing time in milliseconds */
+  readonly durationMs: number
+}
+
+/** Import options (IPC-serializable, no callbacks) */
+export interface ImportOptions {
+  /** Target directory in workspace (relative path, default: '/') */
+  readonly targetDir?: string
+  /** Whether to flatten folder structure (default: false) */
+  readonly flatten?: boolean
+  /** Whether to overwrite existing files (default: false) */
+  readonly overwrite?: boolean
+}
+
+/** Import progress event data (Main → Renderer) */
+export interface ImportProgress {
+  /** Current file index (1-based) */
+  readonly current: number
+  /** Total number of files */
+  readonly total: number
+  /** Name of the file currently being processed */
+  readonly fileName: string
 }

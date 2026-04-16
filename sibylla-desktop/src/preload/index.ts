@@ -23,6 +23,9 @@ import type {
   AIChatResponse,
   AIEmbedRequest,
   AIEmbedResponse,
+  ImportOptions,
+  ImportResult,
+  ImportProgress,
 } from '../shared/types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
 
@@ -73,6 +76,10 @@ interface ElectronAPI {
     startWatching: () => Promise<IPCResponse<void>>
     stopWatching: () => Promise<IPCResponse<void>>
     onFileChange: (callback: (event: FileWatchEvent) => void) => () => void
+    
+    // File import
+    import: (sourcePaths: string[], options?: ImportOptions) => Promise<IPCResponse<ImportResult>>
+    onImportProgress: (callback: (data: ImportProgress) => void) => () => void
   }
   
   // Workspace operations
@@ -150,6 +157,9 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.FILE_WATCH_START,
   IPC_CHANNELS.FILE_WATCH_STOP,
   IPC_CHANNELS.FILE_WATCH_EVENT,
+  // File import
+  IPC_CHANNELS.FILE_IMPORT,
+  IPC_CHANNELS.FILE_IMPORT_PROGRESS,
   // Workspace operations
   IPC_CHANNELS.WORKSPACE_CREATE,
   IPC_CHANNELS.WORKSPACE_OPEN,
@@ -343,6 +353,18 @@ const api: ElectronAPI = {
     
     onFileChange: (callback: (event: FileWatchEvent) => void) => {
       return api.on(IPC_CHANNELS.FILE_WATCH_EVENT, callback as (...args: unknown[]) => void)
+    },
+    
+    import: async (sourcePaths: string[], options?: ImportOptions) => {
+      return await safeInvoke<ImportResult>(IPC_CHANNELS.FILE_IMPORT, sourcePaths, options)
+    },
+    
+    onImportProgress: (callback: (data: ImportProgress) => void) => {
+      const handler = (_event: IpcRendererEvent, data: ImportProgress) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.FILE_IMPORT_PROGRESS, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.FILE_IMPORT_PROGRESS, handler)
+      }
     },
   },
   
