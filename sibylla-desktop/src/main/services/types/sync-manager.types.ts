@@ -40,7 +40,26 @@ export interface SyncManagerConfig {
    * @default 30000
    */
   readonly syncIntervalMs?: number
+
+  /**
+   * Delay in milliseconds before triggering sync after network reconnects.
+   * @default 5000
+   */
+  readonly reconnectSyncDelayMs?: number
+
+  /**
+   * Delay in milliseconds before the first sync after start().
+   * Set to 0 to disable initial sync.
+   * @default 5000
+   */
+  readonly initialSyncDelayMs?: number
 }
+
+/** Default delay before sync after network reconnects (ms) */
+export const DEFAULT_RECONNECT_SYNC_DELAY_MS = 5000
+
+/** Default delay before first sync after start() (ms) */
+export const DEFAULT_INITIAL_SYNC_DELAY_MS = 5000
 
 /**
  * SyncManager event type mapping

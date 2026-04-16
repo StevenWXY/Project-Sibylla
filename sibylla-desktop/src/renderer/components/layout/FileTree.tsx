@@ -18,6 +18,9 @@ import {
   validateFilename,
 } from './file-tree.utils'
 import { useFileTreeStore } from '../../store/fileTreeStore'
+import { useSyncStatusStore, selectConflictFiles } from '../../store/syncStatusStore'
+import { useVersionHistoryStore } from '../../store/versionHistoryStore'
+import { VersionHistoryPanel } from '../version-history'
 
 interface FileTreeProps {
   data?: FileTreeNode[]
@@ -115,6 +118,9 @@ export function FileTree({
 
   const openPathSet = useMemo(() => new Set(openPaths), [openPaths])
   const dirtyPathSet = useMemo(() => new Set(dirtyPaths), [dirtyPaths])
+
+  const conflictFiles = useSyncStatusStore(selectConflictFiles)
+  const conflictPathSet = useMemo(() => new Set(conflictFiles), [conflictFiles])
 
   const visibleNodes = useMemo<VisibleTreeNode[]>(
     () => flattenVisibleNodes(data, effectiveExpandedIds),
@@ -569,6 +575,7 @@ export function FileTree({
             expandedIds={effectiveExpandedIds}
             openPaths={openPathSet}
             dirtyPaths={dirtyPathSet}
+            conflictPaths={conflictPathSet}
             renamingPath={effectiveRenamingPath}
             pendingCreate={pendingCreate}
             onSelect={handleSelect}
@@ -614,6 +621,7 @@ export function FileTree({
           onDelete={() => setDeleteTarget(contextMenu.node)}
           onCreateFile={() => beginCreate('file', contextMenu.node.type === 'folder' ? contextMenu.node.path : getParentPath(contextMenu.node.path))}
           onCreateFolder={() => beginCreate('folder', contextMenu.node.type === 'folder' ? contextMenu.node.path : getParentPath(contextMenu.node.path))}
+          onViewHistory={contextMenu.node.type === 'file' ? () => useVersionHistoryStore.getState().openPanel(contextMenu.node.path) : undefined}
         />
       )}
 
@@ -643,6 +651,8 @@ export function FileTree({
           </Button>
         </div>
       </Modal>
+
+      <VersionHistoryPanel />
     </div>
   )
 }

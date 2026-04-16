@@ -1,9 +1,10 @@
 import React from 'react'
-import { Sun, Moon, Monitor } from 'lucide-react'
+import { Sun, Moon, Monitor, Settings } from 'lucide-react'
 import { useTheme } from '../providers/ThemeProvider'
 import { cn } from '../../utils/cn'
 import { useAppStore } from '../../store/appStore'
 import { useTabStore, selectActiveTab } from '../../store/tabStore'
+import { WorkspaceSettings } from '../settings/WorkspaceSettings'
 
 /**
  * Header - 顶部导航栏组件
@@ -26,6 +27,7 @@ import { useTabStore, selectActiveTab } from '../../store/tabStore'
 export const Header = React.memo(function Header() {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const currentWorkspace = useAppStore((state) => state.currentWorkspace)
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = React.useState(false)
   /* [S1-FIX] Use memoized selector to avoid re-renders when unrelated tabs change */
   const activeTab = useTabStore(selectActiveTab)
   
@@ -97,23 +99,47 @@ export const Header = React.memo(function Header() {
         )}
       </div>
       
-      {/* 右侧：主题切换按钮 */}
-      <button
-        onClick={cycleTheme}
-        className={cn(
-          'flex items-center gap-2 rounded-lg px-3 py-2',
-          'transition-colors duration-200',
-          'hover:bg-sys-darkSurface',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
+      {/* 右侧：工作区设置 + 主题切换按钮 */}
+      <div className="flex items-center gap-2">
+        {currentWorkspace && (
+          <button
+            onClick={() => setShowWorkspaceSettings(true)}
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-3 py-2',
+              'transition-colors duration-200',
+              'hover:bg-sys-darkSurface',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
+            )}
+            aria-label="工作区设置"
+            title="工作区设置"
+          >
+            <Settings size={18} className="text-sys-darkMuted" />
+          </button>
         )}
-        aria-label={getThemeLabel()}
-        title={getThemeLabel()}
-      >
-        {getThemeIcon()}
-        <span className="text-xs text-sys-darkMuted">
-          {getThemeText()}
-        </span>
-      </button>
+        <button
+          onClick={cycleTheme}
+          className={cn(
+            'flex items-center gap-2 rounded-lg px-3 py-2',
+            'transition-colors duration-200',
+            'hover:bg-sys-darkSurface',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white'
+          )}
+          aria-label={getThemeLabel()}
+          title={getThemeLabel()}
+        >
+          {getThemeIcon()}
+          <span className="text-xs text-sys-darkMuted">
+            {getThemeText()}
+          </span>
+        </button>
+      </div>
+
+      {showWorkspaceSettings && (
+        <WorkspaceSettings
+          isOpen={showWorkspaceSettings}
+          onClose={() => setShowWorkspaceSettings(false)}
+        />
+      )}
     </header>
   )
 })

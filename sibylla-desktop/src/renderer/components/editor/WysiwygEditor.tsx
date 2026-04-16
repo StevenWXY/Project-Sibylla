@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown as TiptapMarkdown } from 'tiptap-markdown'
@@ -22,6 +22,8 @@ import { SlashCommandMenu, useSlashCommandState } from './SlashCommandMenu'
 import { createSlashCommandExtension } from './extensions/slash-command'
 import { CodeBlockWithHighlight } from './extensions/code-block-lowlight'
 import { cn } from '../../utils/cn'
+import type { SaveFailedPayload } from '../../../shared/types'
+import { SaveFailureBanner } from './SaveFailureBanner'
 import '../../styles/editor.css'
 
 export interface WysiwygEditorProps {
@@ -67,6 +69,8 @@ export function WysiwygEditor({
   const updateCounts = useEditorStore((s) => s.updateCounts)
   const resetStore = useEditorStore((s) => s.reset)
   const loadError = useEditorStore((s) => s.loadError)
+
+  const [saveFailures, setSaveFailures] = useState<SaveFailedPayload['files']>([])
 
   const previousDirtyRef = useRef(false)
   const filePathRef = useRef(filePath)
@@ -180,6 +184,33 @@ export function WysiwygEditor({
 
   flushRef.current = flush
 
+  useEffect(() => {
+    const cleanup = window.electronAPI.file.onSaveFailed((data) => {
+      const relevant = data.files.filter(f => f.path === filePath)
+      if (relevant.length > 0) {
+        setSaveFailures(relevant)
+      }
+    })
+    return cleanup
+  }, [filePath])
+
+  useEffect(() => {
+    const cleanup = window.electronAPI.file.onAutoSaved((data) => {
+      if (data.files.includes(filePath)) {
+        setSaveFailures([])
+      }
+    })
+    return cleanup
+  }, [filePath])
+
+  const handleRetrySave = useCallback(async (failPath: string) => {
+    await window.electronAPI.file.retrySave(failPath)
+  }, [])
+
+  const handleDismissFailure = useCallback(() => {
+    setSaveFailures([])
+  }, [])
+
   /* [S3-FIX] Removed redundant `readOnly !== undefined` check — prop always exists with default value */
   useEffect(() => {
     if (editor) {
@@ -254,6 +285,13 @@ export function WysiwygEditor({
   return (
     <div className={cn('editor-container', className)}>
       {!readOnly && <EditorToolbar editor={editor} />}
+      {saveFailures.length > 0 && (
+        <SaveFailureBanner
+          failedFiles={saveFailures}
+          onRetry={handleRetrySave}
+          onDismiss={handleDismissFailure}
+        />
+      )}
       <EditorContent editor={editor} />
       {!readOnly && <EditorBubbleMenu editor={editor} />}
       {!readOnly && (

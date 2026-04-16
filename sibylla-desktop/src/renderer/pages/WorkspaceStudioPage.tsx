@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AIChatResponse, FileWatchEvent, SyncStatusData } from '../../shared/types'
+import type { AIChatResponse, FileWatchEvent } from '../../shared/types'
 import {
   useAppStore,
   selectCurrentWorkspace,
@@ -13,6 +13,7 @@ import {
 } from '../components/layout/file-tree.utils'
 import { useFileTreeStore } from '../store/fileTreeStore'
 import { useTabStore } from '../store/tabStore'
+import { useSyncStatusStore, selectStatus } from '../store/syncStatusStore'
 import {
   StudioAIPanel,
   StudioEditorPanel,
@@ -283,7 +284,8 @@ export function WorkspaceStudioPage() {
   const [isTasksLoading, setIsTasksLoading] = useState(false)
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
-  const [syncStatus, setSyncStatus] = useState<SyncStatusData | null>(null)
+
+  const syncStatusValue = useSyncStatusStore(selectStatus)
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
@@ -1097,21 +1099,21 @@ export function WorkspaceStudioPage() {
         }
       })
 
-      unlistenSync = window.electronAPI.sync.onStatusChange((data: SyncStatusData) => {
-        setSyncStatus(data)
+      unlistenSync = useSyncStatusStore.subscribe((state, prevState) => {
+        if (state.status === prevState.status) return
 
-        if (data.status === 'error') {
-          pushNotification('error', '同步失败', data.message ?? '请检查网络与仓库状态')
+        if (state.status === 'error') {
+          pushNotification('error', '同步失败', state.errorMessage ?? '请检查网络与仓库状态')
           return
         }
 
-        if (data.status === 'synced') {
+        if (state.status === 'synced') {
           pushNotification('success', '同步完成', '工作区已与云端保持一致')
           return
         }
 
-        if (data.status === 'conflict') {
-          const conflictPathRaw = data.conflictFiles?.[0]
+        if (state.status === 'conflict') {
+          const conflictPathRaw = state.conflictFiles[0]
           if (!conflictPathRaw) {
             pushNotification('warning', '出现冲突', '检测到冲突但未返回具体文件')
             return
@@ -1322,9 +1324,9 @@ export function WorkspaceStudioPage() {
         focusComposerSignal={focusComposerSignal}
       />
 
-      {syncStatus && (
+      {syncStatusValue !== 'idle' && (
         <div className="pointer-events-none absolute bottom-10 right-6 rounded border border-sys-darkBorder bg-[#090909]/90 px-3 py-1 text-[11px] text-sys-darkMuted">
-          Sync: {syncStatus.status}
+          Sync: {syncStatusValue}
         </div>
       )}
     </div>

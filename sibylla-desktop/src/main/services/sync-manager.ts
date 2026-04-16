@@ -32,7 +32,13 @@ import type {
   SyncManagerConfig,
   SyncManagerEvents,
 } from './types/sync-manager.types'
+import {
+  DEFAULT_RECONNECT_SYNC_DELAY_MS,
+  DEFAULT_INITIAL_SYNC_DELAY_MS,
+} from './types/sync-manager.types'
 import type { SyncStatus, SyncStatusData } from '../../../shared/types'
+import type { NetworkMonitor } from './network-monitor'
+import type { AutoSaveManager } from './auto-save-manager'
 
 /** Log prefix for all SyncManager operations */
 const LOG_PREFIX = '[SyncManager]'
@@ -116,11 +122,14 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
   // ─── Dependencies ─────────────────────────────────────────────────────
   private readonly fileManager: FileManager
   private readonly gitAbstraction: GitAbstraction
+  private readonly networkMonitor: NetworkMonitor | null
 
   // ─── Configuration ────────────────────────────────────────────────────
   private readonly workspaceDir: string
   private readonly saveDebounceMs: number
   private readonly syncIntervalMs: number
+  private readonly reconnectSyncDelayMs: number
+  private readonly initialSyncDelayMs: number
 
   // ─── Per-file debounce timers ─────────────────────────────────────────
   private readonly saveTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map()
@@ -142,6 +151,9 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
   // ─── Git operation queue (serializes all Git operations) ──────────────
   private gitOpQueue: Promise<void> = Promise.resolve()
 
+  // ─── Listener cleanup references ──────────────────────────────────────
+  private powerResumeHandler: (() => void) | null = null
+
   /**
    * Create a new SyncManager instance
    *
@@ -149,26 +161,33 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
    * @param fileManager - FileManager instance (reserved for future file-level checks)
    * @param gitAbstraction - GitAbstraction instance for Git operations
    * @param networkProvider - Optional network status provider (defaults to Electron net)
+   * @param networkMonitor - Optional NetworkMonitor for proactive network detection (TASK006)
    */
   constructor(
     config: SyncManagerConfig,
     fileManager: FileManager,
     gitAbstraction: GitAbstraction,
     networkProvider?: NetworkStatusProvider,
+    networkMonitor?: NetworkMonitor,
   ) {
     super()
 
     this.workspaceDir = config.workspaceDir
     this.saveDebounceMs = config.saveDebounceMs ?? DEFAULT_SAVE_DEBOUNCE_MS
     this.syncIntervalMs = config.syncIntervalMs ?? DEFAULT_SYNC_INTERVAL_MS
+    this.reconnectSyncDelayMs = config.reconnectSyncDelayMs ?? DEFAULT_RECONNECT_SYNC_DELAY_MS
+    this.initialSyncDelayMs = config.initialSyncDelayMs ?? DEFAULT_INITIAL_SYNC_DELAY_MS
     this.fileManager = fileManager
     this.gitAbstraction = gitAbstraction
     this.networkProvider = networkProvider ?? new ElectronNetworkProvider()
+    this.networkMonitor = networkMonitor ?? null
 
     logger.info(`${LOG_PREFIX} Initialized`, {
       workspaceDir: this.workspaceDir,
       saveDebounceMs: this.saveDebounceMs,
       syncIntervalMs: this.syncIntervalMs,
+      reconnectSyncDelayMs: this.reconnectSyncDelayMs,
+      initialSyncDelayMs: this.initialSyncDelayMs,
     })
   }
 
@@ -197,6 +216,15 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
       this.updateStatus('offline')
     }
 
+    // Start NetworkMonitor if provided
+    if (this.networkMonitor) {
+      this.networkMonitor.start()
+      this.setupNetworkMonitorListeners()
+    }
+
+    // Setup power monitor listeners
+    this.setupPowerListeners()
+
     // Start periodic sync timer (only if interval > 0)
     if (this.syncIntervalMs > 0) {
       this.syncTimer = setInterval(() => {
@@ -208,9 +236,19 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
       }, this.syncIntervalMs)
     }
 
+    // Trigger initial sync after delay
+    if (this.initialSyncDelayMs > 0) {
+      setTimeout(() => {
+        this.scheduledSync().catch((error: unknown) => {
+          logger.error(`${LOG_PREFIX} Unhandled error in initial sync`, error)
+        })
+      }, this.initialSyncDelayMs)
+    }
+
     logger.info(`${LOG_PREFIX} Started`, {
       isOnline: this.isOnline,
       syncIntervalMs: this.syncIntervalMs,
+      hasNetworkMonitor: this.networkMonitor !== null,
     })
   }
 
@@ -225,6 +263,22 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
       logger.warn(`${LOG_PREFIX} Not started, ignoring stop() call`)
       return
     }
+
+    // Stop NetworkMonitor if provided
+    if (this.networkMonitor) {
+      this.networkMonitor.stop()
+      this.networkMonitor.removeAllListeners()
+    }
+
+    // Remove powerMonitor resume listener
+    this.cleanupPowerListener()
+
+    // Clear AutoSaveManager listener reference
+    if (this.autoSaveManagerRef && this.boundAutoSaveCommitted) {
+      this.autoSaveManagerRef.off('committed', this.boundAutoSaveCommitted)
+    }
+    this.autoSaveManagerRef = null
+    this.boundAutoSaveCommitted = null
 
     // Clear sync timer
     if (this.syncTimer !== null) {
@@ -501,6 +555,128 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
     } finally {
       this.isSyncing = false
       this.emit('sync:end')
+    }
+  }
+
+  // ─── AutoSaveManager Integration (TASK006) ────────────────────────────
+
+  /**
+   * Connect AutoSaveManager's committed event to trigger sync
+   *
+   * Uses loose coupling — AutoSaveManager is injected, not a constructor dependency.
+   * Listening to the 'committed' event (not 'save-failed') because only successful
+   * commits need to trigger sync.
+   *
+   * @param autoSaveManager - AutoSaveManager instance to listen to
+   */
+  private autoSaveManagerRef: AutoSaveManager | null = null
+
+  connectAutoSaveManager(autoSaveManager: AutoSaveManager): void {
+    if (this.autoSaveManagerRef) {
+      this.autoSaveManagerRef.off('committed', this.boundAutoSaveCommitted)
+    }
+
+    this.autoSaveManagerRef = autoSaveManager
+    this.boundAutoSaveCommitted = () => {
+      this.scheduleImmediateSync()
+    }
+    autoSaveManager.on('committed', this.boundAutoSaveCommitted)
+
+    logger.info(`${LOG_PREFIX} AutoSaveManager connected`)
+  }
+
+  private boundAutoSaveCommitted: (() => void) | null = null
+
+  // ─── Immediate Sync Scheduling (TASK006) ─────────────────────────────
+
+  /**
+   * Schedule an immediate sync with a short delay
+   *
+   * Called when AutoSaveManager commits changes. The 2-second delay allows
+   * the AutoSaveManager's flush operation to complete fully before syncing.
+   * Uses scheduledSync() internally which respects the isSyncing lock.
+   */
+  private scheduleImmediateSync(): void {
+    if (!this.isOnline && this.networkMonitor && !this.networkMonitor.getIsOnline()) {
+      return
+    }
+
+    setTimeout(() => {
+      this.scheduledSync().catch((error: unknown) => {
+        logger.error(`${LOG_PREFIX} Unhandled error in immediate sync`, error)
+      })
+    }, 2000)
+  }
+
+  // ─── NetworkMonitor Listeners (TASK006) ──────────────────────────────
+
+  /**
+   * Set up event listeners on the NetworkMonitor instance
+   *
+   * - reconnected: triggers sync after reconnectSyncDelayMs (default 5s)
+   * - disconnected: updates status to offline immediately
+   * - status-changed: syncs the isOnline flag
+   */
+  private setupNetworkMonitorListeners(): void {
+    if (!this.networkMonitor) return
+
+    this.networkMonitor.on('reconnected', () => {
+      logger.info(`${LOG_PREFIX} Network reconnected, scheduling sync`)
+      setTimeout(() => {
+        this.scheduledSync().catch((error: unknown) => {
+          logger.error(`${LOG_PREFIX} Unhandled error in reconnect sync`, error)
+        })
+      }, this.reconnectSyncDelayMs)
+    })
+
+    this.networkMonitor.on('disconnected', () => {
+      this.isOnline = false
+      this.updateStatus('offline')
+    })
+
+    this.networkMonitor.on('status-changed', (online: boolean) => {
+      this.isOnline = online
+    })
+  }
+
+  // ─── Power Monitor Listeners (TASK006) ───────────────────────────────
+
+  /**
+   * Set up system power event listeners via Electron's powerMonitor
+   *
+   * On resume from sleep, triggers sync after a 3-second delay to allow
+   * the network adapter to reconnect. Uses dynamic require() to avoid
+   * errors in non-Electron environments (e.g., unit tests).
+   */
+  private setupPowerListeners(): void {
+    this.cleanupPowerListener()
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { powerMonitor } = require('electron') as { powerMonitor: Electron.PowerMonitor }
+
+      const handler = () => {
+        logger.info(`${LOG_PREFIX} System resumed from sleep`)
+        setTimeout(() => {
+          this.scheduledSync().catch((error: unknown) => {
+            logger.error(`${LOG_PREFIX} Unhandled error in resume sync`, error)
+          })
+        }, 3000)
+      }
+
+      powerMonitor.on('resume', handler)
+      this.powerResumeHandler = () => {
+        powerMonitor.off('resume', handler)
+      }
+    } catch {
+      logger.warn(`${LOG_PREFIX} powerMonitor unavailable (non-Electron environment)`)
+    }
+  }
+
+  private cleanupPowerListener(): void {
+    if (this.powerResumeHandler) {
+      this.powerResumeHandler()
+      this.powerResumeHandler = null
     }
   }
 

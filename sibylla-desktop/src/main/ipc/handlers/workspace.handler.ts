@@ -9,6 +9,7 @@
 import { ipcMain, IpcMainInvokeEvent, dialog } from 'electron'
 import { IpcHandler } from '../handler'
 import { WorkspaceManager } from '../../services/workspace-manager'
+import { TokenStorage } from '../../services/token-storage'
 import { IPC_CHANNELS } from '../../../shared/types'
 import { logger } from '../../utils/logger'
 import type {
@@ -17,6 +18,12 @@ import type {
   WorkspaceConfig,
   WorkspaceMetadata,
 } from '../../../shared/types'
+import type {
+  MemberRole,
+  WorkspaceMember,
+  InviteRequest,
+  InviteResult,
+} from '../../../shared/types/member.types'
 
 /**
  * Callback type for workspace lifecycle events
@@ -35,6 +42,13 @@ export type WorkspaceLifecycleCallback = (workspaceInfo: WorkspaceInfo) => void 
 export class WorkspaceHandler extends IpcHandler {
   readonly namespace = 'workspace'
   private workspaceManager: WorkspaceManager | null = null
+  private tokenStorage: TokenStorage | null = null
+  private readonly cloudBaseUrl: string
+
+  constructor() {
+    super()
+    this.cloudBaseUrl = (process.env.CLOUD_API_URL ?? 'https://api.sibylla.io').replace(/\/+$/, '')
+  }
   
   /**
    * Lifecycle callbacks for workspace open/close events
@@ -54,6 +68,11 @@ export class WorkspaceHandler extends IpcHandler {
   setWorkspaceManager(workspaceManager: WorkspaceManager): void {
     this.workspaceManager = workspaceManager
     logger.info('[WorkspaceHandler] WorkspaceManager instance set')
+  }
+
+  setTokenStorage(tokenStorage: TokenStorage): void {
+    this.tokenStorage = tokenStorage
+    logger.info('[WorkspaceHandler] TokenStorage instance set')
   }
   
   /**
@@ -101,6 +120,12 @@ export class WorkspaceHandler extends IpcHandler {
     // Utility
     ipcMain.handle(IPC_CHANNELS.WORKSPACE_SELECT_FOLDER, this.safeHandle(this.selectFolder.bind(this)))
     
+    // Member management
+    ipcMain.handle(IPC_CHANNELS.WORKSPACE_GET_MEMBERS, this.safeHandle(this.getMembers.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.WORKSPACE_INVITE_MEMBER, this.safeHandle(this.inviteMember.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.WORKSPACE_UPDATE_MEMBER_ROLE, this.safeHandle(this.updateMemberRole.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.WORKSPACE_REMOVE_MEMBER, this.safeHandle(this.removeMember.bind(this)))
+    
     logger.info('[WorkspaceHandler] All handlers registered')
   }
   
@@ -117,6 +142,10 @@ export class WorkspaceHandler extends IpcHandler {
     ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_UPDATE_CONFIG)
     ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_GET_METADATA)
     ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_SELECT_FOLDER)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_GET_MEMBERS)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_INVITE_MEMBER)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_UPDATE_MEMBER_ROLE)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKSPACE_REMOVE_MEMBER)
     
     this.workspaceManager = null
     this.onWorkspaceOpenedCallback = null
@@ -320,6 +349,119 @@ export class WorkspaceHandler extends IpcHandler {
   }
   
   // ─── Private Helpers ──────────────────────────────────────────────────
+
+  private ensureToken(): string {
+    if (!this.tokenStorage) {
+      throw new Error('TokenStorage not initialized')
+    }
+    const token = this.tokenStorage.getAccessToken()
+    if (!token) {
+      throw new Error('Not authenticated — access token unavailable')
+    }
+    return token
+  }
+
+  private async getMembers(
+    _event: IpcMainInvokeEvent,
+    workspaceId: string,
+  ): Promise<WorkspaceMember[]> {
+    const token = this.ensureToken()
+    logger.info('[WorkspaceHandler] Getting members', { workspaceId })
+
+    const response = await fetch(
+      `${this.cloudBaseUrl}/api/v1/workspaces/${workspaceId}/members`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+
+    if (!response.ok) {
+      throw new Error(`Failed to get members: ${response.status} ${response.statusText}`)
+    }
+
+    return response.json() as Promise<WorkspaceMember[]>
+  }
+
+  private async inviteMember(
+    _event: IpcMainInvokeEvent,
+    workspaceId: string,
+    request: InviteRequest,
+  ): Promise<InviteResult> {
+    const token = this.ensureToken()
+    logger.info('[WorkspaceHandler] Inviting member', { workspaceId, email: request.email })
+
+    const response = await fetch(
+      `${this.cloudBaseUrl}/api/v1/workspaces/${workspaceId}/members/invite`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      },
+    )
+
+    if (!response.ok) {
+      let errorMessage = '邀请失败，请重试'
+      try {
+        const errorBody = (await response.json()) as { error?: { message?: string } }
+        errorMessage = errorBody.error?.message ?? errorMessage
+      } catch {
+        // Use default error message
+      }
+      return { success: false, error: errorMessage }
+    }
+
+    return { success: true }
+  }
+
+  private async updateMemberRole(
+    _event: IpcMainInvokeEvent,
+    workspaceId: string,
+    userId: string,
+    role: MemberRole,
+  ): Promise<void> {
+    const token = this.ensureToken()
+    logger.info('[WorkspaceHandler] Updating member role', { workspaceId, userId, role })
+
+    const response = await fetch(
+      `${this.cloudBaseUrl}/api/v1/workspaces/${workspaceId}/members/${userId}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ role }),
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error(`Failed to update role: ${response.status} ${response.statusText}`)
+    }
+  }
+
+  private async removeMember(
+    _event: IpcMainInvokeEvent,
+    workspaceId: string,
+    userId: string,
+  ): Promise<void> {
+    const token = this.ensureToken()
+    logger.info('[WorkspaceHandler] Removing member', { workspaceId, userId })
+
+    const response = await fetch(
+      `${this.cloudBaseUrl}/api/v1/workspaces/${workspaceId}/members/${userId}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error(`Failed to remove member: ${response.status} ${response.statusText}`)
+    }
+  }
+
+  // ─── Private Lifecycle Helpers ───────────────────────────────────────
   
   /**
    * Safely invoke the workspace opened callback

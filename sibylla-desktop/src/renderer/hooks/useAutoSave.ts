@@ -29,16 +29,37 @@ export function useAutoSave(
       setSaving(true)
       try {
         await onSave(content)
-        setSaved()
-        setDirty(false)
+        window.electronAPI.file.notifyChange(filePath, content)
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err))
         setSaveError(error.message)
         onError(error)
       }
     },
-    [onSave, onError, setSaving, setSaved, setSaveError, setDirty]
+    [onSave, onError, filePath, setSaving, setSaveError]
   )
+
+  useEffect(() => {
+    if (!filePath) return
+    const cleanup = window.electronAPI.file.onAutoSaved((data) => {
+      if (data.files.includes(filePath)) {
+        setSaved()
+        setDirty(false)
+      }
+    })
+    return cleanup
+  }, [filePath, setSaved, setDirty])
+
+  useEffect(() => {
+    if (!filePath) return
+    const cleanup = window.electronAPI.file.onSaveFailed((data) => {
+      const failed = data.files.find(f => f.path === filePath)
+      if (failed) {
+        setSaveError(failed.error)
+      }
+    })
+    return cleanup
+  }, [filePath, setSaveError])
 
   const scheduleSave = useCallback(
     (content: string) => {
@@ -98,8 +119,6 @@ export function useAutoSave(
     }
   }, [editor, enabled, filePath, scheduleSave])
 
-  /* [C4-FIX] Use editorStore.isDirty (content-level) instead of TipTap's editor.isDirty
-     (undo-history-level) to determine whether content needs flushing on unmount. */
   const storeIsDirty = useEditorStore((s) => s.isDirty)
 
   useEffect(() => {

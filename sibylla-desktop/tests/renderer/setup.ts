@@ -37,10 +37,23 @@ const mockElectronAPI = {
     getConfig: vi.fn(),
     updateConfig: vi.fn(),
     getMetadata: vi.fn(),
+    getMembers: vi.fn(),
+    inviteMember: vi.fn(),
+    updateMemberRole: vi.fn(),
+    removeMember: vi.fn(),
   },
   sync: {
     force: vi.fn(),
+    getState: vi.fn(),
     onStatusChange: vi.fn(() => vi.fn()),
+  },
+  git: {
+    getConflicts: vi.fn(),
+    resolve: vi.fn(),
+    onConflictDetected: vi.fn(() => vi.fn()),
+    history: vi.fn(),
+    diff: vi.fn(),
+    restore: vi.fn(),
   },
   auth: {
     login: vi.fn(),

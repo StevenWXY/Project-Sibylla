@@ -5,6 +5,8 @@ import type {
   AuthRegisterInput,
   AuthSession,
   AuthUser,
+  ConflictInfo,
+  ConflictResolution,
   FileContent,
   FileInfo,
   FileWatchEvent,
@@ -16,7 +18,12 @@ import type {
   WorkspaceConfig,
   WorkspaceInfo,
   WorkspaceMetadata,
+  WorkspaceMember,
+  InviteRequest,
+  InviteResult,
+  MemberRole,
 } from '../../shared/types'
+import type { CommitInfo, FileDiff } from '../../shared/types/git.types'
 import { ErrorType } from '../../shared/types'
 import type { ElectronAPI } from '../../preload/index'
 
@@ -25,6 +32,30 @@ const MOCK_USER: AuthUser = {
   email: 'demo@sibylla.ai',
   name: 'Sibylla Demo',
 }
+
+const MOCK_MEMBERS: WorkspaceMember[] = [
+  {
+    id: 'mock-user-1',
+    name: 'Sibylla Demo',
+    email: 'demo@sibylla.ai',
+    role: 'admin',
+    joinedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mock-user-2',
+    name: 'Alice Editor',
+    email: 'alice@example.com',
+    role: 'editor',
+    joinedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mock-user-3',
+    name: 'Bob Viewer',
+    email: 'bob@example.com',
+    role: 'viewer',
+    joinedAt: new Date().toISOString(),
+  },
+]
 
 const MOCK_WORKSPACE_CONFIG: WorkspaceConfig = {
   workspaceId: 'ws-sibylla-demo',
@@ -411,12 +442,19 @@ function createMockAPI(): ElectronAPI {
         return ok(undefined)
       },
       getMetadata: async () => ok(currentWorkspace.metadata),
+      getMembers: async (_workspaceId: string) => ok<WorkspaceMember[]>(MOCK_MEMBERS),
+      inviteMember: async (_workspaceId: string, _request: InviteRequest) => ok<InviteResult>({ success: true }),
+      updateMemberRole: async (_workspaceId: string, _userId: string, _role: MemberRole) => ok(undefined),
+      removeMember: async (_workspaceId: string, _userId: string) => ok(undefined),
     },
     sync: {
       force: async () => {
         const result: SyncResult = { success: true, hasConflicts: false, conflicts: [] }
         emitSync({ status: 'synced', timestamp: Date.now() })
         return ok(result)
+      },
+      getState: async () => {
+        return ok({ status: 'synced' as const, timestamp: Date.now() })
       },
       onStatusChange: (callback: (data: SyncStatusData) => void) => {
         syncListeners.add(callback)
@@ -427,6 +465,48 @@ function createMockAPI(): ElectronAPI {
           syncListeners.delete(callback)
         }
       },
+    },
+    git: {
+      getConflicts: async () => ok<ConflictInfo[]>([]),
+      resolve: async (_resolution: ConflictResolution) => ok(`mock-oid-${Date.now()}`),
+      onConflictDetected: (_callback: (conflicts: ConflictInfo[]) => void) => () => {},
+      history: async () => ok<readonly CommitInfo[]>([
+        {
+          oid: 'mock-commit-001',
+          message: '更新 prd.md',
+          authorName: 'Demo User',
+          authorEmail: 'demo@sibylla.ai',
+          timestamp: Date.now() - 3 * 60 * 1000,
+          parents: ['mock-commit-000'],
+        },
+        {
+          oid: 'mock-commit-000',
+          message: 'Initial commit: workspace created',
+          authorName: 'Demo User',
+          authorEmail: 'demo@sibylla.ai',
+          timestamp: Date.now() - 24 * 60 * 60 * 1000,
+          parents: [],
+        },
+      ]),
+      diff: async () => ok<FileDiff>({
+        filepath: 'prd.md',
+        oldContent: '# Product Requirements Document\n- [ ] Define clear user personas',
+        newContent: '# Product Requirements Document\n- [ ] Define clear user personas\n- [ ] Complete task decomposition',
+        hunks: [
+          {
+            oldStart: 1,
+            oldLines: 2,
+            newStart: 1,
+            newLines: 3,
+            lines: [
+              { type: 'context', content: '# Product Requirements Document' },
+              { type: 'context', content: '- [ ] Define clear user personas' },
+              { type: 'add', content: '- [ ] Complete task decomposition' },
+            ],
+          },
+        ],
+      }),
+      restore: async () => ok(`mock-restore-oid-${Date.now()}`),
     },
     ai: {
       chat: async (request) => ok(createAIResponse(request)),

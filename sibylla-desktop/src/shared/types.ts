@@ -5,8 +5,33 @@
  * main process, renderer process, and preload scripts.
  */
 
-// Re-export ElectronAPI type from preload for convenience
+import type {
+  MemberRole,
+  WorkspaceMember,
+  InviteRequest,
+  InviteResult,
+} from './types/member.types'
+import type { CommitInfo, HistoryOptions, FileDiff } from './types/git.types'
 export type { ElectronAPI } from '../preload/index'
+
+// Re-export member types for convenience
+export type {
+  MemberRole,
+  WorkspaceMember,
+  InviteRequest,
+  InviteResult,
+  PermissionCheck,
+} from './types/member.types'
+export { ROLE_PERMISSIONS } from './types/member.types'
+
+// Re-export git types for convenience
+export type {
+  CommitInfo,
+  HistoryOptions,
+  FileDiff,
+  DiffLine,
+  DiffHunk,
+} from './types/git.types'
 
 /**
  * Application configuration
@@ -89,6 +114,12 @@ export const IPC_CHANNELS = {
   WORKSPACE_GET_CONFIG: 'workspace:get-config',
   WORKSPACE_UPDATE_CONFIG: 'workspace:update-config',
   WORKSPACE_GET_METADATA: 'workspace:get-metadata',
+
+  // Workspace member management
+  WORKSPACE_GET_MEMBERS: 'workspace:getMembers',
+  WORKSPACE_INVITE_MEMBER: 'workspace:inviteMember',
+  WORKSPACE_UPDATE_MEMBER_ROLE: 'workspace:updateMemberRole',
+  WORKSPACE_REMOVE_MEMBER: 'workspace:removeMember',
   
   // Git operations (reserved for future implementation)
   GIT_STATUS: 'git:status',
@@ -96,6 +127,17 @@ export const IPC_CHANNELS = {
   GIT_COMMIT: 'git:commit',
   GIT_HISTORY: 'git:history',
   GIT_DIFF: 'git:diff',
+
+  /** Renderer → Main: Restore file to a specific version */
+  GIT_RESTORE: 'git:restore',
+
+  // Git conflict operations
+  /** Renderer → Main: Get detailed conflict info for all conflicting files */
+  GIT_GET_CONFLICTS: 'git:getConflicts',
+  /** Renderer → Main: Resolve a conflict with chosen strategy */
+  GIT_RESOLVE: 'git:resolve',
+  /** Main → Renderer: Push conflict detection event (webContents.send) */
+  GIT_CONFLICT_DETECTED: 'git:conflictDetected',
   
   // AI operations (reserved for future implementation)
   AI_CHAT: 'ai:chat',
@@ -107,6 +149,8 @@ export const IPC_CHANNELS = {
   SYNC_FORCE: 'sync:force',
   /** Main → Renderer: Broadcast sync status changes */
   SYNC_STATUS_CHANGED: 'sync:status-changed',
+  /** Renderer → Main: Get current sync state snapshot */
+  SYNC_GET_STATE: 'sync:getState',
 
   // Auth operations
   /** Login with email/password */
@@ -123,6 +167,16 @@ export const IPC_CHANNELS = {
   // File import operations
   FILE_IMPORT: 'file:import',
   FILE_IMPORT_PROGRESS: 'file:importProgress',
+
+  // Auto-save operations
+  /** Renderer → Main: Notify that file content has changed (send/on, one-way) */
+  FILE_NOTIFY_CHANGE: 'file:notifyChange',
+  /** Main → Renderer: Auto-save succeeded (webContents.send) */
+  FILE_AUTO_SAVED: 'file:autoSaved',
+  /** Main → Renderer: Auto-save failed (webContents.send) */
+  FILE_SAVE_FAILED: 'file:saveFailed',
+  /** Renderer → Main: Manual retry for a failed save (invoke/handle) */
+  FILE_RETRY_SAVE: 'file:retrySave',
 
   // Event notifications (main process → renderer process)
   NOTIFICATION: 'notification',
@@ -217,12 +271,23 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.WORKSPACE_UPDATE_CONFIG]: { params: [updates: Partial<WorkspaceConfig>]; return: void }
   [IPC_CHANNELS.WORKSPACE_GET_METADATA]: { params: []; return: WorkspaceMetadata }
 
-  // Git operations (reserved)
+  // Workspace member management
+  [IPC_CHANNELS.WORKSPACE_GET_MEMBERS]: { params: [workspaceId: string]; return: WorkspaceMember[] }
+  [IPC_CHANNELS.WORKSPACE_INVITE_MEMBER]: { params: [workspaceId: string, request: InviteRequest]; return: InviteResult }
+  [IPC_CHANNELS.WORKSPACE_UPDATE_MEMBER_ROLE]: { params: [workspaceId: string, userId: string, role: MemberRole]; return: void }
+  [IPC_CHANNELS.WORKSPACE_REMOVE_MEMBER]: { params: [workspaceId: string, userId: string]; return: void }
+
+  // Git operations
   [IPC_CHANNELS.GIT_STATUS]: { params: []; return: unknown }
   [IPC_CHANNELS.GIT_SYNC]: { params: []; return: unknown }
   [IPC_CHANNELS.GIT_COMMIT]: { params: [message?: string]; return: unknown }
-  [IPC_CHANNELS.GIT_HISTORY]: { params: []; return: unknown }
-  [IPC_CHANNELS.GIT_DIFF]: { params: []; return: unknown }
+  [IPC_CHANNELS.GIT_HISTORY]: { params: [options?: HistoryOptions]; return: readonly CommitInfo[] }
+  [IPC_CHANNELS.GIT_DIFF]: { params: [filepath: string, commitA?: string, commitB?: string]; return: FileDiff }
+  [IPC_CHANNELS.GIT_RESTORE]: { params: [filepath: string, commitSha: string]; return: string }
+
+  // Git conflict operations
+  [IPC_CHANNELS.GIT_GET_CONFLICTS]: { params: []; return: ConflictInfo[] }
+  [IPC_CHANNELS.GIT_RESOLVE]: { params: [resolution: ConflictResolution]; return: string }
 
   // AI operations
   [IPC_CHANNELS.AI_CHAT]: { params: [request: AIChatRequest | string]; return: AIChatResponse }
@@ -232,6 +297,7 @@ export interface IPCChannelMap {
   // Sync operations
   [IPC_CHANNELS.SYNC_FORCE]: { params: []; return: SyncResult }
   [IPC_CHANNELS.SYNC_STATUS_CHANGED]: { params: [data: SyncStatusData]; return: void }
+  [IPC_CHANNELS.SYNC_GET_STATE]: { params: []; return: SyncStatusData }
 
   // Auth operations
   [IPC_CHANNELS.AUTH_LOGIN]: { params: [input: AuthLoginInput]; return: AuthSession }
@@ -248,6 +314,12 @@ export interface IPCChannelMap {
 
   // File import operations
   [IPC_CHANNELS.FILE_IMPORT]: { params: [sourcePaths: string[], options?: ImportOptions]; return: ImportResult }
+
+  // Auto-save operations
+  // FILE_NOTIFY_CHANGE: send/on (one-way), not in IPCChannelMap
+  // FILE_AUTO_SAVED: Main → Renderer push, not in IPCChannelMap
+  // FILE_SAVE_FAILED: Main → Renderer push, not in IPCChannelMap
+  [IPC_CHANNELS.FILE_RETRY_SAVE]: { params: [filePath: string]; return: void }
 }
 
 /**
@@ -844,4 +916,58 @@ export interface ImportProgress {
   readonly total: number
   /** Name of the file currently being processed */
   readonly fileName: string
+}
+
+/**
+ * Auto-Save Types
+ *
+ * Shared types for auto-save event payloads exchanged via IPC.
+ */
+
+/** Payload for file:autoSaved event (Main → Renderer) */
+export interface AutoSavedPayload {
+  /** List of file paths that were successfully saved and committed */
+  readonly files: readonly string[]
+  /** Timestamp when the save completed (milliseconds since epoch) */
+  readonly timestamp: number
+}
+
+/** Payload for file:saveFailed event (Main → Renderer) */
+export interface SaveFailedPayload {
+  /** List of files that failed to save with error details */
+  readonly files: ReadonlyArray<{ readonly path: string; readonly error: string }>
+}
+
+/**
+ * Conflict Types
+ *
+ * Shared types for Git conflict detection and resolution.
+ * Defined here (shared/types.ts) following the same pattern as SyncStatus/SyncResult.
+ */
+
+/** Single file conflict information */
+export interface ConflictInfo {
+  /** Workspace-relative file path */
+  readonly filePath: string
+  /** Local (ours) version content — extracted from <<<<<<< HEAD section */
+  readonly localContent: string
+  /** Remote (theirs) version content — extracted from >>>>>>> section */
+  readonly remoteContent: string
+  /** Common ancestor (base) version content */
+  readonly baseContent: string
+  /** Name of the remote author (if available) */
+  readonly remoteAuthor?: string
+}
+
+/** Conflict resolution strategy */
+export type ResolutionType = 'mine' | 'theirs' | 'manual'
+
+/** Resolution request — sent from renderer via IPC */
+export interface ConflictResolution {
+  /** Workspace-relative file path */
+  readonly filePath: string
+  /** Resolution strategy */
+  readonly type: ResolutionType
+  /** Required when type is 'manual' */
+  readonly content?: string
 }

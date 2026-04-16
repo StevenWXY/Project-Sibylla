@@ -49,6 +49,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -67,6 +68,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -85,6 +87,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -104,6 +107,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -123,6 +127,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set(['readme.md'])}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -142,6 +147,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -161,6 +167,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set(['readme.md'])}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -181,6 +188,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -200,6 +208,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -222,6 +231,7 @@ describe('TreeNode', () => {
         expandedIds={new Set(['docs'])}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -243,6 +253,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -263,6 +274,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -285,6 +297,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -306,6 +319,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -327,6 +341,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -347,6 +362,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -368,6 +384,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath="readme.md"
         pendingCreate={null}
         {...defaultHandlers}
@@ -388,6 +405,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath="other.md"
         pendingCreate={null}
         {...defaultHandlers}
@@ -406,6 +424,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -425,6 +444,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -444,6 +464,7 @@ describe('TreeNode', () => {
         expandedIds={new Set(['docs'])}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={{ parentPath: 'docs', type: 'file', defaultName: 'untitled.md' }}
         {...defaultHandlers}
@@ -464,6 +485,7 @@ describe('TreeNode', () => {
         expandedIds={new Set(['docs'])}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={{ parentPath: 'other', type: 'file', defaultName: 'untitled.md' }}
         {...defaultHandlers}
@@ -482,6 +504,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -497,6 +520,7 @@ describe('TreeNode', () => {
         expandedIds={new Set(['docs'])}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -515,6 +539,7 @@ describe('TreeNode', () => {
         expandedIds={new Set()}
         openPaths={new Set()}
         dirtyPaths={new Set()}
+        conflictPaths={new Set()}
         renamingPath={null}
         pendingCreate={null}
         {...defaultHandlers}
@@ -538,6 +563,7 @@ describe('TreeNode', () => {
           expandedIds={new Set(['level0', 'level1', 'level2', 'level3', 'level4', 'level5', 'level6', 'level7', 'level8', 'level9', 'level10'])}
           openPaths={new Set()}
           dirtyPaths={new Set()}
+          conflictPaths={new Set()}
           renamingPath={null}
           pendingCreate={null}
           {...defaultHandlers}

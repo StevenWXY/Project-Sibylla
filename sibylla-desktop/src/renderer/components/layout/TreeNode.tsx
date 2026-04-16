@@ -24,6 +24,7 @@ interface TreeNodeProps {
   expandedIds: ReadonlySet<string>
   openPaths: ReadonlySet<string>
   dirtyPaths: ReadonlySet<string>
+  conflictPaths: ReadonlySet<string>
   renamingPath: string | null
   pendingCreate: PendingCreateState | null
   onSelect: (node: FileTreeNode) => void
@@ -49,6 +50,7 @@ export const TreeNode = memo(function TreeNode({
   expandedIds,
   openPaths,
   dirtyPaths,
+  conflictPaths,
   renamingPath,
   pendingCreate,
   onSelect,
@@ -71,6 +73,7 @@ export const TreeNode = memo(function TreeNode({
   const isSelected = selectedId === node.path
   const isOpen = openPaths.has(node.path)
   const isDirty = dirtyPaths.has(node.path)
+  const isFileSyncConflict = !isFolder && conflictPaths.has(node.path)
   const hasChildren = Boolean(node.children && node.children.length > 0)
   const isRenaming = renamingPath === node.path
 
@@ -169,6 +172,9 @@ export const TreeNode = memo(function TreeNode({
             <span className="truncate">{node.name}</span>
             {isDirty && <span className="text-amber-500 dark:text-amber-400">*</span>}
             {isOpen && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
+            {isFileSyncConflict && (
+              <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" title="文件冲突" />
+            )}
           </span>
         )}
 
@@ -249,6 +255,7 @@ export const TreeNode = memo(function TreeNode({
               expandedIds={expandedIds}
               openPaths={openPaths}
               dirtyPaths={dirtyPaths}
+              conflictPaths={conflictPaths}
               renamingPath={renamingPath}
               pendingCreate={pendingCreate}
               onSelect={onSelect}

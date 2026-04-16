@@ -10,8 +10,10 @@ import { BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
 import { IpcHandler } from '../handler'
 import { FileManager } from '../../services/file-manager'
 import { ImportManager } from '../../services/import-manager'
+import { AutoSaveManager } from '../../services/auto-save-manager'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
+  AutoSavedPayload,
   FileContent,
   FileReadOptions,
   FileWriteOptions,
@@ -21,6 +23,7 @@ import type {
   ImportOptions,
   ImportResult,
   ImportProgress,
+  SaveFailedPayload,
 } from '../../../shared/types'
 import type {
   ReadFileOptions as ManagerReadOptions,
@@ -29,6 +32,7 @@ import type {
   FileInfo as ManagerFileInfo,
 } from '../../services/types/file-manager.types'
 import type { InternalImportOptions } from '../../services/types/import-manager.types'
+import type { BatchCommitResult, SaveResult } from '../../services/types/auto-save.types'
 
 /**
  * FileHandler class
@@ -40,6 +44,7 @@ export class FileHandler extends IpcHandler {
   readonly namespace = 'file'
   private fileManager: FileManager | null = null
   private importManager: ImportManager | null = null
+  private autoSaveManager: AutoSaveManager | null = null
   
   /**
    * Set FileManager instance
@@ -59,6 +64,32 @@ export class FileHandler extends IpcHandler {
   setImportManager(importManager: ImportManager): void {
     this.importManager = importManager
     console.log('[FileHandler] ImportManager instance set')
+  }
+
+  /**
+   * Set AutoSaveManager instance and connect its events to IPC broadcasts
+   *
+   * @param autoSaveManager - AutoSaveManager instance for auto-save operations
+   */
+  setAutoSaveManager(autoSaveManager: AutoSaveManager): void {
+    this.autoSaveManager = autoSaveManager
+
+    autoSaveManager.on('committed', (result: BatchCommitResult) => {
+      const payload: AutoSavedPayload = {
+        files: [...result.files],
+        timestamp: Date.now(),
+      }
+      this.broadcastToAllWindows(IPC_CHANNELS.FILE_AUTO_SAVED, payload)
+    })
+
+    autoSaveManager.on('save-failed', (failedResults: SaveResult[]) => {
+      const payload: SaveFailedPayload = {
+        files: failedResults.map(r => ({ path: r.filePath, error: r.error ?? 'Unknown error' })),
+      }
+      this.broadcastToAllWindows(IPC_CHANNELS.FILE_SAVE_FAILED, payload)
+    })
+
+    console.log('[FileHandler] AutoSaveManager instance set')
   }
   
   /**
@@ -88,6 +119,18 @@ export class FileHandler extends IpcHandler {
     // File import
     ipcMain.handle(IPC_CHANNELS.FILE_IMPORT, this.safeHandle(this.importFiles.bind(this)))
     
+    // Auto-save: file:notifyChange (send/on, one-way notification)
+    ipcMain.on(IPC_CHANNELS.FILE_NOTIFY_CHANGE, (_event, filePath: string, content: string) => {
+      if (!this.autoSaveManager) {
+        console.warn('[FileHandler] AutoSaveManager not initialized, ignoring notifyChange')
+        return
+      }
+      this.autoSaveManager.onFileChanged(filePath, content)
+    })
+
+    // Auto-save: file:retrySave (invoke/handle, user-initiated retry)
+    ipcMain.handle(IPC_CHANNELS.FILE_RETRY_SAVE, this.safeHandle(this.retrySave.bind(this)))
+    
     console.log('[FileHandler] All handlers registered')
   }
   
@@ -109,6 +152,8 @@ export class FileHandler extends IpcHandler {
     ipcMain.removeHandler(IPC_CHANNELS.FILE_WATCH_START)
     ipcMain.removeHandler(IPC_CHANNELS.FILE_WATCH_STOP)
     ipcMain.removeHandler(IPC_CHANNELS.FILE_IMPORT)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_RETRY_SAVE)
+    ipcMain.removeAllListeners(IPC_CHANNELS.FILE_NOTIFY_CHANGE)
     
     if (this.fileManager) {
       // Stop file watching
@@ -385,5 +430,29 @@ export class FileHandler extends IpcHandler {
       createdTime: new Date(info.createdTime).toISOString(),
       extension: info.extension,
     }
+  }
+
+  /**
+   * Manual retry for a failed save
+   */
+  private async retrySave(
+    _event: IpcMainInvokeEvent,
+    filePath: string,
+  ): Promise<void> {
+    if (!this.autoSaveManager) {
+      throw new Error('AutoSaveManager not initialized')
+    }
+    await this.autoSaveManager.retrySave(filePath)
+  }
+
+  /**
+   * Broadcast a message to all open BrowserWindows
+   */
+  private broadcastToAllWindows(channel: string, data: unknown): void {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send(channel, data)
+      }
+    })
   }
 }

@@ -6,6 +6,19 @@ describe('useAutoSave', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     useEditorStore.getState().reset()
+
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        electronAPI: {
+          file: {
+            notifyChange: vi.fn(),
+            onAutoSaved: vi.fn(() => () => {}),
+            onSaveFailed: vi.fn(() => () => {}),
+          },
+        },
+      },
+      writable: true,
+    })
   })
 
   afterEach(() => {

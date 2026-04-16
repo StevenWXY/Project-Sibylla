@@ -21,6 +21,8 @@ import {
   GitAbstractionErrorCode,
 } from '../../src/main/services/types/git-abstraction.types'
 import type { SyncResult } from '../../src/main/services/types/git-abstraction.types'
+import { NetworkMonitor } from '../../src/main/services/network-monitor'
+import { EventEmitter } from 'events'
 
 // ─── Mock Factories ─────────────────────────────────────────────────────────
 
@@ -63,6 +65,7 @@ function createTestConfig(overrides?: Partial<SyncManagerConfig>): SyncManagerCo
     workspaceDir: '/mock/workspace',
     saveDebounceMs: 1000,
     syncIntervalMs: 30000,
+    initialSyncDelayMs: 0,
     ...overrides,
   }
 }
@@ -661,7 +664,7 @@ describe('SyncManager', () => {
 
     it('should restart correctly after stop() then start()', async () => {
       syncManager = new SyncManager(
-        createTestConfig({ syncIntervalMs: 30000 }),
+        createTestConfig({ syncIntervalMs: 30000, initialSyncDelayMs: 0 }),
         mockFileManager as never,
         mockGitAbstraction as never,
         mockNetworkProvider,
@@ -687,6 +690,252 @@ describe('SyncManager', () => {
 
       vi.advanceTimersByTime(120000)
       expect(mockGitAbstraction.sync).not.toHaveBeenCalled()
+    })
+  })
+
+  // ─── 9. TASK006: AutoSaveManager Integration Tests ──────────────────
+
+  describe('TASK006: AutoSaveManager Integration', () => {
+    function createMockAutoSaveManager() {
+      const emitter = new EventEmitter()
+      return {
+        on: emitter.on.bind(emitter),
+        off: emitter.off.bind(emitter),
+        emit: emitter.emit.bind(emitter),
+        removeAllListeners: emitter.removeAllListeners.bind(emitter),
+      }
+    }
+
+    it('should trigger sync 2s after AutoSaveManager committed event', async () => {
+      const mockAutoSave = createMockAutoSaveManager()
+
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 0, initialSyncDelayMs: 0 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        mockNetworkProvider,
+      )
+      syncManager.start()
+      syncManager.connectAutoSaveManager(mockAutoSave as never)
+
+      expect(mockGitAbstraction.sync).not.toHaveBeenCalled()
+
+      mockAutoSave.emit('committed', { commitOid: 'abc123', files: ['test.md'], message: 'test' })
+
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(mockGitAbstraction.sync).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(600)
+      expect(mockGitAbstraction.sync).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not trigger immediate sync when offline', async () => {
+      const mockAutoSave = createMockAutoSaveManager()
+      const offlineProvider = createMockNetworkProvider(false)
+
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 0, initialSyncDelayMs: 0 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        offlineProvider,
+      )
+      syncManager.start()
+      syncManager.connectAutoSaveManager(mockAutoSave as never)
+
+      mockAutoSave.emit('committed', { commitOid: 'abc123', files: ['test.md'], message: 'test' })
+
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockGitAbstraction.sync).not.toHaveBeenCalled()
+    })
+  })
+
+  // ─── 10. TASK006: NetworkMonitor Integration Tests ──────────────────
+
+  describe('TASK006: NetworkMonitor Integration', () => {
+    let fetchSpy: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      fetchSpy = vi.fn()
+      vi.stubGlobal('fetch', fetchSpy)
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('should trigger sync after NetworkMonitor reconnected event', async () => {
+      fetchSpy.mockResolvedValue({ ok: true })
+
+      const networkMonitor = new NetworkMonitor({ checkIntervalMs: 100000 })
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 0, reconnectSyncDelayMs: 5000, initialSyncDelayMs: 0 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        mockNetworkProvider,
+        networkMonitor,
+      )
+      syncManager.start()
+
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(10000)
+
+      mockGitAbstraction.sync.mockClear()
+
+      networkMonitor.emit('reconnected')
+
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(mockGitAbstraction.sync).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(mockGitAbstraction.sync).toHaveBeenCalledTimes(1)
+    })
+
+    it('should update status to offline on NetworkMonitor disconnected event', () => {
+      const networkMonitor = new NetworkMonitor({ checkIntervalMs: 100000 })
+
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 0, initialSyncDelayMs: 0 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        mockNetworkProvider,
+        networkMonitor,
+      )
+      syncManager.start()
+
+      const statusSpy = vi.fn()
+      syncManager.on('status:changed', statusSpy)
+
+      networkMonitor.emit('disconnected')
+
+      expect(syncManager.getCurrentStatus()).toBe('offline')
+      expect(statusSpy).toHaveBeenCalledWith(expect.objectContaining({ status: 'offline' }))
+    })
+
+    it('should sync isOnline flag on NetworkMonitor status-changed event', () => {
+      const networkMonitor = new NetworkMonitor({ checkIntervalMs: 100000 })
+
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 0, initialSyncDelayMs: 0 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        mockNetworkProvider,
+        networkMonitor,
+      )
+      syncManager.start()
+
+      expect(syncManager.getIsOnline()).toBe(true)
+
+      networkMonitor.emit('status-changed', false)
+      expect(syncManager.getIsOnline()).toBe(false)
+
+      networkMonitor.emit('status-changed', true)
+      expect(syncManager.getIsOnline()).toBe(true)
+    })
+
+    it('should stop NetworkMonitor on SyncManager stop()', () => {
+      fetchSpy.mockResolvedValue({ ok: true })
+      const networkMonitor = new NetworkMonitor({ checkIntervalMs: 10000 })
+
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 30000, initialSyncDelayMs: 0 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        mockNetworkProvider,
+        networkMonitor,
+      )
+      syncManager.start()
+
+      expect(fetchSpy).toHaveBeenCalled()
+
+      syncManager.stop()
+
+      const callCountBefore = fetchSpy.mock.calls.length
+      vi.advanceTimersByTime(30000)
+
+      expect(fetchSpy.mock.calls.length).toBe(callCountBefore)
+    })
+  })
+
+  // ─── 11. TASK006: Initial Sync Delay Tests ──────────────────────────
+
+  describe('TASK006: Initial Sync Delay', () => {
+    it('should trigger initial sync after initialSyncDelayMs', async () => {
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 0, initialSyncDelayMs: 5000 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        mockNetworkProvider,
+      )
+
+      syncManager.start()
+
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(mockGitAbstraction.sync).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(mockGitAbstraction.sync).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not trigger initial sync when initialSyncDelayMs is 0', async () => {
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 0, initialSyncDelayMs: 0 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        mockNetworkProvider,
+      )
+
+      syncManager.start()
+
+      await vi.advanceTimersByTimeAsync(10000)
+      expect(mockGitAbstraction.sync).not.toHaveBeenCalled()
+    })
+  })
+
+  // ─── 12. TASK006: Concurrency Protection Tests ──────────────────────
+
+  describe('TASK006: Concurrency Protection', () => {
+    it('should skip scheduled sync when AutoSave-triggered sync is in progress', async () => {
+      const mockAutoSave = {
+        on: vi.fn(),
+        off: vi.fn(),
+        emit: vi.fn(),
+        removeAllListeners: vi.fn(),
+      }
+
+      mockGitAbstraction.sync.mockImplementation(() => {
+        return new Promise<SyncResult>((resolve) => {
+          setTimeout(() => resolve({ success: true }), 40000)
+        })
+      })
+
+      syncManager = new SyncManager(
+        createTestConfig({ syncIntervalMs: 30000, initialSyncDelayMs: 0 }),
+        mockFileManager as never,
+        mockGitAbstraction as never,
+        mockNetworkProvider,
+      )
+      syncManager.start()
+      syncManager.connectAutoSaveManager(mockAutoSave as never)
+
+      const committedListener = mockAutoSave.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'committed',
+      )
+      expect(committedListener).toBeDefined()
+
+      const listener = committedListener![1] as () => void
+      listener()
+
+      await vi.advanceTimersByTimeAsync(2500)
+      expect(mockGitAbstraction.sync).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(27500)
+      expect(mockGitAbstraction.sync).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(10000)
+      expect(mockGitAbstraction.sync).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(20000)
+      expect(mockGitAbstraction.sync).toHaveBeenCalledTimes(2)
     })
   })
 })

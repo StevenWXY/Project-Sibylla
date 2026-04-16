@@ -7,6 +7,7 @@ import { FileHandler } from './ipc/handlers/file.handler'
 import { WorkspaceHandler } from './ipc/handlers/workspace.handler'
 import { WindowHandler } from './ipc/handlers/window.handler'
 import { SyncHandler } from './ipc/handlers/sync.handler'
+import { GitHandler } from './ipc/handlers/git.handler'
 import { AuthHandler } from './ipc/handlers/auth.handler'
 import { AIHandler } from './ipc/handlers/ai.handler'
 import { FileManager } from './services/file-manager'
@@ -14,6 +15,9 @@ import { ImportManager } from './services/import-manager'
 import { WorkspaceManager } from './services/workspace-manager'
 import { GitAbstraction } from './services/git-abstraction'
 import { SyncManager } from './services/sync-manager'
+import { ConflictResolver } from './services/conflict-resolver'
+import { NetworkMonitor } from './services/network-monitor'
+import { AutoSaveManager } from './services/auto-save-manager'
 import { FileWatcher } from './services/file-watcher'
 import { AuthClient } from './services/auth-client'
 import { TokenStorage } from './services/token-storage'
@@ -27,6 +31,9 @@ let mainWindow: BrowserWindow | null = null
 
 // Keep reference to SyncManager for cleanup on quit
 let syncManager: SyncManager | null = null
+
+// Keep reference to AutoSaveManager for cleanup on quit
+let autoSaveManager: AutoSaveManager | null = null
 
 // Keep reference to FileWatcher for cleanup on quit
 let fileWatcher: FileWatcher | null = null
@@ -72,6 +79,9 @@ if (!gotTheLock) {
       
       // Create SyncHandler
       const syncHandler = new SyncHandler()
+      
+      // Create GitHandler (for conflict operations)
+      const gitHandler = new GitHandler()
       
       // Create AuthHandler with AuthClient and TokenStorage
       const authClient = new AuthClient()
@@ -138,6 +148,12 @@ if (!gotTheLock) {
           
           // Create and start SyncManager
           const syncInterval = workspaceInfo.config.syncInterval ?? 30
+
+          // Create NetworkMonitor for proactive network detection
+          const networkMonitor = new NetworkMonitor({
+            checkUrl: 'https://api.sibylla.io/health',
+          })
+
           syncManager = new SyncManager(
             {
               workspaceDir: workspacePath,
@@ -146,13 +162,44 @@ if (!gotTheLock) {
             },
             fileManager,
             gitAbstraction,
+            undefined,
+            networkMonitor,
           )
           
           // Connect SyncHandler to SyncManager for IPC event bridging
           syncHandler.setSyncManager(syncManager)
           
+          // Create ConflictResolver and inject into GitHandler
+          const conflictResolver = new ConflictResolver(gitAbstraction, workspacePath)
+          gitHandler.setConflictResolver(conflictResolver)
+          gitHandler.setGitAbstraction(gitAbstraction)
+
+          // Listen for sync:conflict events and broadcast conflict details
+          syncManager.on('sync:conflict', async () => {
+            try {
+              const conflictInfos = await conflictResolver.getConflicts()
+              if (conflictInfos.length > 0) {
+                gitHandler.broadcastConflict(conflictInfos)
+              }
+            } catch (error: unknown) {
+              console.error('[Main] Failed to broadcast conflict details', error)
+            }
+          })
+          
           // Start automatic sync
           syncManager.start()
+
+          // Create and inject AutoSaveManager
+          autoSaveManager = new AutoSaveManager(
+            {},
+            fileManager,
+            gitAbstraction,
+            authorName,
+          )
+          fileHandler.setAutoSaveManager(autoSaveManager)
+
+          // Connect AutoSaveManager → SyncManager (TASK006)
+          syncManager.connectAutoSaveManager(autoSaveManager)
           
           // ── S4 FIX: Wire FileWatcher → SyncManager.notifyFileChanged() ──
           // Stop previous FileWatcher if any
@@ -198,6 +245,12 @@ if (!gotTheLock) {
           syncManager.stop()
           syncManager = null
         }
+
+        if (autoSaveManager) {
+          console.log('[Main] Destroying AutoSaveManager for workspace close')
+          autoSaveManager.destroy()
+          autoSaveManager = null
+        }
       })
       
       // Register all handlers
@@ -207,6 +260,7 @@ if (!gotTheLock) {
         fileHandler,
         workspaceHandler,
         syncHandler,
+        gitHandler,
         authHandler,
         aiHandler,
         windowHandler,
@@ -262,6 +316,11 @@ if (!gotTheLock) {
     if (syncManager) {
       syncManager.stop()
       syncManager = null
+    }
+    // Destroy AutoSaveManager if running
+    if (autoSaveManager) {
+      autoSaveManager.destroy()
+      autoSaveManager = null
     }
     // Cleanup IPC handlers
     ipcManager.cleanup()

@@ -3,6 +3,7 @@ import {
   Copy,
   FilePlus2,
   FolderPlus,
+  History,
   Pencil,
   Trash2,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ interface TreeContextMenuProps {
   onDelete: () => void
   onCreateFile: () => void
   onCreateFolder: () => void
+  onViewHistory?: () => void
 }
 
 interface MenuItem {
@@ -40,6 +42,7 @@ export function TreeContextMenu({
   onDelete,
   onCreateFile,
   onCreateFolder,
+  onViewHistory,
 }: TreeContextMenuProps) {
   const isFolder = node.type === 'folder'
 
@@ -77,6 +80,18 @@ export function TreeContextMenu({
         icon: <Copy className="h-3.5 w-3.5" />,
         action: onCopyPath,
       },
+    )
+
+    if (!isFolder && onViewHistory) {
+      baseItems.push({
+        key: 'view-history',
+        label: '查看历史',
+        icon: <History className="h-3.5 w-3.5" />,
+        action: onViewHistory,
+      })
+    }
+
+    baseItems.push(
       { key: 'sep-delete', label: '', icon: null, action: () => undefined, separator: true },
       {
         key: 'delete',
@@ -88,7 +103,7 @@ export function TreeContextMenu({
     )
 
     return baseItems
-  }, [isFolder, onCopyPath, onCreateFile, onCreateFolder, onDelete, onRename])
+  }, [isFolder, onCopyPath, onCreateFile, onCreateFolder, onDelete, onRename, onViewHistory])
 
   useEffect(() => {
     const handleClickOutside = () => onClose()

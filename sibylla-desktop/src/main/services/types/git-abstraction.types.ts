@@ -9,7 +9,17 @@
  * - No `any` types
  * - All interface properties are `readonly`
  * - Explicit return types on all public methods
- * 
+ */
+
+export type {
+  CommitInfo,
+  HistoryOptions,
+  DiffLine,
+  DiffHunk,
+  FileDiff,
+} from '../../../shared/types/git.types'
+
+/**
  * Design principles:
  * - Git invisible: No Git terminology exposed to users
  * - File-level collaboration: Minimum collaboration unit is file
@@ -90,113 +100,14 @@ export interface FileStatus {
  * categorized by their current state.
  */
 export interface GitStatus {
-  /** Files modified in working directory (unstaged) */
   readonly modified: readonly string[]
-
-  /** Files staged for commit */
   readonly staged: readonly string[]
-
-  /** New files not yet tracked by Git */
   readonly untracked: readonly string[]
-
-  /** Files deleted from working directory */
   readonly deleted: readonly string[]
 }
 
-/**
- * Commit information
- * 
- * Contains metadata about a single Git commit.
- * Timestamps are stored as Unix timestamps in milliseconds.
- */
-export interface CommitInfo {
-  /** Commit hash (SHA-1 OID) */
-  readonly oid: string
-
-  /** Commit message */
-  readonly message: string
-
-  /** Author name */
-  readonly authorName: string
-
-  /** Author email */
-  readonly authorEmail: string
-
-  /** Commit timestamp (Unix timestamp in milliseconds) */
-  readonly timestamp: number
-
-  /** Parent commit hashes */
-  readonly parents: readonly string[]
-}
-
-/**
- * Options for querying commit history
- */
-export interface HistoryOptions {
-  /** Maximum number of commits to return (default: 50) */
-  readonly depth?: number
-
-  /** Only include commits that affect this file path */
-  readonly filepath?: string
-
-  /** Starting ref to query from (default: 'HEAD') */
-  readonly ref?: string
-}
-
-/**
- * Single line in a diff hunk
- * 
- * Represents one line of change in a diff output.
- */
-export interface DiffLine {
-  /** Type of change: added, removed, or context (unchanged) */
-  readonly type: 'add' | 'delete' | 'context'
-
-  /** Line content */
-  readonly content: string
-}
-
-/**
- * A contiguous block of changes in a diff
- * 
- * Represents a hunk in unified diff format.
- */
-export interface DiffHunk {
-  /** Starting line number in the old file */
-  readonly oldStart: number
-
-  /** Number of lines in the old file */
-  readonly oldLines: number
-
-  /** Starting line number in the new file */
-  readonly newStart: number
-
-  /** Number of lines in the new file */
-  readonly newLines: number
-
-  /** Lines in this hunk */
-  readonly lines: readonly DiffLine[]
-}
-
-/**
- * File difference information
- * 
- * Contains the diff between two versions of a file,
- * including both the raw content and structured hunks.
- */
-export interface FileDiff {
-  /** Relative file path from workspace root */
-  readonly filepath: string
-
-  /** Content of the old version (empty string for new files) */
-  readonly oldContent: string
-
-  /** Content of the new version (empty string for deleted files) */
-  readonly newContent: string
-
-  /** Structured diff hunks */
-  readonly hunks: readonly DiffHunk[]
-}
+// CommitInfo, HistoryOptions, DiffLine, DiffHunk, FileDiff
+// are re-exported from shared/types/git.types.ts (see top of file)
 
 /**
  * Git abstraction error codes

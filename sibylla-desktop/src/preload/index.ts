@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 import type {
+  AutoSavedPayload,
+  ConflictInfo,
+  ConflictResolution,
   IPCResponse,
   SystemInfo,
   EchoRequest,
@@ -26,7 +29,13 @@ import type {
   ImportOptions,
   ImportResult,
   ImportProgress,
+  SaveFailedPayload,
+  MemberRole,
+  WorkspaceMember,
+  InviteRequest,
+  InviteResult,
 } from '../shared/types'
+import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
 
 /**
@@ -80,6 +89,12 @@ interface ElectronAPI {
     // File import
     import: (sourcePaths: string[], options?: ImportOptions) => Promise<IPCResponse<ImportResult>>
     onImportProgress: (callback: (data: ImportProgress) => void) => () => void
+
+    // Auto-save
+    notifyChange: (filePath: string, content: string) => void
+    onAutoSaved: (callback: (data: AutoSavedPayload) => void) => () => void
+    onSaveFailed: (callback: (data: SaveFailedPayload) => void) => () => void
+    retrySave: (filePath: string) => Promise<IPCResponse<void>>
   }
   
   // Workspace operations
@@ -93,12 +108,35 @@ interface ElectronAPI {
     getConfig: () => Promise<IPCResponse<WorkspaceConfig>>
     updateConfig: (updates: Partial<WorkspaceConfig>) => Promise<IPCResponse<void>>
     getMetadata: () => Promise<IPCResponse<WorkspaceMetadata>>
+
+    // Member management
+    getMembers: (workspaceId: string) => Promise<IPCResponse<WorkspaceMember[]>>
+    inviteMember: (workspaceId: string, request: InviteRequest) => Promise<IPCResponse<InviteResult>>
+    updateMemberRole: (workspaceId: string, userId: string, role: MemberRole) => Promise<IPCResponse<void>>
+    removeMember: (workspaceId: string, userId: string) => Promise<IPCResponse<void>>
   }
   
   // Sync operations
   sync: {
     force: () => Promise<IPCResponse<SyncResult>>
+    getState: () => Promise<IPCResponse<SyncStatusData>>
     onStatusChange: (callback: (data: SyncStatusData) => void) => () => void
+  }
+
+  // Git conflict operations
+  git: {
+    /** Get detailed conflict info for all conflicting files */
+    getConflicts: () => Promise<IPCResponse<ConflictInfo[]>>
+    /** Resolve a conflict with chosen strategy */
+    resolve: (resolution: ConflictResolution) => Promise<IPCResponse<string>>
+    /** Listen for conflict detection events (pushed on sync conflict) */
+    onConflictDetected: (callback: (conflicts: ConflictInfo[]) => void) => () => void
+    /** Get file version history */
+    history: (options?: HistoryOptions) => Promise<IPCResponse<readonly CommitInfo[]>>
+    /** Get diff between two versions of a file */
+    diff: (filepath: string, commitA?: string, commitB?: string) => Promise<IPCResponse<FileDiff>>
+    /** Restore file to a specific version */
+    restore: (filepath: string, commitSha: string) => Promise<IPCResponse<string>>
   }
 
   // AI operations
@@ -160,6 +198,11 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   // File import
   IPC_CHANNELS.FILE_IMPORT,
   IPC_CHANNELS.FILE_IMPORT_PROGRESS,
+  // Auto-save
+  IPC_CHANNELS.FILE_NOTIFY_CHANGE,
+  IPC_CHANNELS.FILE_AUTO_SAVED,
+  IPC_CHANNELS.FILE_SAVE_FAILED,
+  IPC_CHANNELS.FILE_RETRY_SAVE,
   // Workspace operations
   IPC_CHANNELS.WORKSPACE_CREATE,
   IPC_CHANNELS.WORKSPACE_OPEN,
@@ -170,9 +213,23 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.WORKSPACE_GET_CONFIG,
   IPC_CHANNELS.WORKSPACE_UPDATE_CONFIG,
   IPC_CHANNELS.WORKSPACE_GET_METADATA,
+  // Workspace member management
+  IPC_CHANNELS.WORKSPACE_GET_MEMBERS,
+  IPC_CHANNELS.WORKSPACE_INVITE_MEMBER,
+  IPC_CHANNELS.WORKSPACE_UPDATE_MEMBER_ROLE,
+  IPC_CHANNELS.WORKSPACE_REMOVE_MEMBER,
   // Sync operations
   IPC_CHANNELS.SYNC_FORCE,
   IPC_CHANNELS.SYNC_STATUS_CHANGED,
+  IPC_CHANNELS.SYNC_GET_STATE,
+  // Git conflict operations
+  IPC_CHANNELS.GIT_GET_CONFLICTS,
+  IPC_CHANNELS.GIT_RESOLVE,
+  IPC_CHANNELS.GIT_CONFLICT_DETECTED,
+  // Git version history operations
+  IPC_CHANNELS.GIT_HISTORY,
+  IPC_CHANNELS.GIT_DIFF,
+  IPC_CHANNELS.GIT_RESTORE,
   // Auth operations
   IPC_CHANNELS.AUTH_LOGIN,
   IPC_CHANNELS.AUTH_REGISTER,
@@ -366,6 +423,30 @@ const api: ElectronAPI = {
         ipcRenderer.removeListener(IPC_CHANNELS.FILE_IMPORT_PROGRESS, handler)
       }
     },
+
+    notifyChange: (filePath: string, content: string) => {
+      ipcRenderer.send(IPC_CHANNELS.FILE_NOTIFY_CHANGE, filePath, content)
+    },
+
+    onAutoSaved: (callback: (data: AutoSavedPayload) => void) => {
+      const handler = (_event: IpcRendererEvent, data: AutoSavedPayload) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.FILE_AUTO_SAVED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.FILE_AUTO_SAVED, handler)
+      }
+    },
+
+    onSaveFailed: (callback: (data: SaveFailedPayload) => void) => {
+      const handler = (_event: IpcRendererEvent, data: SaveFailedPayload) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.FILE_SAVE_FAILED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.FILE_SAVE_FAILED, handler)
+      }
+    },
+
+    retrySave: (filePath: string) => {
+      return safeInvoke<void>(IPC_CHANNELS.FILE_RETRY_SAVE, filePath)
+    },
   },
   
   // Workspace operations
@@ -405,6 +486,22 @@ const api: ElectronAPI = {
     getMetadata: async () => {
       return await safeInvoke<WorkspaceMetadata>(IPC_CHANNELS.WORKSPACE_GET_METADATA)
     },
+
+    getMembers: async (workspaceId: string) => {
+      return await safeInvoke<WorkspaceMember[]>(IPC_CHANNELS.WORKSPACE_GET_MEMBERS, workspaceId)
+    },
+
+    inviteMember: async (workspaceId: string, request: InviteRequest) => {
+      return await safeInvoke<InviteResult>(IPC_CHANNELS.WORKSPACE_INVITE_MEMBER, workspaceId, request)
+    },
+
+    updateMemberRole: async (workspaceId: string, userId: string, role: MemberRole) => {
+      return await safeInvoke<void>(IPC_CHANNELS.WORKSPACE_UPDATE_MEMBER_ROLE, workspaceId, userId, role)
+    },
+
+    removeMember: async (workspaceId: string, userId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.WORKSPACE_REMOVE_MEMBER, workspaceId, userId)
+    },
   },
   
   // Sync operations
@@ -412,9 +509,44 @@ const api: ElectronAPI = {
     force: async () => {
       return await safeInvoke<SyncResult>(IPC_CHANNELS.SYNC_FORCE)
     },
+
+    getState: async () => {
+      return await safeInvoke<SyncStatusData>(IPC_CHANNELS.SYNC_GET_STATE)
+    },
     
     onStatusChange: (callback: (data: SyncStatusData) => void) => {
       return api.on(IPC_CHANNELS.SYNC_STATUS_CHANGED, callback as (...args: unknown[]) => void)
+    },
+  },
+
+  // Git conflict operations
+  git: {
+    getConflicts: async () => {
+      return await safeInvoke<ConflictInfo[]>(IPC_CHANNELS.GIT_GET_CONFLICTS)
+    },
+
+    resolve: async (resolution: ConflictResolution) => {
+      return await safeInvoke<string>(IPC_CHANNELS.GIT_RESOLVE, resolution)
+    },
+
+    onConflictDetected: (callback: (conflicts: ConflictInfo[]) => void) => {
+      const handler = (_event: IpcRendererEvent, conflicts: ConflictInfo[]) => callback(conflicts)
+      ipcRenderer.on(IPC_CHANNELS.GIT_CONFLICT_DETECTED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.GIT_CONFLICT_DETECTED, handler)
+      }
+    },
+
+    history: async (options?: HistoryOptions) => {
+      return await safeInvoke<readonly CommitInfo[]>(IPC_CHANNELS.GIT_HISTORY, options)
+    },
+
+    diff: async (filepath: string, commitA?: string, commitB?: string) => {
+      return await safeInvoke<FileDiff>(IPC_CHANNELS.GIT_DIFF, filepath, commitA, commitB)
+    },
+
+    restore: async (filepath: string, commitSha: string) => {
+      return await safeInvoke<string>(IPC_CHANNELS.GIT_RESTORE, filepath, commitSha)
     },
   },
   

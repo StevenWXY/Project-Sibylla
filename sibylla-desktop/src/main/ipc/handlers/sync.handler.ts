@@ -60,6 +60,10 @@ export class SyncHandler extends IpcHandler {
       IPC_CHANNELS.SYNC_FORCE,
       this.safeHandle(this.handleForceSync.bind(this)),
     )
+    ipcMain.handle(
+      IPC_CHANNELS.SYNC_GET_STATE,
+      this.safeHandle(this.handleGetState.bind(this)),
+    )
 
     logger.info('[SyncHandler] All handlers registered')
   }
@@ -69,6 +73,7 @@ export class SyncHandler extends IpcHandler {
    */
   override cleanup(): void {
     ipcMain.removeHandler(IPC_CHANNELS.SYNC_FORCE)
+    ipcMain.removeHandler(IPC_CHANNELS.SYNC_GET_STATE)
     this.removeStatusListener()
     logger.info('[SyncHandler] Cleanup completed')
   }
@@ -89,6 +94,17 @@ export class SyncHandler extends IpcHandler {
 
     logger.info('[SyncHandler] Force sync requested')
     return this.syncManager.forceSync()
+  }
+
+  private handleGetState(_event: IpcMainInvokeEvent): SyncStatusData {
+    if (!this.syncManager) {
+      throw new Error('SyncManager not initialized')
+    }
+
+    return {
+      status: this.syncManager.getCurrentStatus(),
+      timestamp: Date.now(),
+    }
   }
 
   // ─── Broadcasting ─────────────────────────────────────────────────────

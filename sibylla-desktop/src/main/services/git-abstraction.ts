@@ -1110,6 +1110,59 @@ export class GitAbstraction extends EventEmitter {
   // ─── Utility Methods ──────────────────────────────────────────────────
 
   /**
+   * Read file content at a specific commit (public API)
+   *
+   * Wraps the private getFileContent() method with path normalization
+   * and structured logging for safe external consumption.
+   *
+   * @param filepath - Path to the file (absolute or relative to workspace)
+   * @param ref - Commit OID or ref name to read from
+   * @returns The file content as a UTF-8 string, or empty string if not found
+   * @throws {GitAbstractionError} If the repository is not initialized
+   * @throws {GitAbstractionError} If the file path is invalid
+   */
+  async readFileAtCommit(filepath: string, ref: string): Promise<string> {
+    const normalizedPath = this.normalizePath(filepath)
+    logger.debug(`${LOG_PREFIX} Reading file at commit`, { filepath: normalizedPath, ref })
+
+    await this.ensureInitialized()
+    return this.getFileContent(normalizedPath, ref)
+  }
+
+  /**
+   * Restore a file to the content at a specific commit
+   *
+   * Writes the file content from the specified commit to the working directory,
+   * stages it, and creates a new commit. This preserves history (not a revert).
+   *
+   * @param filepath - Path to the file (absolute or relative to workspace)
+   * @param commitSha - The SHA-1 OID of the commit to restore from
+   * @returns The SHA-1 OID of the newly created commit
+   * @throws {GitAbstractionError} If the repository is not initialized
+   * @throws {GitAbstractionError} If the file path is invalid
+   * @throws {GitAbstractionError} If there are no changes to commit (content identical)
+   */
+  async restoreVersion(filepath: string, commitSha: string): Promise<string> {
+    const normalizedPath = this.normalizePath(filepath)
+    logger.info(`${LOG_PREFIX} Restoring file to version`, { filepath: normalizedPath, commitSha })
+
+    await this.ensureInitialized()
+
+    const content = await this.getFileContent(normalizedPath, commitSha)
+    const fullPath = path.join(this.workspaceDir, normalizedPath)
+    await fs.promises.writeFile(fullPath, content, 'utf-8')
+
+    await this.stageFile(normalizedPath)
+
+    const shortSha = commitSha.slice(0, 7)
+    const message = `恢复 ${path.basename(normalizedPath)} 到版本 ${shortSha}`
+    const oid = await this.commit(message)
+
+    logger.info(`${LOG_PREFIX} File restored`, { filepath: normalizedPath, commitOid: oid })
+    return oid
+  }
+
+  /**
    * Get the current branch name
    *
    * Reads the symbolic ref that HEAD points to and returns the branch name.
@@ -1466,15 +1519,17 @@ export class GitAbstraction extends EventEmitter {
 
           // Check for conflicts
           if (mergeResult.tree === undefined) {
+            const conflictFiles = await this.enumerateConflictFiles()
             const elapsed = Date.now() - startTime
             logger.warn(`${LOG_PREFIX} Pull completed with conflicts`, {
               elapsedMs: elapsed,
+              conflictCount: conflictFiles.length,
             })
 
             return {
               success: false,
               hasConflicts: true,
-              conflicts: [],
+              conflicts: conflictFiles,
             }
           }
 
@@ -2181,5 +2236,44 @@ export class GitAbstraction extends EventEmitter {
     } catch {
       return []
     }
+  }
+
+  /**
+   * Enumerate files containing conflict markers in the working directory
+   *
+   * After isomorphic-git merge fails with conflicts, conflict markers
+   * (<<<<<<< HEAD, =======, >>>>>>>) remain in the working tree files.
+   * This method scans modified files for these markers.
+   *
+   * @returns Array of workspace-relative file paths containing conflict markers
+   */
+  private async enumerateConflictFiles(): Promise<string[]> {
+    const conflictFiles: string[] = []
+
+    try {
+      const status = await this.getStatus()
+
+      const candidates = [...status.modified, ...status.staged]
+      for (const filepath of candidates) {
+        try {
+          const fullPath = path.join(this.workspaceDir, filepath)
+          const content = await fs.promises.readFile(fullPath, 'utf-8')
+          if (content.includes('<<<<<<< ') && content.includes('=======')) {
+            conflictFiles.push(filepath)
+          }
+        } catch {
+          // File may not be readable — skip silently
+        }
+      }
+
+      // Also scan untracked files that might have conflict markers
+      // (edge case: new file with conflict content)
+    } catch (error: unknown) {
+      logger.warn(`${LOG_PREFIX} Failed to enumerate conflict files`, {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
+    return conflictFiles
   }
 }
