@@ -5,7 +5,6 @@ import { MemberList } from './MemberList'
 type SettingsTab = 'members' | 'general'
 
 interface WorkspaceSettingsProps {
-  isOpen: boolean
   onClose: () => void
 }
 
@@ -32,7 +31,7 @@ function TabButton({
   )
 }
 
-export function WorkspaceSettings({ isOpen, onClose }: WorkspaceSettingsProps) {
+export function WorkspaceSettings({ onClose }: WorkspaceSettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('members')
 
   return (

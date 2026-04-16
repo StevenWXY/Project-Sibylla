@@ -37,7 +37,7 @@ export function ConflictCompareView({
   useEffect(() => {
     setManualContent(conflict.localContent)
     setActiveTab('compare')
-  }, [conflict.filePath])
+  }, [conflict.filePath, conflict.localContent])
 
   const handleManualChange = useCallback((content: string) => {
     setManualContent(content)

@@ -136,7 +136,6 @@ export const Header = React.memo(function Header() {
 
       {showWorkspaceSettings && (
         <WorkspaceSettings
-          isOpen={showWorkspaceSettings}
           onClose={() => setShowWorkspaceSettings(false)}
         />
       )}
