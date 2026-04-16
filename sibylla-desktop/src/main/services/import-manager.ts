@@ -13,7 +13,7 @@
 import * as path from 'path'
 import { promises as fs } from 'fs'
 import mammoth from 'mammoth'
-import pdfParse from 'pdf-parse'
+import * as pdfParse from 'pdf-parse'
 import { FileManager } from './file-manager'
 import { logger } from '../utils/logger'
 import type {
