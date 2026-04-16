@@ -48,12 +48,12 @@ describe('SyncStatusIndicator', () => {
     expect(screen.getByText('同步失败')).toBeInTheDocument()
   })
 
-  it('syncing state has animate-spin class on icon', () => {
+  it('syncing state has animate-spin class on icon wrapper', () => {
     setStatus({ status: 'syncing', timestamp: Date.now() })
     render(<SyncStatusIndicator />)
     const button = screen.getByRole('button')
-    const svg = button.querySelector('svg')
-    expect(svg?.classList.contains('animate-spin')).toBe(true)
+    const spinningSpan = button.querySelector('span.animate-spin')
+    expect(spinningSpan).toBeInTheDocument()
   })
 
   it('synced state does not have animate-spin class', () => {

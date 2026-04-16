@@ -28,8 +28,13 @@ vi.mock('electron', () => ({
     listeners: (channel: string) => {
       const handler = mockHandlers.get(channel)
       return handler ? [handler] : []
-    }
-  }
+    },
+    on: () => {},
+    removeAllListeners: () => {},
+  },
+  BrowserWindow: {
+    getAllWindows: () => [],
+  },
 }))
 
 describe('FileHandler IPC Integration', () => {

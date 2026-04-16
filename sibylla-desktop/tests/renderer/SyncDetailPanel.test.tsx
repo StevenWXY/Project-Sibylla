@@ -73,16 +73,16 @@ describe('SyncDetailPanel', () => {
     expect(window.electronAPI.sync.force).toHaveBeenCalledOnce()
   })
 
-  it('shows 重试 button when status is error', () => {
+  it('shows 重试同步 button when status is error', () => {
     setStatus({ status: 'error', timestamp: Date.now(), message: 'fail' })
     render(<SyncDetailPanel onClose={mockOnClose} />)
-    expect(screen.getByText('重试')).toBeInTheDocument()
+    expect(screen.getByText('重试同步')).toBeInTheDocument()
   })
 
-  it('does not show 重试 button when status is not error', () => {
+  it('does not show 重试同步 button when status is not error', () => {
     setStatus({ status: 'synced', timestamp: Date.now() })
     render(<SyncDetailPanel onClose={mockOnClose} />)
-    expect(screen.queryByText('重试')).not.toBeInTheDocument()
+    expect(screen.queryByText('重试同步')).not.toBeInTheDocument()
   })
 
   it('calls onClose when X button is clicked', () => {

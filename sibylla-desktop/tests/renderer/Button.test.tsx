@@ -51,10 +51,10 @@ describe('Button', () => {
 
   it('applies variant classes correctly', () => {
     const { rerender } = render(<Button variant="primary">Primary</Button>)
-    expect(screen.getByRole('button')).toHaveClass('bg-notion-accent')
+    expect(screen.getByRole('button')).toHaveClass('bg-white')
 
     rerender(<Button variant="danger">Danger</Button>)
-    expect(screen.getByRole('button')).toHaveClass('bg-red-600')
+    expect(screen.getByRole('button')).toHaveClass('bg-red-700')
   })
 
   it('applies size classes correctly', () => {

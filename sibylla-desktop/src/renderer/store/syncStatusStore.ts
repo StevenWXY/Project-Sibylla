@@ -31,7 +31,7 @@ export const useSyncStatusStore = create<SyncStatusStore>()(
       setState: (data) =>
         set((state) => ({
           status: data.status,
-          lastSyncedAt: data.status === 'synced' ? data.timestamp : state.lastSyncedAt,
+          lastSyncedAt: data.status === 'synced' ? data.timestamp : null,
           errorMessage: data.message ?? null,
           conflictFiles: data.conflictFiles ?? [],
         }), false, 'syncStatus/setState'),
