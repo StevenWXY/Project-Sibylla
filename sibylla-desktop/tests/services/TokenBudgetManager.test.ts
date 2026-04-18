@@ -44,7 +44,7 @@ describe('Token Budget Management', () => {
     ])
     fileManager = createMockFileManager(files)
 
-    const engine = new ContextEngine(fileManager, memoryManager, {
+    const engine = new ContextEngine(fileManager, memoryManager, undefined, {
       maxContextTokens: 16000,
       systemPromptReserve: 2000,
     })
@@ -67,7 +67,7 @@ describe('Token Budget Management', () => {
     ])
     fileManager = createMockFileManager(files)
 
-    const engine = new ContextEngine(fileManager, memoryManager, {
+    const engine = new ContextEngine(fileManager, memoryManager, undefined, {
       maxContextTokens: 500,
       systemPromptReserve: 100,
     })
@@ -88,7 +88,7 @@ describe('Token Budget Management', () => {
     ])
     fileManager = createMockFileManager(files)
 
-    const engine = new ContextEngine(fileManager, memoryManager, {
+    const engine = new ContextEngine(fileManager, memoryManager, undefined, {
       maxContextTokens: 50,
       systemPromptReserve: 10,
     })
@@ -129,7 +129,7 @@ describe('Token Budget Management', () => {
     ])
     fileManager = createMockFileManager(files)
 
-    const engine = new ContextEngine(fileManager, memoryManager, {
+    const engine = new ContextEngine(fileManager, memoryManager, undefined, {
       maxContextTokens: 1000,
       systemPromptReserve: 200,
     })

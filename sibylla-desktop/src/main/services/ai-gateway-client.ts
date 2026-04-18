@@ -86,7 +86,7 @@ export class AiGatewayClient {
               yield content
             }
           } catch {
-            // skip malformed SSE data chunks
+            yield data
           }
         }
       }
@@ -102,7 +102,7 @@ export class AiGatewayClient {
               yield content
             }
           } catch {
-            // skip malformed trailing SSE data
+            yield data
           }
         }
       }
