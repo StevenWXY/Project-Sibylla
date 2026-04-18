@@ -43,8 +43,7 @@ export default defineConfig({
         'isomorphic-git/http/node',
         'diff',
         
-        // To be added in future phases
-        // 'better-sqlite3',
+        'better-sqlite3',
       ]
     },
     

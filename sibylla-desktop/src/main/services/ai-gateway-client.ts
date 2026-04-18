@@ -36,6 +36,81 @@ export class AiGatewayClient {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
   }
 
+  async *chatStream(
+    request: AiGatewayChatRequest,
+    accessToken?: string,
+    signal?: AbortSignal
+  ): AsyncGenerator<string, void, undefined> {
+    const response = await fetch(`${this.baseUrl}/api/v1/ai/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ ...request, stream: true }),
+      signal,
+    })
+
+    if (!response.ok) {
+      const fallbackText = await response.text()
+      throw new Error(`AI gateway stream request failed: ${response.status} ${fallbackText}`)
+    }
+
+    if (!response.body) {
+      throw new Error('AI gateway stream response body is null')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data: ')) continue
+          const data = trimmed.slice(6)
+          if (data === '[DONE]') return
+
+          try {
+            const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> }
+            const content = parsed.choices?.[0]?.delta?.content
+            if (content) {
+              yield content
+            }
+          } catch {
+            // skip malformed SSE data chunks
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        const trimmed = buffer.trim()
+        if (trimmed.startsWith('data: ') && trimmed.slice(6) !== '[DONE]') {
+          const data = trimmed.slice(6)
+          try {
+            const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> }
+            const content = parsed.choices?.[0]?.delta?.content
+            if (content) {
+              yield content
+            }
+          } catch {
+            // skip malformed trailing SSE data
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
   async chat(request: AiGatewayChatRequest, accessToken?: string): Promise<AiGatewayChatResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/api/v1/ai/chat`, {

@@ -10,6 +10,8 @@ import { SyncHandler } from './ipc/handlers/sync.handler'
 import { GitHandler } from './ipc/handlers/git.handler'
 import { AuthHandler } from './ipc/handlers/auth.handler'
 import { AIHandler } from './ipc/handlers/ai.handler'
+import { SearchHandler } from './ipc/handlers/search.handler'
+import { MemoryHandler } from './ipc/handlers/memory.handler'
 import { FileManager } from './services/file-manager'
 import { ImportManager } from './services/import-manager'
 import { WorkspaceManager } from './services/workspace-manager'
@@ -24,6 +26,8 @@ import { TokenStorage } from './services/token-storage'
 import { MemoryManager } from './services/memory-manager'
 import { LocalRagEngine } from './services/local-rag-engine'
 import { AiGatewayClient } from './services/ai-gateway-client'
+import { DatabaseManager } from './services/database-manager'
+import { LocalSearchEngine } from './services/local-search-engine'
 import type { WorkspaceInfo } from '../shared/types'
 
 // Keep reference to main window to prevent garbage collection
@@ -34,6 +38,12 @@ let syncManager: SyncManager | null = null
 
 // Keep reference to AutoSaveManager for cleanup on quit
 let autoSaveManager: AutoSaveManager | null = null
+
+// Keep reference to DatabaseManager for cleanup on quit
+let databaseManager: DatabaseManager | null = null
+
+// Keep reference to LocalSearchEngine for FileWatcher forwarding
+let localSearchEngineRef: import('./services/local-search-engine').LocalSearchEngine | null = null
 
 // Keep reference to FileWatcher for cleanup on quit
 let fileWatcher: FileWatcher | null = null
@@ -98,10 +108,18 @@ if (!gotTheLock) {
         localRagEngine,
         tokenStorage,
         workspaceManager,
+        fileManager,
       )
       
       // Create WindowHandler (window reference set after createMainWindow)
       const windowHandler = new WindowHandler()
+
+      // Create MemoryHandler
+      const memoryHandler = new MemoryHandler(
+        memoryManager,
+        localRagEngine,
+        workspaceManager,
+      )
       
       // ─── Workspace lifecycle hooks ────────────────────────────────
       // Wire up SyncManager initialization/teardown to workspace open/close
@@ -215,6 +233,12 @@ if (!gotTheLock) {
             if (event.type === 'add' || event.type === 'change' || event.type === 'unlink') {
               currentSyncManager.notifyFileChanged(event.path)
             }
+            // Notify SkillEngine about skill file changes
+            aiHandler.handleFileChangeForSkills(event)
+            // Forward to LocalSearchEngine for incremental index updates
+            if (localSearchEngineRef) {
+              void localSearchEngineRef.onFileChange(event)
+            }
           })
           
           console.log('[Main] All services started for workspace', { path: workspacePath })
@@ -223,6 +247,22 @@ if (!gotTheLock) {
           memoryManager.setWorkspacePath(workspacePath)
           localRagEngine.setWorkspacePath(workspacePath)
           await localRagEngine.rebuildIndex()
+          await aiHandler.initSkills()
+
+          // Initialize fulltext search (DatabaseManager + LocalSearchEngine)
+          databaseManager = new DatabaseManager(workspacePath)
+          localSearchEngineRef = new LocalSearchEngine(
+            databaseManager,
+            fileManager,
+            workspacePath,
+          )
+          const searchHandler = new SearchHandler(localSearchEngineRef)
+          ipcManager.registerHandler(searchHandler)
+
+          // Start initial index build in background
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            await localSearchEngineRef.initialize(mainWindow)
+          }
         } catch (error) {
           console.error('[Main] Failed to initialize workspace services', error)
           // Non-fatal: workspace can still be used without sync
@@ -232,6 +272,16 @@ if (!gotTheLock) {
       workspaceHandler.onWorkspaceClosed(async () => {
         memoryManager.setWorkspacePath(null)
         localRagEngine.setWorkspacePath(null)
+
+        // Cleanup search engine
+        if (localSearchEngineRef) {
+          localSearchEngineRef.dispose()
+          localSearchEngineRef = null
+        }
+        if (databaseManager) {
+          databaseManager.close()
+          databaseManager = null
+        }
 
         // Stop FileWatcher
         if (fileWatcher) {
@@ -263,6 +313,7 @@ if (!gotTheLock) {
         gitHandler,
         authHandler,
         aiHandler,
+        memoryHandler,
         windowHandler,
       ]
       
@@ -321,6 +372,15 @@ if (!gotTheLock) {
     if (autoSaveManager) {
       autoSaveManager.destroy()
       autoSaveManager = null
+    }
+    // Cleanup DatabaseManager if running
+    if (databaseManager) {
+      databaseManager.close()
+      databaseManager = null
+    }
+    if (localSearchEngineRef) {
+      localSearchEngineRef.dispose()
+      localSearchEngineRef = null
     }
     // Cleanup IPC handlers
     ipcManager.cleanup()

@@ -1,3 +1,5 @@
+import type { DiffHunk } from '../../../shared/types/git.types'
+
 export type EditorMode = 'edit' | 'preview' | 'split'
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 export type ChatRole = 'user' | 'assistant'
@@ -9,6 +11,9 @@ export interface SearchResultItem {
   path: string
   lineNumber: number
   preview: string
+  snippet: string
+  rank: number
+  matchCount: number
 }
 
 export interface TaskItem {
@@ -28,6 +33,18 @@ export interface NotificationItem {
   read: boolean
 }
 
+export interface ParsedFileDiff {
+  filePath: string
+  hunks: DiffHunk[]
+  fullNewContent: string
+  fullOldContent: string
+  stats: {
+    additions: number
+    deletions: number
+  }
+}
+
+/** @deprecated Use ParsedFileDiff[] via ChatMessage.diffProposals instead */
 export interface DiffProposal {
   targetPath: string
   before: string
@@ -41,7 +58,19 @@ export interface ChatMessage {
   createdAt: number
   contextSources?: string[]
   streaming?: boolean
+  /** @deprecated Use diffProposals instead */
   diffProposal?: DiffProposal | null
+  diffProposals?: ParsedFileDiff[]
+  memoryState?: {
+    tokenCount: number
+    tokenDebt: number
+    flushTriggered: boolean
+  } | null
+  ragHits?: Array<{
+    path: string
+    score: number
+    snippet: string
+  }>
 }
 
 /** @deprecated 使用 tabStore.TabInfo 替代 */

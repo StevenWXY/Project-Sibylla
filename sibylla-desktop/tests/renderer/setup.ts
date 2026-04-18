@@ -68,6 +68,54 @@ const mockElectronAPI = {
     close: vi.fn(),
     toggleFullscreen: vi.fn(),
   },
+  ai: {
+    chat: vi.fn(),
+    stream: vi.fn().mockReturnValue('mock-stream-id'),
+    abortStream: vi.fn(),
+    onStreamChunk: vi.fn().mockReturnValue(vi.fn()),
+    onStreamEnd: vi.fn().mockReturnValue(vi.fn()),
+    onStreamError: vi.fn().mockReturnValue(vi.fn()),
+    embed: vi.fn(),
+    contextFiles: vi.fn().mockResolvedValue({
+      success: true,
+      data: [
+        { path: 'docs/prd.md', name: 'prd.md', type: 'file' as const, extension: 'md' },
+        { path: 'CLAUDE.md', name: 'CLAUDE.md', type: 'file' as const, extension: 'md' },
+      ],
+      timestamp: Date.now(),
+    }),
+    skillList: vi.fn().mockResolvedValue({
+      success: true,
+      data: [
+        { id: 'writing-prd', name: '撰写 PRD', description: '按照产品需求文档标准模板撰写 PRD', scenarios: '产品需求文档撰写' },
+        { id: 'writing-design', name: '技术方案撰写', description: '按照技术方案标准模板撰写设计文档', scenarios: '技术方案设计' },
+      ],
+      timestamp: Date.now(),
+    }),
+    skillSearch: vi.fn().mockResolvedValue({
+      success: true,
+      data: [
+        { id: 'writing-prd', name: '撰写 PRD', description: '按照产品需求文档标准模板撰写 PRD', scenarios: '产品需求文档撰写' },
+      ],
+      timestamp: Date.now(),
+    }),
+  },
+  memory: {
+    snapshot: vi.fn().mockResolvedValue({ success: true, data: { content: '', tokenCount: 0, tokenDebt: 0 }, timestamp: Date.now() }),
+    update: vi.fn().mockResolvedValue({ success: true, data: { content: '', tokenCount: 0, tokenDebt: 0 }, timestamp: Date.now() }),
+    flush: vi.fn().mockResolvedValue({ success: true, data: { triggered: false, thresholdTokens: 0, sessionTokens: 0, snapshot: { content: '', tokenCount: 0, tokenDebt: 0 } }, timestamp: Date.now() }),
+    queryDailyLog: vi.fn().mockResolvedValue({ success: true, data: [], timestamp: Date.now() }),
+  },
+  rag: {
+    search: vi.fn().mockResolvedValue({ success: true, data: [], timestamp: Date.now() }),
+    rebuild: vi.fn().mockResolvedValue({ success: true, data: undefined, timestamp: Date.now() }),
+  },
+  search: {
+    query: vi.fn().mockResolvedValue({ success: true, data: [], timestamp: Date.now() }),
+    indexStatus: vi.fn().mockResolvedValue({ success: true, data: { totalFiles: 0, indexedFiles: 0, indexSizeBytes: 0, lastIndexedAt: null, isIndexing: false }, timestamp: Date.now() }),
+    reindex: vi.fn().mockResolvedValue({ success: true, data: undefined, timestamp: Date.now() }),
+    onIndexProgress: vi.fn().mockReturnValue(vi.fn()),
+  },
   on: vi.fn(() => vi.fn()),
   off: vi.fn(),
 }

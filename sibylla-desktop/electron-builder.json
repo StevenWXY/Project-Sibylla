@@ -9,6 +9,9 @@
     "dist/**/*",
     "package.json"
   ],
+  "asarUnpack": [
+    "node_modules/better-sqlite3/**/*"
+  ],
   "mac": {
     "target": ["dmg", "zip"],
     "category": "public.app-category.productivity",

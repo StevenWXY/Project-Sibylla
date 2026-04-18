@@ -139,10 +139,27 @@ export const IPC_CHANNELS = {
   /** Main → Renderer: Push conflict detection event (webContents.send) */
   GIT_CONFLICT_DETECTED: 'git:conflictDetected',
   
-  // AI operations (reserved for future implementation)
+  // AI operations
   AI_CHAT: 'ai:chat',
   AI_STREAM: 'ai:stream',
+  AI_STREAM_CHUNK: 'ai:stream:chunk',
+  AI_STREAM_END: 'ai:stream:end',
+  AI_STREAM_ERROR: 'ai:stream:error',
+  AI_STREAM_ABORT: 'ai:stream:abort',
   AI_EMBED: 'ai:embed',
+  AI_CONTEXT_FILES: 'ai:context:files',
+  AI_SKILL_LIST: 'ai:skill:list',
+  AI_SKILL_SEARCH: 'ai:skill:search',
+
+  // Memory operations
+  MEMORY_SNAPSHOT: 'memory:snapshot',
+  MEMORY_UPDATE: 'memory:update',
+  MEMORY_FLUSH: 'memory:flush',
+  MEMORY_DAILY_LOG_QUERY: 'memory:daily-log:query',
+
+  // RAG operations
+  RAG_SEARCH: 'rag:search',
+  RAG_REBUILD: 'rag:rebuild',
   
   // Sync operations (SyncManager layer — distinct from git:sync which is direct Git sync)
   /** Renderer → Main: Force trigger a sync operation */
@@ -177,6 +194,12 @@ export const IPC_CHANNELS = {
   FILE_SAVE_FAILED: 'file:saveFailed',
   /** Renderer → Main: Manual retry for a failed save (invoke/handle) */
   FILE_RETRY_SAVE: 'file:retrySave',
+
+  // Search operations (local fulltext search via SQLite FTS5)
+  SEARCH_QUERY: 'search:query',
+  SEARCH_INDEX_STATUS: 'search:indexStatus',
+  SEARCH_REINDEX: 'search:reindex',
+  SEARCH_INDEX_PROGRESS: 'search:indexProgress',
 
   // Event notifications (main process → renderer process)
   NOTIFICATION: 'notification',
@@ -291,8 +314,30 @@ export interface IPCChannelMap {
 
   // AI operations
   [IPC_CHANNELS.AI_CHAT]: { params: [request: AIChatRequest | string]; return: AIChatResponse }
-  [IPC_CHANNELS.AI_STREAM]: { params: [request: AIChatRequest | string]; return: AIChatResponse }
+  [IPC_CHANNELS.AI_STREAM]: { params: [request: AIStreamRequest]; return: void }
+  // AI_STREAM_CHUNK / END / ERROR / ABORT: send/on (event push), not in IPCChannelMap
   [IPC_CHANNELS.AI_EMBED]: { params: [request: AIEmbedRequest | string]; return: AIEmbedResponse }
+  [IPC_CHANNELS.AI_CONTEXT_FILES]: { params: [query: string, limit?: number]; return: ContextFileInfo[] }
+
+  // Skill operations
+  [IPC_CHANNELS.AI_SKILL_LIST]: { params: []; return: SkillSummary[] }
+  [IPC_CHANNELS.AI_SKILL_SEARCH]: { params: [params: SkillSearchParams]; return: SkillSummary[] }
+
+  // Memory operations
+  [IPC_CHANNELS.MEMORY_SNAPSHOT]: { params: []; return: MemorySnapshotResponse }
+  [IPC_CHANNELS.MEMORY_UPDATE]: { params: [request: MemoryUpdateRequest]; return: MemorySnapshotResponse }
+  [IPC_CHANNELS.MEMORY_FLUSH]: { params: [request: MemoryFlushRequest]; return: MemoryFlushResponse }
+  [IPC_CHANNELS.MEMORY_DAILY_LOG_QUERY]: { params: [request: DailyLogQueryRequest]; return: DailyLogEntry[] }
+
+  // RAG operations
+  [IPC_CHANNELS.RAG_SEARCH]: { params: [request: RagSearchRequest]; return: RagSearchHit[] }
+  [IPC_CHANNELS.RAG_REBUILD]: { params: []; return: void }
+
+  // Search operations
+  [IPC_CHANNELS.SEARCH_QUERY]: { params: [params: SearchQueryParams]; return: SearchResult[] }
+  [IPC_CHANNELS.SEARCH_INDEX_STATUS]: { params: []; return: SearchIndexStatus }
+  [IPC_CHANNELS.SEARCH_REINDEX]: { params: []; return: void }
+  [IPC_CHANNELS.SEARCH_INDEX_PROGRESS]: { params: [progress: SearchIndexProgress]; return: void }
 
   // Sync operations
   [IPC_CHANNELS.SYNC_FORCE]: { params: []; return: SyncResult }
@@ -584,6 +629,12 @@ export interface AIChatRequest {
   contextWindowTokens?: number
   /** Current session token usage before this turn */
   sessionTokenUsage?: number
+  /** Current editing file path (relative to workspace root) */
+  currentFile?: string
+  /** Manually referenced file paths via @[[path]] syntax */
+  manualRefs?: string[]
+  /** Skill IDs referenced via #skill-name syntax */
+  skillRefs?: string[]
 }
 
 export interface AIRagHit {
@@ -613,6 +664,40 @@ export interface AIChatResponse {
   warnings: string[]
   ragHits: AIRagHit[]
   memory: AIMemoryState
+}
+
+export interface AIStreamChunk {
+  id: string
+  delta: string
+}
+
+export interface AIStreamEnd {
+  id: string
+  content: string
+  usage: {
+    inputTokens: number
+    outputTokens: number
+    totalTokens: number
+    estimatedCostUsd: number
+  }
+  ragHits: AIRagHit[]
+  memory: AIMemoryState
+  provider: 'openai' | 'anthropic' | 'mock'
+  model: string
+  intercepted: boolean
+  warnings: string[]
+}
+
+export interface AIStreamError {
+  id: string
+  code: 'rate_limit' | 'context_length' | 'timeout' | 'auth' | 'network' | 'unknown'
+  message: string
+  retryable: boolean
+  partialContent: string
+}
+
+export interface AIStreamRequest extends AIChatRequest {
+  streamId: string
 }
 
 export interface AIEmbedRequest {
@@ -970,4 +1055,165 @@ export interface ConflictResolution {
   readonly type: ResolutionType
   /** Required when type is 'manual' */
   readonly content?: string
+}
+
+/**
+ * Context Engine Types
+ *
+ * Types for the AI context assembly system, supporting three-layer
+ * context model (always-load, semantic, manual-reference).
+ */
+
+export type ContextLayerType = 'always' | 'manual' | 'skill'
+
+export interface ContextSource {
+  filePath: string
+  content: string
+  tokenCount: number
+  layer: ContextLayerType
+}
+
+export interface ContextLayer {
+  type: ContextLayerType
+  sources: ContextSource[]
+  totalTokens: number
+}
+
+export interface AssembledContext {
+  layers: ContextLayer[]
+  systemPrompt: string
+  totalTokens: number
+  budgetUsed: number
+  budgetTotal: number
+  sources: ContextSource[]
+  warnings: string[]
+}
+
+export interface ContextEngineConfig {
+  maxContextTokens?: number
+  systemPromptReserve?: number
+  alwaysLoadFiles?: string[]
+}
+
+export interface ContextFileInfo {
+  path: string
+  name: string
+  type: 'file' | 'directory'
+  extension?: string
+}
+
+export interface Skill {
+  id: string
+  name: string
+  description: string
+  scenarios: string
+  instructions: string
+  outputFormat: string
+  examples: string
+  filePath: string
+  tokenCount: number
+  updatedAt: number
+}
+
+export interface SkillSummary {
+  id: string
+  name: string
+  description: string
+  scenarios: string
+}
+
+export interface SkillSearchParams {
+  query: string
+  limit?: number
+}
+
+export interface SearchQueryParams {
+  query: string
+  limit?: number
+  fileExtensions?: string[]
+}
+
+export interface SearchResult {
+  id: string
+  path: string
+  snippet: string
+  rank: number
+  lineNumber?: number
+  matchCount: number
+}
+
+export interface SearchIndexStatus {
+  totalFiles: number
+  indexedFiles: number
+  indexSizeBytes: number
+  lastIndexedAt: number | null
+  isIndexing: boolean
+}
+
+export interface SearchIndexProgress {
+  phase: 'scanning' | 'indexing' | 'complete' | 'error'
+  current: number
+  total: number
+  filePath?: string
+  error?: string
+}
+
+// ─── Memory IPC Types ───
+
+export interface MemorySnapshotResponse {
+  content: string
+  tokenCount: number
+  tokenDebt: number
+}
+
+export interface MemoryUpdateRequest {
+  updates: MemoryUpdateItem[]
+}
+
+export interface MemoryUpdateItem {
+  section: string
+  content: string
+  priority?: 'P0' | 'P1' | 'P2'
+  tags?: string[]
+}
+
+export interface MemoryFlushRequest {
+  sessionTokens: number
+  contextWindowTokens: number
+  pendingInsights: string[]
+}
+
+export interface MemoryFlushResponse {
+  triggered: boolean
+  thresholdTokens: number
+  sessionTokens: number
+  snapshot: MemorySnapshotResponse
+}
+
+export interface DailyLogQueryRequest {
+  date: string
+}
+
+export interface DailyLogEntry {
+  timestamp: string
+  type: string
+  operator: string
+  sessionId: string
+  summary: string
+  details: string[]
+  tags: string[]
+  relatedFiles: string[]
+}
+
+// ─── RAG IPC Types ───
+
+export interface RagSearchRequest {
+  query: string
+  limit?: number
+}
+
+export interface RagSearchHit {
+  path: string
+  score: number
+  snippet: string
 }

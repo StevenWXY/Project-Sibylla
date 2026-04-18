@@ -1,12 +1,16 @@
 import type {
   AIChatRequest,
   AIChatResponse,
+  AIStreamChunk,
+  AIStreamEnd,
+  AIStreamError,
   AuthLoginInput,
   AuthRegisterInput,
   AuthSession,
   AuthUser,
   ConflictInfo,
   ConflictResolution,
+  ContextFileInfo,
   FileContent,
   FileInfo,
   FileWatchEvent,
@@ -22,6 +26,11 @@ import type {
   InviteRequest,
   InviteResult,
   MemberRole,
+  SkillSummary,
+  SkillSearchParams,
+  SearchQueryParams,
+  SearchResult,
+  SearchIndexStatus,
 } from '../../shared/types'
 import type { CommitInfo, FileDiff } from '../../shared/types/git.types'
 import { ErrorType } from '../../shared/types'
@@ -101,6 +110,39 @@ export function bootstrap() {
 const fileWatchListeners = new Set<(event: FileWatchEvent) => void>()
 const syncListeners = new Set<(data: SyncStatusData) => void>()
 const channelListeners = new Map<IPCChannel, Set<(...args: unknown[]) => void>>()
+
+const MOCK_SKILLS: SkillSummary[] = [
+  {
+    id: 'writing-prd',
+    name: '撰写 PRD',
+    description: '按照产品需求文档标准模板撰写 PRD',
+    scenarios: '产品需求文档撰写',
+  },
+  {
+    id: 'writing-design',
+    name: '技术方案撰写',
+    description: '按照技术方案标准模板撰写设计文档',
+    scenarios: '技术方案设计',
+  },
+  {
+    id: 'writing-meeting-notes',
+    name: '会议纪要',
+    description: '快速生成结构化的会议纪要',
+    scenarios: '会议记录与纪要整理',
+  },
+  {
+    id: 'analysis-competitor',
+    name: '竞品分析',
+    description: '按照竞品分析框架进行系统化分析',
+    scenarios: '竞品调研与分析',
+  },
+  {
+    id: 'planning-tasks',
+    name: '任务规划',
+    description: '将目标分解为可执行的任务清单',
+    scenarios: '项目任务分解与规划',
+  },
+]
 
 let currentWorkspacePath = '/Users/dd/Documents/Playground/Project-Sibylla'
 let currentWorkspace: WorkspaceInfo = buildWorkspaceInfo(currentWorkspacePath)
@@ -510,8 +552,106 @@ function createMockAPI(): ElectronAPI {
     },
     ai: {
       chat: async (request) => ok(createAIResponse(request)),
-      stream: async (request) => ok(createAIResponse(request)),
+      stream: (request) => {
+        const streamId = `mock-stream-${Date.now()}`
+        const content = typeof request === 'string' ? request : request.message
+        const mockText = `Sure, retrieved \`Sibylla_VI_Design_System.html\`.\nIt is recommended to use a dark gray panel with warning colors.\nI have generated a Diff preview for this request:\n\n- ${content.slice(0, 120)}`
+        const chars = mockText.split('')
+        let charIndex = 0
+        const interval = window.setInterval(() => {
+          if (charIndex >= chars.length) {
+            window.clearInterval(interval)
+            const chunkEnd: AIStreamEnd = {
+              id: streamId,
+              content: mockText,
+              usage: { inputTokens: 320, outputTokens: 136, totalTokens: 456, estimatedCostUsd: 0.0021 },
+              ragHits: [],
+              memory: { tokenCount: 456, tokenDebt: 0, flushTriggered: false },
+              provider: 'mock',
+              model: 'claude-3.5-sonnet',
+              intercepted: false,
+              warnings: [],
+            }
+            const endListeners = channelListeners.get('ai:stream:end' as IPCChannel)
+            if (endListeners) {
+              for (const listener of endListeners) {
+                listener(chunkEnd)
+              }
+            }
+            return
+          }
+          const delta = chars[charIndex]
+          charIndex++
+          const chunk: AIStreamChunk = { id: streamId, delta }
+          const chunkListeners = channelListeners.get('ai:stream:chunk' as IPCChannel)
+          if (chunkListeners) {
+            for (const listener of chunkListeners) {
+              listener(chunk)
+            }
+          }
+        }, 50)
+        return streamId
+      },
+      abortStream: (_streamId: string) => {},
+      onStreamChunk: (callback: (chunk: AIStreamChunk) => void) => {
+        const channel = 'ai:stream:chunk' as IPCChannel
+        if (!channelListeners.has(channel)) {
+          channelListeners.set(channel, new Set())
+        }
+        const wrapped = (...args: unknown[]) => callback(args[0] as AIStreamChunk)
+        channelListeners.get(channel)?.add(wrapped)
+        return () => { channelListeners.get(channel)?.delete(wrapped) }
+      },
+      onStreamEnd: (callback: (end: AIStreamEnd) => void) => {
+        const channel = 'ai:stream:end' as IPCChannel
+        if (!channelListeners.has(channel)) {
+          channelListeners.set(channel, new Set())
+        }
+        const wrapped = (...args: unknown[]) => callback(args[0] as AIStreamEnd)
+        channelListeners.get(channel)?.add(wrapped)
+        return () => { channelListeners.get(channel)?.delete(wrapped) }
+      },
+      onStreamError: (callback: (error: AIStreamError) => void) => {
+        const channel = 'ai:stream:error' as IPCChannel
+        if (!channelListeners.has(channel)) {
+          channelListeners.set(channel, new Set())
+        }
+        const wrapped = (...args: unknown[]) => callback(args[0] as AIStreamError)
+        channelListeners.get(channel)?.add(wrapped)
+        return () => { channelListeners.get(channel)?.delete(wrapped) }
+      },
       embed: async () => ok({ model: 'mock-embedding', vector: Array.from({ length: 12 }, () => Math.random()) }),
+      contextFiles: async (query: string, limit?: number) => {
+        const allFiles = listAllPaths()
+          .filter((entry) => !entry.isDirectory)
+          .map((entry) => {
+            const name = entry.path.split('/').pop() ?? entry.path
+            const ext = name.includes('.') ? name.split('.').pop() : undefined
+            return {
+              path: entry.path,
+              name,
+              type: 'file' as const,
+              extension: ext,
+            }
+          })
+
+        const lowerQuery = query.toLowerCase()
+        const matched = allFiles
+          .filter((f) => f.name.toLowerCase().includes(lowerQuery) || f.path.toLowerCase().includes(lowerQuery))
+          .slice(0, limit ?? 20)
+        return ok<ContextFileInfo[]>(matched)
+      },
+      skillList: async () => ok<SkillSummary[]>(MOCK_SKILLS),
+      skillSearch: async (params: SkillSearchParams) => {
+        const lowerQuery = params.query.toLowerCase()
+        const matched = MOCK_SKILLS.filter(
+          (s) =>
+            s.id.toLowerCase().includes(lowerQuery) ||
+            s.name.toLowerCase().includes(lowerQuery) ||
+            s.description.toLowerCase().includes(lowerQuery)
+        )
+        return ok<SkillSummary[]>(matched.slice(0, params.limit ?? 10))
+      },
     },
     auth: {
       login: async (_input: AuthLoginInput) => ok<AuthSession>({ isAuthenticated: true, user: MOCK_USER }),
@@ -525,6 +665,41 @@ function createMockAPI(): ElectronAPI {
       maximize: async () => ok(false),
       close: async () => ok(undefined),
       toggleFullscreen: async () => ok(false),
+    },
+    search: {
+      query: async (params: SearchQueryParams): Promise<IPCResponse<SearchResult[]>> => {
+        const results: SearchResult[] = []
+        if (!params.query) return ok(results)
+        const lowerQuery = params.query.toLowerCase()
+        for (const [filePath, content] of MOCK_FILES.entries()) {
+          const lines = content.split('\n')
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].toLowerCase().includes(lowerQuery)) {
+              results.push({
+                id: `${filePath}::${i + 1}`,
+                path: filePath,
+                snippet: lines[i].replace(
+                  new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+                  '<mark>$&</mark>',
+                ),
+                rank: -1 / (i + 1),
+                lineNumber: i + 1,
+                matchCount: 1,
+              })
+            }
+          }
+        }
+        return ok(results.slice(0, params.limit ?? 20))
+      },
+      indexStatus: async () => ok<SearchIndexStatus>({
+        totalFiles: MOCK_FILES.size,
+        indexedFiles: MOCK_FILES.size,
+        indexSizeBytes: 0,
+        lastIndexedAt: Date.now(),
+        isIndexing: false,
+      }),
+      reindex: async () => ok(undefined),
+      onIndexProgress: () => () => {},
     },
     on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => {
       if (!channelListeners.has(channel)) {

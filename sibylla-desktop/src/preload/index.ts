@@ -3,6 +3,7 @@ import type {
   AutoSavedPayload,
   ConflictInfo,
   ConflictResolution,
+  ContextFileInfo,
   IPCResponse,
   SystemInfo,
   EchoRequest,
@@ -26,6 +27,9 @@ import type {
   AIChatResponse,
   AIEmbedRequest,
   AIEmbedResponse,
+  AIStreamChunk,
+  AIStreamEnd,
+  AIStreamError,
   ImportOptions,
   ImportResult,
   ImportProgress,
@@ -34,6 +38,20 @@ import type {
   WorkspaceMember,
   InviteRequest,
   InviteResult,
+  SkillSummary,
+  SkillSearchParams,
+  SearchQueryParams,
+  SearchResult,
+  SearchIndexStatus,
+  SearchIndexProgress,
+  MemorySnapshotResponse,
+  MemoryUpdateRequest,
+  MemoryFlushRequest,
+  MemoryFlushResponse,
+  DailyLogQueryRequest,
+  DailyLogEntry,
+  RagSearchRequest,
+  RagSearchHit,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -142,8 +160,29 @@ interface ElectronAPI {
   // AI operations
   ai: {
     chat: (request: AIChatRequest | string) => Promise<IPCResponse<AIChatResponse>>
-    stream: (request: AIChatRequest | string) => Promise<IPCResponse<AIChatResponse>>
+    stream: (request: AIChatRequest | string) => string
+    abortStream: (streamId: string) => void
+    onStreamChunk: (callback: (chunk: AIStreamChunk) => void) => () => void
+    onStreamEnd: (callback: (end: AIStreamEnd) => void) => () => void
+    onStreamError: (callback: (error: AIStreamError) => void) => () => void
     embed: (request: AIEmbedRequest | string) => Promise<IPCResponse<AIEmbedResponse>>
+    contextFiles: (query: string, limit?: number) => Promise<IPCResponse<ContextFileInfo[]>>
+    skillList: () => Promise<IPCResponse<SkillSummary[]>>
+    skillSearch: (params: SkillSearchParams) => Promise<IPCResponse<SkillSummary[]>>
+  }
+
+  // Memory operations
+  memory: {
+    snapshot: () => Promise<IPCResponse<MemorySnapshotResponse>>
+    update: (request: MemoryUpdateRequest) => Promise<IPCResponse<MemorySnapshotResponse>>
+    flush: (request: MemoryFlushRequest) => Promise<IPCResponse<MemoryFlushResponse>>
+    queryDailyLog: (request: DailyLogQueryRequest) => Promise<IPCResponse<DailyLogEntry[]>>
+  }
+
+  // RAG operations
+  rag: {
+    search: (request: RagSearchRequest) => Promise<IPCResponse<RagSearchHit[]>>
+    rebuild: () => Promise<IPCResponse<void>>
   }
   
   // Auth operations
@@ -161,6 +200,14 @@ interface ElectronAPI {
     maximize: () => Promise<IPCResponse<boolean>>
     close: () => Promise<IPCResponse<void>>
     toggleFullscreen: () => Promise<IPCResponse<boolean>>
+  }
+  
+  // Search operations
+  search: {
+    query: (params: SearchQueryParams) => Promise<IPCResponse<SearchResult[]>>
+    indexStatus: () => Promise<IPCResponse<SearchIndexStatus>>
+    reindex: () => Promise<IPCResponse<void>>
+    onIndexProgress: (callback: (progress: SearchIndexProgress) => void) => () => void
   }
   
   // Event listeners (for future use)
@@ -239,12 +286,32 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   // AI operations
   IPC_CHANNELS.AI_CHAT,
   IPC_CHANNELS.AI_STREAM,
+  IPC_CHANNELS.AI_STREAM_CHUNK,
+  IPC_CHANNELS.AI_STREAM_END,
+  IPC_CHANNELS.AI_STREAM_ERROR,
+  IPC_CHANNELS.AI_STREAM_ABORT,
   IPC_CHANNELS.AI_EMBED,
+  IPC_CHANNELS.AI_CONTEXT_FILES,
+  IPC_CHANNELS.AI_SKILL_LIST,
+  IPC_CHANNELS.AI_SKILL_SEARCH,
+  // Memory operations
+  IPC_CHANNELS.MEMORY_SNAPSHOT,
+  IPC_CHANNELS.MEMORY_UPDATE,
+  IPC_CHANNELS.MEMORY_FLUSH,
+  IPC_CHANNELS.MEMORY_DAILY_LOG_QUERY,
+  // RAG operations
+  IPC_CHANNELS.RAG_SEARCH,
+  IPC_CHANNELS.RAG_REBUILD,
   // Window control
   IPC_CHANNELS.WINDOW_MINIMIZE,
   IPC_CHANNELS.WINDOW_MAXIMIZE,
   IPC_CHANNELS.WINDOW_CLOSE,
   IPC_CHANNELS.WINDOW_TOGGLE_FULLSCREEN,
+  // Search operations
+  IPC_CHANNELS.SEARCH_QUERY,
+  IPC_CHANNELS.SEARCH_INDEX_STATUS,
+  IPC_CHANNELS.SEARCH_REINDEX,
+  IPC_CHANNELS.SEARCH_INDEX_PROGRESS,
 ]
 
 /**
@@ -579,12 +646,84 @@ const api: ElectronAPI = {
       return await safeInvoke<AIChatResponse>(IPC_CHANNELS.AI_CHAT, request)
     },
 
-    stream: async (request: AIChatRequest | string) => {
-      return await safeInvoke<AIChatResponse>(IPC_CHANNELS.AI_STREAM, request)
+    stream: (request: AIChatRequest | string) => {
+      const streamId = `stream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const payload = typeof request === 'string'
+        ? { message: request, streamId }
+        : { ...request, streamId }
+      ipcRenderer.send(IPC_CHANNELS.AI_STREAM, payload)
+      return streamId
+    },
+
+    abortStream: (streamId: string) => {
+      ipcRenderer.send(IPC_CHANNELS.AI_STREAM_ABORT, streamId)
+    },
+
+    onStreamChunk: (callback: (chunk: AIStreamChunk) => void) => {
+      return api.on(
+        IPC_CHANNELS.AI_STREAM_CHUNK,
+        callback as (...args: unknown[]) => void
+      )
+    },
+
+    onStreamEnd: (callback: (end: AIStreamEnd) => void) => {
+      return api.on(
+        IPC_CHANNELS.AI_STREAM_END,
+        callback as (...args: unknown[]) => void
+      )
+    },
+
+    onStreamError: (callback: (error: AIStreamError) => void) => {
+      return api.on(
+        IPC_CHANNELS.AI_STREAM_ERROR,
+        callback as (...args: unknown[]) => void
+      )
     },
 
     embed: async (request: AIEmbedRequest | string) => {
       return await safeInvoke<AIEmbedResponse>(IPC_CHANNELS.AI_EMBED, request)
+    },
+
+    contextFiles: async (query: string, limit?: number) => {
+      return await safeInvoke<ContextFileInfo[]>(IPC_CHANNELS.AI_CONTEXT_FILES, query, limit)
+    },
+
+    skillList: async () => {
+      return await safeInvoke<SkillSummary[]>(IPC_CHANNELS.AI_SKILL_LIST)
+    },
+
+    skillSearch: async (params: SkillSearchParams) => {
+      return await safeInvoke<SkillSummary[]>(IPC_CHANNELS.AI_SKILL_SEARCH, params)
+    },
+  },
+
+  // Memory operations
+  memory: {
+    snapshot: async () => {
+      return await safeInvoke<MemorySnapshotResponse>(IPC_CHANNELS.MEMORY_SNAPSHOT)
+    },
+
+    update: async (request: MemoryUpdateRequest) => {
+      return await safeInvoke<MemorySnapshotResponse>(IPC_CHANNELS.MEMORY_UPDATE, request)
+    },
+
+    flush: async (request: MemoryFlushRequest) => {
+      return await safeInvoke<MemoryFlushResponse>(IPC_CHANNELS.MEMORY_FLUSH, request)
+    },
+
+    queryDailyLog: async (request: DailyLogQueryRequest) => {
+      return await safeInvoke<DailyLogEntry[]>(IPC_CHANNELS.MEMORY_DAILY_LOG_QUERY, request)
+    },
+  },
+
+  // RAG operations
+  rag: {
+    search: async (request: RagSearchRequest) => {
+      return await safeInvoke<RagSearchHit[]>(IPC_CHANNELS.RAG_SEARCH, request)
+    },
+
+    rebuild: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.RAG_REBUILD)
     },
   },
   
@@ -604,6 +743,29 @@ const api: ElectronAPI = {
     
     toggleFullscreen: async () => {
       return await safeInvoke<boolean>(IPC_CHANNELS.WINDOW_TOGGLE_FULLSCREEN)
+    },
+  },
+
+  // Search operations
+  search: {
+    query: async (params: SearchQueryParams) => {
+      return await safeInvoke<SearchResult[]>(IPC_CHANNELS.SEARCH_QUERY, params)
+    },
+
+    indexStatus: async () => {
+      return await safeInvoke<SearchIndexStatus>(IPC_CHANNELS.SEARCH_INDEX_STATUS)
+    },
+
+    reindex: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.SEARCH_REINDEX)
+    },
+
+    onIndexProgress: (callback: (progress: SearchIndexProgress) => void) => {
+      const handler = (_event: IpcRendererEvent, progress: SearchIndexProgress) => callback(progress)
+      ipcRenderer.on(IPC_CHANNELS.SEARCH_INDEX_PROGRESS, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.SEARCH_INDEX_PROGRESS, handler)
+      }
     },
   },
   

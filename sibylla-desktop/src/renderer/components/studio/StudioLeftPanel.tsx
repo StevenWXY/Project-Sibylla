@@ -388,8 +388,11 @@ export function StudioLeftPanel({
                 />
                 <div className="max-h-36 space-y-1 overflow-y-auto">
                   {isSearching && <p className="text-xs text-sys-darkMuted">Searching...</p>}
-                  {!isSearching && searchResults.length === 0 && (
+                  {!isSearching && searchResults.length === 0 && searchQuery.trim() && (
                     <p className="text-xs text-sys-darkMuted">No results</p>
+                  )}
+                  {!isSearching && !searchQuery.trim() && (
+                    <p className="text-xs text-sys-darkMuted">Type to search...</p>
                   )}
                   {!isSearching &&
                     searchResults.slice(0, 12).map((result) => (
@@ -402,7 +405,11 @@ export function StudioLeftPanel({
                         <div className="truncate font-mono text-[10px] text-sys-darkMuted">
                           {result.path}:{result.lineNumber}
                         </div>
-                        <div className="truncate">{result.preview}</div>
+                        <div className="truncate">
+                          {result.snippet
+                            ? result.snippet.replace(/<\/?mark>/g, '')
+                            : result.preview}
+                        </div>
                       </button>
                     ))}
                 </div>

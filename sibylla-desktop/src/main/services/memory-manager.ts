@@ -2,6 +2,7 @@ import { promises as fs } from 'fs'
 import * as path from 'path'
 import { FileLock } from './file-lock'
 import { logger } from '../utils/logger'
+import type { DailyLogEntry } from '../../shared/types'
 
 export type MemoryLogType =
   | 'user-interaction'
@@ -179,6 +180,88 @@ export class MemoryManager {
       sessionTokens,
       snapshot,
     }
+  }
+
+  async queryDailyLog(date: string): Promise<DailyLogEntry[]> {
+    const workspacePath = this.ensureWorkspacePath()
+    const dailyDirPath = path.join(workspacePath, MEMORY_DAILY_DIR)
+    const logPath = path.join(dailyDirPath, `${date}.md`)
+
+    try {
+      const content = await fs.readFile(logPath, 'utf-8')
+      return this.parseDailyLog(content)
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException
+      if (nodeError.code === 'ENOENT') {
+        return []
+      }
+      throw error
+    }
+  }
+
+  private parseDailyLog(content: string): DailyLogEntry[] {
+    const entries: DailyLogEntry[] = []
+    const blocks = content.split('<!-- entry-start -->')
+
+    for (const block of blocks) {
+      const endIdx = block.indexOf('<!-- entry-end -->')
+      if (endIdx === -1) continue
+      const text = block.slice(0, endIdx)
+
+      const timestamp = this.extractField(text, '时间')
+      const type = this.extractField(text, '类型')
+      const operator = this.extractField(text, '操作者')
+      const sessionId = this.extractField(text, '会话ID')
+      const summary = this.extractField(text, '摘要')
+      const tagsRaw = this.extractField(text, '标签')
+      const filesRaw = this.extractField(text, '关联文件')
+      const details = this.extractListItems(text, '详情')
+
+      if (!timestamp || !type || !summary) continue
+
+      const tags = tagsRaw && tagsRaw !== '(none)'
+        ? tagsRaw.split(/\s+/).map((t) => t.replace(/^#/, '')).filter((t) => t.length > 0)
+        : []
+      const relatedFiles = filesRaw && filesRaw !== '(none)'
+        ? filesRaw.split(',').map((f) => f.trim()).filter((f) => f.length > 0)
+        : []
+
+      entries.push({
+        timestamp,
+        type,
+        operator: operator ?? '',
+        sessionId: sessionId ?? '',
+        summary,
+        details: details.length > 0 ? details : [],
+        tags,
+        relatedFiles,
+      })
+    }
+
+    return entries
+  }
+
+  private extractField(text: string, label: string): string | null {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`\\*\\*${escaped}\\*\\*:\\s*(.+)`)
+    const match = text.match(regex)
+    return match?.[1]?.trim() ?? null
+  }
+
+  private extractListItems(text: string, label: string): string[] {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`\\*\\*${escaped}\\*\\*:[\\s\\S]*?(?=\\*\\*|$)`)
+    const match = text.match(regex)
+    if (!match) return []
+    const block = match[0]
+    const items: string[] = []
+    for (const line of block.split('\n')) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('- ') && trimmed !== '- (none)') {
+        items.push(trimmed.slice(2))
+      }
+    }
+    return items
   }
 
   private ensureWorkspacePath(): string {

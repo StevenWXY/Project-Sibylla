@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AIChatResponse, FileWatchEvent } from '../../shared/types'
+import type { FileWatchEvent } from '../../shared/types'
+import type { AIStreamEnd, AIStreamError } from '../../shared/types'
 import {
   useAppStore,
   selectCurrentWorkspace,
@@ -14,16 +15,29 @@ import {
 import { useFileTreeStore } from '../store/fileTreeStore'
 import { useTabStore } from '../store/tabStore'
 import { useSyncStatusStore, selectStatus } from '../store/syncStatusStore'
+import { useAIChatStore, selectMessages, selectIsStreaming, selectSessionTokenUsage } from '../store/aiChatStore'
+import { useSearchStore, selectResults, selectIsSearching, selectQuery } from '../store/searchStore'
+import {
+  useDiffReviewStore,
+  selectProposals,
+  selectActiveIndex,
+  selectIsApplying,
+  selectIsEditing,
+  selectEditingContent,
+  selectAppliedPaths,
+  selectFailedPath,
+  selectErrorMessage,
+} from '../store/diffReviewStore'
+import { parseDiffBlocksWithFileRead } from '../utils/diffParser'
+import { useAIStream } from '../hooks/useAIStream'
 import {
   StudioAIPanel,
   StudioEditorPanel,
   StudioLeftPanel,
-  type ChatMessage,
   type EditorMode,
   type SaveStatus,
 } from '../components/studio'
 import type {
-  DiffProposal,
   LeftToolMode,
   NotificationItem,
   NotificationLevel,
@@ -32,37 +46,9 @@ import type {
 } from '../components/studio/types'
 
 const AUTOSAVE_DELAY_MS = 900
-const SEARCH_DEBOUNCE_MS = 260
-const MAX_SEARCH_RESULTS = 80
 const MAX_NOTIFICATIONS = 60
-const MAX_SEARCH_FILE_SIZE = 512 * 1024
 const MAX_TASK_FILE_SIZE = 768 * 1024
 const QUICK_AI_PROMPT_PREFIX = 'Create file:'
-
-const SEARCHABLE_EXTENSIONS = new Set([
-  'md',
-  'mdx',
-  'txt',
-  'json',
-  'js',
-  'jsx',
-  'ts',
-  'tsx',
-  'css',
-  'scss',
-  'html',
-  'xml',
-  'yaml',
-  'yml',
-  'toml',
-  'ini',
-  'py',
-  'java',
-  'go',
-  'rs',
-  'sql',
-  'sh',
-])
 
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdx'])
 
@@ -89,67 +75,11 @@ function normalizeExtension(extension?: string): string {
   return (extension ?? '').replace(/^\./, '').toLowerCase()
 }
 
-function isSearchableFile(file: FileInfo): boolean {
-  if (file.isDirectory) {
-    return false
-  }
-  const extension = normalizeExtension(file.extension)
-  if (!extension) {
-    return true
-  }
-  return SEARCHABLE_EXTENSIONS.has(extension)
-}
-
 function isMarkdownFile(file: FileInfo): boolean {
   if (file.isDirectory) {
     return false
   }
   return MARKDOWN_EXTENSIONS.has(normalizeExtension(file.extension))
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function extractFirstCodeBlock(text: string): string | null {
-  const matched = text.match(/```(?:[\w+-]+)?\n([\s\S]*?)```/)
-  const block = matched?.[1]?.trim()
-  return block && block.length > 0 ? block : null
-}
-
-function buildDiffProposal(
-  userInput: string,
-  response: AIChatResponse,
-  targetPath: string | null,
-  currentContent: string
-): DiffProposal | null {
-  if (!targetPath) {
-    return null
-  }
-
-  const fullRewrite = extractFirstCodeBlock(response.content)
-  if (fullRewrite && fullRewrite !== currentContent) {
-    return {
-      targetPath,
-      before: currentContent,
-      after: fullRewrite,
-    }
-  }
-
-  const replaceMatch = userInput.match(
-    /(?:将|把)[“"']([\s\S]+?)[”"'](?:替换为|替换成|改为|改成)[“"']([\s\S]+?)[”"']/
-  )
-  const beforeText = replaceMatch?.[1]
-  const afterText = replaceMatch?.[2]
-  if (beforeText && afterText && currentContent.includes(beforeText)) {
-    return {
-      targetPath,
-      before: beforeText,
-      after: afterText,
-    }
-  }
-
-  return null
 }
 
 function hasConflictMarkers(content: string): boolean {
@@ -244,16 +174,6 @@ function buildConflictDraft(filePath: string, fileContent: string, currentEditor
   }
 }
 
-function applyProposalToContent(currentContent: string, proposal: DiffProposal): string {
-  if (proposal.before && currentContent.includes(proposal.before)) {
-    return currentContent.replace(new RegExp(escapeRegex(proposal.before)), proposal.after)
-  }
-  if (proposal.before === currentContent) {
-    return proposal.after
-  }
-  return proposal.after
-}
-
 export function WorkspaceStudioPage() {
   const currentWorkspace = useAppStore(selectCurrentWorkspace)
   const tabState = useTabStore()
@@ -276,9 +196,10 @@ export function WorkspaceStudioPage() {
   const [editorError, setEditorError] = useState<string | null>(null)
 
   const [activeTool, setActiveTool] = useState<LeftToolMode>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
-  const [isSearching, setIsSearching] = useState(false)
+  const searchStore = useSearchStore()
+  const searchQuery = useSearchStore(selectQuery)
+  const searchResults = useSearchStore(selectResults)
+  const isSearching = useSearchStore(selectIsSearching)
 
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [isTasksLoading, setIsTasksLoading] = useState(false)
@@ -287,15 +208,15 @@ export function WorkspaceStudioPage() {
 
   const syncStatusValue = useSyncStatusStore(selectStatus)
 
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const messages = useAIChatStore(selectMessages)
+  const isStreaming = useAIChatStore(selectIsStreaming)
+  const sessionTokenUsage = useAIChatStore(selectSessionTokenUsage)
+  const aiChatStore = useAIChatStore()
   const [chatInput, setChatInput] = useState('')
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [sessionTokenUsage, setSessionTokenUsage] = useState(0)
   const [focusComposerSignal, setFocusComposerSignal] = useState(0)
 
   const [conflictDraft, setConflictDraft] = useState<ConflictDraft | null>(null)
 
-  const activeAIRequestRef = useRef<string | null>(null)
   const selectedFileRef = useRef<string | null>(null)
   const isDirtyRef = useRef(false)
   const editorContentRef = useRef('')
@@ -648,65 +569,6 @@ export function WorkspaceStudioPage() {
     [openFile]
   )
 
-  const runSearch = useCallback(
-    async (query: string) => {
-      if (!currentWorkspace) {
-        setSearchResults([])
-        return
-      }
-
-      const normalizedQuery = query.trim().toLowerCase()
-      if (!normalizedQuery) {
-        setSearchResults([])
-        setIsSearching(false)
-        return
-      }
-
-      setIsSearching(true)
-
-      try {
-        const searchableFiles = workspaceFileEntries.filter(isSearchableFile).slice(0, 260)
-        const nextResults: SearchResultItem[] = []
-
-        for (const file of searchableFiles) {
-          if (nextResults.length >= MAX_SEARCH_RESULTS) {
-            break
-          }
-
-          const readResult = await window.electronAPI.file.read(file.path, {
-            maxSize: MAX_SEARCH_FILE_SIZE,
-          })
-          if (!readResult.success || !readResult.data) {
-            continue
-          }
-
-          const lines = readResult.data.content.split('\n')
-          for (const [index, line] of lines.entries()) {
-            if (nextResults.length >= MAX_SEARCH_RESULTS) {
-              break
-            }
-
-            if (!line.toLowerCase().includes(normalizedQuery)) {
-              continue
-            }
-
-            nextResults.push({
-              id: `${file.path}:${index + 1}:${nextResults.length}`,
-              path: normalizePath(file.path),
-              lineNumber: index + 1,
-              preview: line.trim() || '(空行)',
-            })
-          }
-        }
-
-        setSearchResults(nextResults)
-      } finally {
-        setIsSearching(false)
-      }
-    },
-    [currentWorkspace, workspaceFileEntries]
-  )
-
   const openSearchResult = useCallback(
     async (result: SearchResultItem) => {
       await openFile(result.path)
@@ -789,206 +651,203 @@ export function WorkspaceStudioPage() {
     setFocusComposerSignal((value) => value + 1)
   }, [])
 
-  const stopStreaming = useCallback(() => {
-    activeAIRequestRef.current = null
-    setIsStreaming(false)
-    setMessages((previous) =>
-      previous.map((message) =>
-        message.streaming
-          ? {
-              ...message,
-              streaming: false,
-              content: message.content || '[请求已停止]',
-            }
-          : message
-      )
-    )
-    pushNotification('info', 'AI 请求已停止', '你可以继续发送下一条消息。')
-  }, [pushNotification])
+  const { startStream, abortStream } = useAIStream({
+    onStreamEnd: (end: AIStreamEnd) => {
+      void (async () => {
+        const currentPath = selectedFileRef.current
+        const currentContent = editorContentRef.current
 
-  const sendChatMessage = useCallback(async () => {
+        const diffProposals = await parseDiffBlocksWithFileRead(
+          end.content,
+          currentPath ?? '',
+          currentContent
+        )
+
+        if (diffProposals.length > 0) {
+          useDiffReviewStore.getState().setProposals(diffProposals)
+
+          const state = useAIChatStore.getState()
+          const msgId = end.id
+          useAIChatStore.setState({
+            messages: state.messages.map((m) =>
+              m.id === msgId ? { ...m, diffProposals } : m
+            ),
+          })
+        }
+      })()
+
+      if (end.intercepted) {
+        pushNotification('warning', 'LLM 网关已拦截请求', end.warnings.join('；') || '请检查策略和提示词')
+      }
+
+      if (end.memory.flushTriggered) {
+        pushNotification(
+          'warning',
+          'MEMORY 已触发压缩',
+          `token=${end.memory.tokenCount} debt=${end.memory.tokenDebt}`
+        )
+      }
+
+      if (end.warnings.length > 0) {
+        pushNotification('warning', 'AI 返回警告', end.warnings.join('；'))
+      }
+
+      if (!end.intercepted && end.warnings.length === 0) {
+        pushNotification(
+          'success',
+          'AI 响应完成',
+          `${end.provider}/${end.model} · ${end.usage.totalTokens} tokens`
+        )
+      }
+    },
+    onStreamError: (error: AIStreamError) => {
+      pushNotification('error', 'AI 请求失败', error.message)
+    },
+  })
+
+  const stopStreaming = useCallback(() => {
+    const state = useAIChatStore.getState()
+    const streamId = state.activeStreamId ?? state.messages.find((m) => m.streaming)?.id
+    if (streamId) {
+      abortStream(streamId)
+    }
+    pushNotification('info', 'AI 请求已停止', '你可以继续发送下一条消息。')
+  }, [abortStream, pushNotification])
+
+  const sendChatMessage = useCallback((manualRefs?: string[], skillRefs?: string[]) => {
     const trimmed = chatInput.trim()
     if (!trimmed || isStreaming) {
       return
     }
 
     const mentions = extractMentionedFiles(trimmed)
-    const userMessage: ChatMessage = {
-      id: createId('user'),
-      role: 'user',
-      content: trimmed,
-      createdAt: Date.now(),
-    }
+    const initialSources = Array.from(
+      new Set([
+        ...(selectedFilePath ? [selectedFilePath] : []),
+        ...mentions,
+        ...(skillRefs ?? []).map((id) => `⚡ skills/${id}.md`),
+      ])
+    )
+
+    useAIChatStore.getState().addUserMessage(trimmed)
 
     const assistantId = createId('assistant')
-    const initialSources = Array.from(new Set([...(selectedFilePath ? [selectedFilePath] : []), ...mentions]))
-
-    const assistantPlaceholder: ChatMessage = {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      createdAt: Date.now(),
-      contextSources: initialSources,
-      streaming: true,
-      diffProposal: null,
-    }
-
-    setMessages((previous) => [...previous, userMessage, assistantPlaceholder])
+    useAIChatStore.getState().addAssistantPlaceholder(assistantId, initialSources)
     setChatInput('')
-    setIsStreaming(true)
 
-    const requestId = createId('ai-request')
-    activeAIRequestRef.current = requestId
-
-    try {
-      const request = {
-        message: trimmed,
-        sessionId: `desktop-${workspaceId ?? 'workspace'}`,
-        model: currentWorkspace?.config.defaultModel,
-        useRag: true,
-        contextWindowTokens: 16000,
-        sessionTokenUsage,
-      }
-
-      const response = await window.electronAPI.ai.stream(request)
-
-      if (activeAIRequestRef.current !== requestId) {
-        return
-      }
-
-      if (!response.success || !response.data) {
-        throw new Error(response.error?.message ?? 'AI 网关调用失败')
-      }
-
-      const ai = response.data
-      const ragSources = ai.ragHits.map((hit) => normalizePath(hit.path))
-      const contextSources = Array.from(new Set([...initialSources, ...ragSources]))
-      const proposal = buildDiffProposal(trimmed, ai, selectedFilePath, editorContentRef.current)
-
-      setSessionTokenUsage((previous) => previous + ai.usage.totalTokens)
-      setMessages((previous) =>
-        previous.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: ai.content,
-                contextSources,
-                streaming: false,
-                diffProposal: proposal,
-              }
-            : message
-        )
-      )
-
-      if (ai.intercepted) {
-        pushNotification('warning', 'LLM 网关已拦截请求', ai.warnings.join('；') || '请检查策略和提示词')
-      }
-
-      if (ai.memory.flushTriggered) {
-        pushNotification(
-          'warning',
-          'MEMORY 已触发压缩',
-          `token=${ai.memory.tokenCount} debt=${ai.memory.tokenDebt}`
-        )
-      }
-
-      if (ai.warnings.length > 0) {
-        pushNotification('warning', 'AI 返回警告', ai.warnings.join('；'))
-      }
-
-      if (!ai.intercepted && ai.warnings.length === 0) {
-        pushNotification(
-          'success',
-          'AI 响应完成',
-          `${ai.provider}/${ai.model} · ${ai.usage.totalTokens} tokens`
-        )
-      }
-    } catch (error) {
-      if (activeAIRequestRef.current !== requestId) {
-        return
-      }
-
-      const message = error instanceof Error ? error.message : 'AI 调用失败'
-      setMessages((previous) =>
-        previous.map((item) =>
-          item.id === assistantId
-            ? {
-                ...item,
-                content: `请求失败：${message}`,
-                streaming: false,
-              }
-            : item
-        )
-      )
-      pushNotification('error', 'AI 请求失败', message)
-    } finally {
-      if (activeAIRequestRef.current === requestId) {
-        activeAIRequestRef.current = null
-      }
-      setIsStreaming(false)
+    const request = {
+      message: trimmed,
+      sessionId: `desktop-${workspaceId ?? 'workspace'}`,
+      model: currentWorkspace?.config.defaultModel,
+      useRag: true,
+      contextWindowTokens: 16000,
+      sessionTokenUsage,
+      streamId: assistantId,
+      currentFile: selectedFilePath ?? undefined,
+      manualRefs,
+      skillRefs,
     }
+
+    startStream(request)
   }, [
     chatInput,
     currentWorkspace?.config.defaultModel,
     isStreaming,
-    pushNotification,
     selectedFilePath,
     sessionTokenUsage,
+    startStream,
     workspaceId,
   ])
 
-  const applyDiffProposal = useCallback(
-    async (messageId: string, editFirst: boolean) => {
-      const message = messages.find((item) => item.id === messageId)
-      const proposal = message?.diffProposal
-      if (!proposal) {
-        pushNotification('warning', '无法应用修改', '未找到可用的 Diff 提案')
-        return
-      }
+  const diffReviewStore = useDiffReviewStore()
+  const diffReviewProposals = useDiffReviewStore(selectProposals)
+  const diffReviewActiveIndex = useDiffReviewStore(selectActiveIndex)
+  const diffReviewIsApplying = useDiffReviewStore(selectIsApplying)
+  const diffReviewIsEditing = useDiffReviewStore(selectIsEditing)
+  const diffReviewEditingContent = useDiffReviewStore(selectEditingContent)
+  const diffReviewAppliedPaths = useDiffReviewStore(selectAppliedPaths)
+  const diffReviewFailedPath = useDiffReviewStore(selectFailedPath)
+  const diffReviewErrorMessage = useDiffReviewStore(selectErrorMessage)
 
-      const targetPath = normalizePath(proposal.targetPath)
-      const readResult = await window.electronAPI.file.read(targetPath)
-      if (!readResult.success || !readResult.data) {
-        pushNotification('error', 'Diff 应用失败', readResult.error?.message ?? '读取目标文件失败')
-        return
-      }
-
-      const nextContent = applyProposalToContent(readResult.data.content, proposal)
-
-      if (editFirst) {
-        if (selectedFileRef.current !== targetPath) {
-          await openFile(targetPath)
-        }
-        setEditorMode('edit')
-        setEditorContent(nextContent)
-        setConflictDraft(null)
-        pushNotification('info', '已写入编辑区', '请确认后等待自动保存或继续手动编辑')
-        return
-      }
-
-      const writeResult = await window.electronAPI.file.write(targetPath, nextContent, {
-        atomic: true,
-        createDirs: true,
-      })
-
-      if (!writeResult.success) {
-        pushNotification('error', 'Diff 应用失败', writeResult.error?.message ?? '写入目标文件失败')
-        return
-      }
-
-      if (selectedFileRef.current === targetPath) {
-        setEditorContent(nextContent)
-        setSavedContentSnapshot(nextContent)
-        setSaveStatus('saved')
-        window.setTimeout(() => setSaveStatus('idle'), 800)
-      }
-
+  const handleDiffApply = useCallback(
+    async (filePath: string) => {
+      await diffReviewStore.applyProposal(filePath)
       await refreshTree()
       await loadTasks()
-      pushNotification('success', '修改已应用', targetPath)
+
+      if (selectedFileRef.current === filePath) {
+        const proposal = diffReviewStore.proposals.find((p) => p.filePath === filePath)
+        if (proposal) {
+          setEditorContent(proposal.fullNewContent)
+          setSavedContentSnapshot(proposal.fullNewContent)
+          setSaveStatus('saved')
+          window.setTimeout(() => setSaveStatus('idle'), 800)
+        }
+      }
+
+      pushNotification('success', '修改已应用', filePath)
     },
-    [loadTasks, messages, openFile, pushNotification, refreshTree]
+    [diffReviewStore, loadTasks, pushNotification, refreshTree]
   )
+
+  const handleDiffApplyAll = useCallback(async () => {
+    await diffReviewStore.applyAll()
+    await refreshTree()
+    await loadTasks()
+    pushNotification('success', '全部修改已应用', `${diffReviewStore.proposals.length} 个文件`)
+  }, [diffReviewStore, loadTasks, pushNotification, refreshTree])
+
+  const handleDiffApplyEdited = useCallback(async () => {
+    await diffReviewStore.applyEdited()
+    await refreshTree()
+    await loadTasks()
+    pushNotification('success', '编辑后修改已应用', '')
+  }, [diffReviewStore, loadTasks, pushNotification, refreshTree])
+
+  const handleDiffRollback = useCallback(async () => {
+    await diffReviewStore.rollbackApplied()
+    await refreshTree()
+    await loadTasks()
+    pushNotification('info', '已回滚修改', '已恢复到修改前的内容')
+  }, [diffReviewStore, loadTasks, pushNotification, refreshTree])
+
+  const diffReviewPanelProps = useMemo(() => {
+    if (diffReviewProposals.length === 0) return null
+    return {
+      proposals: diffReviewProposals,
+      activeIndex: diffReviewActiveIndex,
+      isApplying: diffReviewIsApplying,
+      isEditing: diffReviewIsEditing,
+      editingContent: diffReviewEditingContent,
+      appliedPaths: diffReviewAppliedPaths,
+      failedPath: diffReviewFailedPath,
+      errorMessage: diffReviewErrorMessage,
+      onApply: handleDiffApply,
+      onApplyAll: handleDiffApplyAll,
+      onStartEditing: () => diffReviewStore.startEditing(),
+      onCancelEditing: () => diffReviewStore.cancelEditing(),
+      onEditingContentChange: (content: string) => diffReviewStore.updateEditingContent(content),
+      onApplyEdited: handleDiffApplyEdited,
+      onRollback: handleDiffRollback,
+      onDismiss: () => diffReviewStore.dismiss(),
+      onClearError: () => diffReviewStore.clearError(),
+      onSetActiveIndex: (index: number) => diffReviewStore.setActiveIndex(index),
+    }
+  }, [
+    diffReviewProposals,
+    diffReviewActiveIndex,
+    diffReviewIsApplying,
+    diffReviewIsEditing,
+    diffReviewEditingContent,
+    diffReviewAppliedPaths,
+    diffReviewFailedPath,
+    diffReviewErrorMessage,
+    handleDiffApply,
+    handleDiffApplyAll,
+    handleDiffApplyEdited,
+    handleDiffRollback,
+    diffReviewStore,
+  ])
 
   const resolveConflictBy = useCallback(
     (strategy: 'yours' | 'theirs' | 'ai' | 'manual') => {
@@ -1038,19 +897,12 @@ export function WorkspaceStudioPage() {
 
     const trimmed = searchQuery.trim()
     if (!trimmed) {
-      setSearchResults([])
-      setIsSearching(false)
+      searchStore.clearResults()
       return
     }
 
-    const timer = window.setTimeout(() => {
-      void runSearch(trimmed)
-    }, SEARCH_DEBOUNCE_MS)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [activeTool, runSearch, searchQuery])
+    searchStore.setQuery(trimmed)
+  }, [activeTool, searchQuery, searchStore])
 
   useEffect(() => {
     if (!workspaceId) {
@@ -1191,9 +1043,12 @@ export function WorkspaceStudioPage() {
 
   useEffect(() => {
     return () => {
-      activeAIRequestRef.current = null
+      const streamId = aiChatStore.activeStreamId
+      if (streamId) {
+        abortStream(streamId)
+      }
     }
-  }, [])
+  }, [abortStream, aiChatStore])
 
   if (!currentWorkspace) {
     return (
@@ -1233,7 +1088,7 @@ export function WorkspaceStudioPage() {
         activeTool={activeTool}
         onChangeTool={setActiveTool}
         searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
+        onSearchQueryChange={(query) => searchStore.setQuery(query)}
         isSearching={isSearching}
         searchResults={searchResults}
         onOpenSearchResult={openSearchResult}
@@ -1305,22 +1160,14 @@ export function WorkspaceStudioPage() {
         isStreaming={isStreaming}
         chatInput={chatInput}
         onChatInputChange={setChatInput}
-        onSendMessage={() => {
-          void sendChatMessage()
-        }}
+        onSendMessage={sendChatMessage}
         onStopStreaming={stopStreaming}
         onNewSession={() => {
-          activeAIRequestRef.current = null
-          setMessages([])
-          setSessionTokenUsage(0)
+          aiChatStore.reset()
+          diffReviewStore.dismiss()
           pushNotification('info', '会话已重置', '新的 AI 上下文会从零开始。')
         }}
-        onApplyDiffProposal={(messageId) => {
-          void applyDiffProposal(messageId, false)
-        }}
-        onEditAndApplyDiffProposal={(messageId) => {
-          void applyDiffProposal(messageId, true)
-        }}
+        diffReviewProps={diffReviewPanelProps}
         focusComposerSignal={focusComposerSignal}
       />
 
