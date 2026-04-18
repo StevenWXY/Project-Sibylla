@@ -44,6 +44,10 @@ export default defineConfig({
         'diff',
         
         'better-sqlite3',
+        
+        // Modules with browser-only API references (DOMMatrix, etc.)
+        'mammoth',
+        'pdf-parse',
       ]
     },
     
