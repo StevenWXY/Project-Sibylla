@@ -1,4 +1,4 @@
-import { ipcMain, IpcMainInvokeEvent } from 'electron'
+import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from 'electron'
 import { IpcHandler } from '../handler'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
@@ -14,6 +14,7 @@ import type {
   SkillSearchParams,
   SkillSummary,
   WorkspaceInfo,
+  DegradationWarning,
 } from '../../../shared/types'
 import { logger } from '../../utils/logger'
 import { AiGatewayClient } from '../../services/ai-gateway-client'
@@ -24,6 +25,7 @@ import { WorkspaceManager } from '../../services/workspace-manager'
 import { FileManager } from '../../services/file-manager'
 import { ContextEngine, type ContextAssemblyRequest } from '../../services/context-engine'
 import { SkillEngine } from '../../services/skill-engine'
+import type { HarnessOrchestrator } from '../../services/harness/orchestrator'
 
 type StreamErrorCode = AIStreamError['code']
 
@@ -34,6 +36,7 @@ export class AIHandler extends IpcHandler {
   private readonly skillEngine: SkillEngine
   private streamListener: ((...args: unknown[]) => void) | null = null
   private abortListener: ((...args: unknown[]) => void) | null = null
+  private harnessOrchestrator: HarnessOrchestrator | null = null
 
   constructor(
     private readonly gatewayClient: AiGatewayClient,
@@ -46,6 +49,10 @@ export class AIHandler extends IpcHandler {
     super()
     this.skillEngine = new SkillEngine(fileManager)
     this.contextEngine = new ContextEngine(fileManager, memoryManager, this.skillEngine)
+  }
+
+  setHarnessOrchestrator(orchestrator: HarnessOrchestrator): void {
+    this.harnessOrchestrator = orchestrator
   }
 
   register(): void {
@@ -130,6 +137,14 @@ export class AIHandler extends IpcHandler {
     const normalized = this.normalizeRequest(input)
     const streamId = this.extractStreamId(input)
     const sender = event.sender
+
+    // ── Harness branch: if orchestrator is present, check mode ──
+    if (this.harnessOrchestrator) {
+      const mode = this.harnessOrchestrator.resolveMode(normalized)
+      if (mode !== 'single') {
+        return this.handleHarnessStream(event, normalized, streamId, mode)
+      }
+    }
 
     const abortController = new AbortController()
     this.activeStreams.set(streamId, abortController)
@@ -306,6 +321,90 @@ export class AIHandler extends IpcHandler {
     if (controller) {
       controller.abort()
       this.activeStreams.delete(streamId)
+    }
+  }
+
+  /**
+   * Harness-mode stream handler.
+   * Dual/Panel modes run synchronously through the orchestrator,
+   * then deliver the result as a single stream chunk + end event.
+   */
+  private async handleHarnessStream(
+    event: Electron.IpcMainEvent,
+    request: AIChatRequest,
+    streamId: string,
+    mode: 'dual' | 'panel'
+  ): Promise<void> {
+    const sender = event.sender
+
+    // Send loading indicator
+    if (!sender.isDestroyed()) {
+      const loadingChunk: AIStreamChunk = {
+        id: streamId,
+        delta: '⏳ AI 正在自检中...\n',
+      }
+      sender.send(IPC_CHANNELS.AI_STREAM_CHUNK, loadingChunk)
+    }
+
+    try {
+      const result = await this.harnessOrchestrator!.execute(request)
+
+      // Broadcast degradation warning if needed
+      if (result.degraded) {
+        const warning: DegradationWarning = {
+          id: `degrade-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          reason: result.degradeReason ?? 'Unknown degradation',
+          originalMode: mode,
+          degradedTo: 'single',
+        }
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.webContents.send(IPC_CHANNELS.HARNESS_DEGRADATION_OCCURRED, warning)
+          }
+        }
+      }
+
+      // Send final content
+      if (!sender.isDestroyed()) {
+        const contentChunk: AIStreamChunk = {
+          id: streamId,
+          delta: result.finalResponse.content,
+        }
+        sender.send(IPC_CHANNELS.AI_STREAM_CHUNK, contentChunk)
+      }
+
+      // Send stream end
+      if (!sender.isDestroyed()) {
+        const streamEnd: AIStreamEnd = {
+          id: streamId,
+          content: result.finalResponse.content,
+          usage: result.finalResponse.usage,
+          ragHits: result.finalResponse.ragHits,
+          memory: result.finalResponse.memory,
+          provider: result.finalResponse.provider,
+          model: result.finalResponse.model,
+          intercepted: result.finalResponse.intercepted,
+          warnings: result.finalResponse.warnings,
+        }
+        sender.send(IPC_CHANNELS.AI_STREAM_END, streamEnd)
+      }
+    } catch (error) {
+      logger.error('[AIHandler] Harness stream error', {
+        streamId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+
+      if (!sender.isDestroyed()) {
+        const streamError: AIStreamError = {
+          id: streamId,
+          code: 'unknown',
+          message: error instanceof Error ? error.message : String(error),
+          retryable: true,
+          partialContent: '',
+        }
+        sender.send(IPC_CHANNELS.AI_STREAM_ERROR, streamError)
+      }
     }
   }
 

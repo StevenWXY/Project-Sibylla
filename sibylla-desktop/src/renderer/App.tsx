@@ -12,6 +12,9 @@ import { LoginPage } from './components/auth/LoginPage'
 import { Button } from './components/ui/Button'
 import { PixelOctoIcon } from './components/brand/PixelOctoIcon'
 import { useAppStore } from './store/appStore'
+import { useHarnessEvents } from './hooks/useHarnessEvents'
+import { GuardrailNotification } from './components/studio/harness/GuardrailNotification'
+import { ResumeTaskDialog } from './components/studio/harness/ResumeTaskDialog'
 
 type Page =
   | 'home'
@@ -31,6 +34,10 @@ export default function App() {
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null)
   const [isWorkspaceBusy, setIsWorkspaceBusy] = useState(false)
   const [isSyncingNow, setIsSyncingNow] = useState(false)
+
+  // TASK021: Subscribe to Harness IPC events
+  useHarnessEvents()
+
   const currentWorkspace = useAppStore((state) => state.currentWorkspace)
   const currentUser = useAppStore((state) => state.currentUser)
   const recentWorkspaces = useAppStore((state) => state.recentWorkspaces)
@@ -528,6 +535,10 @@ export default function App() {
             }}
           />
         )}
+
+        {/* TASK021: Global Harness overlays */}
+        <GuardrailNotification />
+        <ResumeTaskDialog />
       </AppLayout>
     </ThemeProvider>
   )

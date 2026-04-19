@@ -7,6 +7,7 @@ import type {
   ContextSource,
   Skill,
 } from '../../shared/types'
+import type { HarnessMode } from '../../shared/types'
 import { FileManager } from './file-manager'
 import { MemoryManager } from './memory-manager'
 import type { SkillEngine } from './skill-engine'
@@ -17,6 +18,16 @@ export interface ContextAssemblyRequest {
   currentFile?: string
   manualRefs: string[]
   skillRefs?: string[]
+}
+
+/**
+ * Guide placeholder interface — upgraded to full Guide type in TASK019.
+ */
+export type GuidePlaceholder = import('./harness/guides/types').Guide
+
+export interface HarnessContextRequest extends ContextAssemblyRequest {
+  mode: HarnessMode
+  guides: GuidePlaceholder[]
 }
 
 interface BudgetAllocation {
@@ -112,6 +123,32 @@ export class ContextEngine {
       sources: allSources,
       warnings,
     }
+  }
+
+  async assembleForHarness(request: HarnessContextRequest): Promise<AssembledContext> {
+    // Reuse assembleContext's three-layer assembly logic
+    const base = await this.assembleContext({
+      userMessage: request.userMessage,
+      currentFile: request.currentFile,
+      manualRefs: request.manualRefs,
+      skillRefs: request.skillRefs,
+    })
+
+    // Overlay Guides into system prompt (create new object, do not mutate original)
+    if (request.guides.length > 0) {
+      const guideContent = request.guides
+        .sort((a, b) => b.priority - a.priority)
+        .map(g => `[Guide: ${g.id}]\n${g.content}`)
+        .join('\n\n')
+
+      return {
+        ...base,
+        systemPrompt: `${guideContent}\n\n${base.systemPrompt}`,
+        totalTokens: base.totalTokens + this.estimateTokens(guideContent),
+      }
+    }
+
+    return base
   }
 
   extractFileReferences(message: string): string[] {

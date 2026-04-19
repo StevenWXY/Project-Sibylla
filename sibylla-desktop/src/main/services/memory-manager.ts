@@ -11,6 +11,14 @@ export type MemoryLogType =
   | 'decision'
   | 'error'
   | 'system'
+  | 'harness-trace'
+
+export interface HarnessTraceEvent {
+  component: 'orchestrator' | 'evaluator' | 'sensor' | 'guardrail' | 'guide' | 'state-machine'
+  action: string
+  result: string
+  details?: string[]
+}
 
 export interface MemoryLogEntry {
   type: MemoryLogType
@@ -494,5 +502,16 @@ export class MemoryManager {
       `**初始化日期：** ${date}`,
       '',
     ].join('\n')
+  }
+
+  async appendHarnessTrace(traceId: string, event: HarnessTraceEvent): Promise<void> {
+    await this.appendLog({
+      type: 'harness-trace',
+      operator: `harness:${event.component}`,
+      sessionId: traceId,
+      summary: `${event.component}:${event.action} → ${event.result}`,
+      details: event.details,
+      tags: ['harness', event.component],
+    })
   }
 }

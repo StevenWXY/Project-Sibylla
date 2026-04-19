@@ -36,6 +36,10 @@ export class AiGatewayClient {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
   }
 
+  createSession(options: { role: 'generator' | 'evaluator' }, accessToken?: string): AiGatewaySession {
+    return new AiGatewaySession(this, options.role, accessToken)
+  }
+
   async *chatStream(
     request: AiGatewayChatRequest,
     accessToken?: string,
@@ -153,5 +157,37 @@ export class AiGatewayClient {
         warnings: ['Cloud AI gateway unavailable; desktop fallback response applied'],
       }
     }
+  }
+}
+
+export class AiGatewaySession {
+  readonly sessionId: string
+  readonly role: 'generator' | 'evaluator'
+  private readonly client: AiGatewayClient
+  private readonly accessToken?: string
+
+  constructor(client: AiGatewayClient, role: 'generator' | 'evaluator', accessToken?: string) {
+    this.client = client
+    this.role = role
+    this.sessionId = `session-${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    this.accessToken = accessToken
+  }
+
+  async chat(request: AiGatewayChatRequest): Promise<AiGatewayChatResponse> {
+    return this.client.chat(request, this.accessToken)
+  }
+
+  async *chatStream(request: AiGatewayChatRequest, signal?: AbortSignal): AsyncGenerator<string, void, undefined> {
+    yield* this.client.chatStream(request, this.accessToken, signal)
+  }
+
+  /**
+   * Close the session and release resources.
+   * Currently a noop — AiGatewaySession delegates to stateless HTTP calls on AiGatewayClient.
+   * If future versions introduce persistent connections (WebSocket, SSE keepalive),
+   * this method must be updated to perform actual cleanup.
+   */
+  close(): void {
+    // Intentional noop: no persistent connection to tear down
   }
 }

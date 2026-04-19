@@ -4,6 +4,11 @@
  * This handler exposes FileManager functionality to the renderer process
  * through IPC channels. It handles all file and directory operations,
  * including file watching.
+ * 
+ * Guardrail integration (TASK017):
+ * writeFile, deleteFile, and moveFile are preceded by GuardrailEngine checks.
+ * The engine evaluates rules (SystemPath, SecretLeak, PersonalSpace, BulkOperation)
+ * and may block or require confirmation before the actual file operation proceeds.
  */
 
 import { BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
@@ -11,18 +16,26 @@ import { IpcHandler } from '../handler'
 import { FileManager } from '../../services/file-manager'
 import { ImportManager } from '../../services/import-manager'
 import { AutoSaveManager } from '../../services/auto-save-manager'
+import { GuardrailEngine } from '../../services/harness/guardrails/engine'
+import { isBlockedVerdict, isConditionalVerdict } from '../../services/harness/guardrails/types'
+import type { FileOperation, OperationContext, OperationSource } from '../../services/harness/guardrails/types'
+import { logger } from '../../utils/logger'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
+  AuthUser,
   AutoSavedPayload,
   FileContent,
   FileReadOptions,
   FileWriteOptions,
+  FileOperationResult,
+  GuardrailBlockedEvent,
   ListFilesOptions,
   FileInfo,
   FileWatchEvent,
   ImportOptions,
   ImportResult,
   ImportProgress,
+  MemberRole,
   SaveFailedPayload,
 } from '../../../shared/types'
 import type {
@@ -35,16 +48,27 @@ import type { InternalImportOptions } from '../../services/types/import-manager.
 import type { BatchCommitResult, SaveResult } from '../../services/types/auto-save.types'
 
 /**
+ * Interface for retrieving cached user information.
+ * Decoupled from AuthHandler to avoid circular dependency.
+ */
+interface AuthUserProvider {
+  getCachedUser(): AuthUser | null
+}
+
+/**
  * FileHandler class
  * 
  * Handles all file-related IPC communications between main and renderer processes.
  * Provides a bridge between the renderer's file API and the FileManager service.
+ * Integrates GuardrailEngine for pre-operation security checks on write/delete/move.
  */
 export class FileHandler extends IpcHandler {
   readonly namespace = 'file'
   private fileManager: FileManager | null = null
   private importManager: ImportManager | null = null
   private autoSaveManager: AutoSaveManager | null = null
+  private guardrailEngine: GuardrailEngine | null = null
+  private authUserProvider: AuthUserProvider | null = null
   
   /**
    * Set FileManager instance
@@ -90,6 +114,27 @@ export class FileHandler extends IpcHandler {
     })
 
     console.log('[FileHandler] AutoSaveManager instance set')
+  }
+
+  /**
+   * Set GuardrailEngine instance for pre-operation security checks
+   *
+   * @param engine - GuardrailEngine instance
+   */
+  setGuardrailEngine(engine: GuardrailEngine): void {
+    this.guardrailEngine = engine
+    console.log('[FileHandler] GuardrailEngine instance set')
+  }
+
+  /**
+   * Set auth user provider for OperationContext construction.
+   * Accepts any object with getCachedUser() to avoid coupling to AuthHandler.
+   *
+   * @param provider - Object that can return the cached user
+   */
+  setAuthUserProvider(provider: AuthUserProvider): void {
+    this.authUserProvider = provider
+    console.log('[FileHandler] AuthUserProvider instance set')
   }
   
   /**
@@ -197,9 +242,18 @@ export class FileHandler extends IpcHandler {
     path: string,
     content: string,
     options?: FileWriteOptions
-  ): Promise<void> {
+  ): Promise<FileOperationResult | void> {
     if (!this.fileManager) {
       throw new Error('Workspace not initialized. Please open or create a workspace first.')
+    }
+
+    // Guardrail pre-check (defaults to 'user' source; AI calls will pass 'ai' in future)
+    const guardrailResult = await this.checkGuardrail(
+      { type: 'write', path, content },
+      'user',
+    )
+    if (guardrailResult) {
+      return guardrailResult
     }
     
     const managerOptions: ManagerWriteOptions = {
@@ -209,6 +263,7 @@ export class FileHandler extends IpcHandler {
     }
     
     await this.fileManager.writeFile(path, content, managerOptions)
+    return { status: 'completed' }
   }
   
   /**
@@ -217,12 +272,22 @@ export class FileHandler extends IpcHandler {
   private async deleteFile(
     _event: IpcMainInvokeEvent,
     path: string
-  ): Promise<void> {
+  ): Promise<FileOperationResult | void> {
     if (!this.fileManager) {
       throw new Error('Workspace not initialized. Please open or create a workspace first.')
     }
+
+    // Guardrail pre-check
+    const guardrailResult = await this.checkGuardrail(
+      { type: 'delete', path },
+      'user',
+    )
+    if (guardrailResult) {
+      return guardrailResult
+    }
     
     await this.fileManager.deleteFile(path)
+    return { status: 'completed' }
   }
   
   /**
@@ -247,12 +312,22 @@ export class FileHandler extends IpcHandler {
     _event: IpcMainInvokeEvent,
     sourcePath: string,
     destPath: string
-  ): Promise<void> {
+  ): Promise<FileOperationResult | void> {
     if (!this.fileManager) {
       throw new Error('Workspace not initialized. Please open or create a workspace first.')
     }
+
+    // Guardrail pre-check (rename semantics for guardrail)
+    const guardrailResult = await this.checkGuardrail(
+      { type: 'rename', path: sourcePath, newPath: destPath },
+      'user',
+    )
+    if (guardrailResult) {
+      return guardrailResult
+    }
     
     await this.fileManager.moveFile(sourcePath, destPath)
+    return { status: 'completed' }
   }
   
   /**
@@ -443,6 +518,82 @@ export class FileHandler extends IpcHandler {
       throw new Error('AutoSaveManager not initialized')
     }
     await this.autoSaveManager.retrySave(filePath)
+  }
+
+  /**
+   * Build OperationContext from current auth state and FileManager.
+   * Uses conservative defaults when auth info is unavailable.
+   *
+   * Note: AuthUser does not carry workspace-level role information.
+   * Role resolution requires WorkspaceMember lookup (future improvement).
+   * Until then, default to 'viewer' (most restrictive) for fail-safe guardrail checks.
+   *
+   * @param source - Operation source ('user' | 'ai' | 'sync')
+   */
+  private buildOperationContext(source: OperationSource): OperationContext {
+    const cachedUser = this.authUserProvider?.getCachedUser()
+
+    return {
+      source,
+      userId: cachedUser?.id ?? 'anonymous',
+      // TODO(W2): Resolve actual MemberRole from WorkspaceManager once available
+      userRole: 'viewer' as MemberRole,
+      workspaceRoot: this.fileManager?.getWorkspaceRoot() ?? '',
+    }
+  }
+
+  /**
+   * Run GuardrailEngine check on a file operation.
+   *
+   * Returns:
+   * - `undefined` if operation is allowed (caller should proceed)
+   * - `FileOperationResult` with 'blocked' for blocked verdicts (also broadcasts event)
+   * - `FileOperationResult` with 'pending_confirmation' for conditional verdicts
+   *
+   * If GuardrailEngine is not injected, logs a warning and allows the operation
+   * to proceed (graceful degradation).
+   */
+  private async checkGuardrail(
+    op: FileOperation,
+    source: OperationSource,
+  ): Promise<FileOperationResult | undefined> {
+    if (!this.guardrailEngine) {
+      logger.warn('[FileHandler] GuardrailEngine not initialized, skipping guardrail check')
+      return undefined
+    }
+
+    const ctx = this.buildOperationContext(source)
+    const verdict = await this.guardrailEngine.check(op, ctx)
+
+    if (isBlockedVerdict(verdict)) {
+      // Broadcast block event to all renderer windows
+      const payload: GuardrailBlockedEvent = {
+        ruleId: verdict.ruleId,
+        reason: verdict.reason,
+        severity: 'block',
+        path: op.path,
+        operationType: op.type,
+      }
+      this.broadcastToAllWindows(IPC_CHANNELS.HARNESS_GUARDRAIL_BLOCKED, payload)
+
+      // Return structured result instead of throwing (W8 fix)
+      return {
+        status: 'blocked',
+        ruleId: verdict.ruleId,
+        reason: verdict.reason,
+      }
+    }
+
+    if (isConditionalVerdict(verdict)) {
+      return {
+        status: 'pending_confirmation',
+        ruleId: verdict.ruleId,
+        reason: verdict.reason,
+      }
+    }
+
+    // Allowed — caller should proceed with the operation
+    return undefined
   }
 
   /**

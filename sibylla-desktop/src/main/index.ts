@@ -26,9 +26,26 @@ import { TokenStorage } from './services/token-storage'
 import { MemoryManager } from './services/memory-manager'
 import { LocalRagEngine } from './services/local-rag-engine'
 import { AiGatewayClient } from './services/ai-gateway-client'
+import { ContextEngine } from './services/context-engine'
 import { DatabaseManager } from './services/database-manager'
 import { LocalSearchEngine } from './services/local-search-engine'
+import { GuardrailEngine } from './services/harness/guardrails/engine'
+import { Generator } from './services/harness/generator'
+import { Evaluator } from './services/harness/evaluator'
+import { HarnessOrchestrator } from './services/harness/orchestrator'
+import { HarnessHandler } from './ipc/handlers/harness'
+import { GuideRegistry } from './services/harness/guides/registry'
+import { SensorFeedbackLoop } from './services/harness/sensors/feedback-loop'
+import { ReferenceIntegritySensor } from './services/harness/sensors/reference-integrity'
+import { MarkdownFormatSensor } from './services/harness/sensors/markdown-format'
+import { SpecComplianceSensor } from './services/harness/sensors/spec-compliance'
+import { IntentClassifier, DEFAULT_CLASSIFIER_CONFIG } from './services/harness/intent-classifier'
+import { ToolScopeManager } from './services/harness/tool-scope'
+import { registerBuiltInTools } from './services/harness/built-in-tools'
+import { TaskStateMachine } from './services/harness/task-state-machine'
+import { logger } from './utils/logger'
 import type { WorkspaceInfo } from '../shared/types'
+import { IPC_CHANNELS } from '../shared/types'
 
 // Keep reference to main window to prevent garbage collection
 let mainWindow: BrowserWindow | null = null
@@ -82,6 +99,10 @@ if (!gotTheLock) {
       
       // Create FileHandler
       const fileHandler = new FileHandler()
+
+      // Create and inject GuardrailEngine into FileHandler (TASK017)
+      const guardrailEngine = new GuardrailEngine()
+      fileHandler.setGuardrailEngine(guardrailEngine)
       
       // Create WorkspaceHandler and set WorkspaceManager
       const workspaceHandler = new WorkspaceHandler()
@@ -98,6 +119,9 @@ if (!gotTheLock) {
       const tokenStorage = new TokenStorage()
       const authHandler = new AuthHandler(authClient, tokenStorage)
 
+      // Inject AuthHandler as user provider for GuardrailEngine context (TASK017)
+      fileHandler.setAuthUserProvider(authHandler)
+
       // Create AI infrastructure
       const memoryManager = new MemoryManager()
       const localRagEngine = new LocalRagEngine()
@@ -110,6 +134,86 @@ if (!gotTheLock) {
         workspaceManager,
         fileManager,
       )
+
+      // ====== Harness initialization (TASK018 + TASK019) ======
+      // Create Generator
+      const generator = new Generator(
+        aiGatewayClient,
+        'claude-sonnet-4-20250514',
+        logger
+      )
+
+      // Create Evaluator (uses same model by default)
+      const evaluator = new Evaluator(
+        aiGatewayClient,
+        'claude-sonnet-4-20250514',
+        logger
+      )
+
+      // Create ContextEngine for Harness (reuse FileManager + MemoryManager)
+      // Note: AIHandler creates its own ContextEngine internally.
+      // HarnessOrchestrator needs its own reference for assembleForHarness().
+      // ContextEngine is already statically imported via context-engine module (S4 fix).
+      const harnessContextEngine = new ContextEngine(fileManager, memoryManager)
+
+      // ====== TASK019: GuideRegistry + SensorFeedbackLoop ======
+      const guideRegistry = new GuideRegistry(logger)
+      await guideRegistry.loadBuiltIn()
+
+      const sensorFeedbackLoop = new SensorFeedbackLoop(
+        [
+          new ReferenceIntegritySensor(fileManager, localRagEngine),
+          new MarkdownFormatSensor(),
+          new SpecComplianceSensor(),
+        ],
+        logger,
+      )
+
+      // Create HarnessOrchestrator
+      const harnessOrchestrator = new HarnessOrchestrator(
+        generator,
+        evaluator,
+        guardrailEngine,
+        harnessContextEngine,
+        memoryManager,
+        logger,
+        {
+          defaultMode: 'dual',
+          maxRetries: 2,
+        },
+        guideRegistry,
+        sensorFeedbackLoop,
+      )
+
+      // Inject into AIHandler
+      aiHandler.setHarnessOrchestrator(harnessOrchestrator)
+
+      // Create HarnessHandler and register
+      const harnessConfig = { defaultMode: 'dual' as const }
+      const harnessHandler = new HarnessHandler(
+        harnessOrchestrator,
+        guardrailEngine,
+        harnessConfig,
+        guideRegistry,
+      )
+
+      // ====== TASK020: ToolScopeManager + IntentClassifier initialization ======
+      const intentClassifier = new IntentClassifier(
+        aiGatewayClient,
+        DEFAULT_CLASSIFIER_CONFIG,
+        logger,
+      )
+
+      const toolScopeManager = new ToolScopeManager(intentClassifier, logger)
+      registerBuiltInTools(toolScopeManager)
+
+      harnessOrchestrator.setToolScopeManager(toolScopeManager)
+      harnessHandler.setToolScopeManager(toolScopeManager)
+
+      // ====== TASK021: TaskStateMachine (deferred until workspace opens) ======
+      // TaskStateMachine requires workspacePath, so it is created in onWorkspaceOpened.
+      // References are kept at module scope for lifecycle management.
+      let taskStateMachine: TaskStateMachine | null = null
       
       // Create WindowHandler (window reference set after createMainWindow)
       const windowHandler = new WindowHandler()
@@ -249,6 +353,31 @@ if (!gotTheLock) {
           await localRagEngine.rebuildIndex()
           await aiHandler.initSkills()
 
+          // TASK019: Load workspace-specific custom guides
+          await guideRegistry.loadWorkspaceCustom(workspacePath)
+
+          // TASK021: Initialize TaskStateMachine for this workspace + scan for resumeable tasks
+          taskStateMachine = new TaskStateMachine(workspacePath, logger)
+          harnessOrchestrator.setTaskStateMachine(taskStateMachine)
+          harnessHandler.setTaskStateMachine(taskStateMachine)
+
+          // Scan for resumeable tasks and broadcast to renderer
+          taskStateMachine.findResumeable().then((tasks) => {
+            if (tasks.length > 0) {
+              const summaries = tasks.map((t) => ({
+                taskId: t.taskId,
+                goal: t.goal,
+                status: t.status,
+                completedSteps: t.steps.filter((s) => s.status === 'done').length,
+                totalSteps: t.steps.length,
+                updatedAt: t.updatedAt,
+              }))
+              BrowserWindow.getAllWindows().forEach((win) =>
+                win.webContents.send(IPC_CHANNELS.HARNESS_RESUMEABLE_DETECTED, summaries),
+              )
+            }
+          }).catch((err: unknown) => logger.error('startup.resumeable-scan.failed', { error: String(err) }))
+
           // Initialize fulltext search (DatabaseManager + LocalSearchEngine)
           databaseManager = new DatabaseManager(workspacePath)
           localSearchEngineRef = new LocalSearchEngine(
@@ -315,6 +444,7 @@ if (!gotTheLock) {
         aiHandler,
         memoryHandler,
         windowHandler,
+        harnessHandler,
       ]
       
       for (const handler of handlers) {

@@ -234,38 +234,70 @@ Sprint 1+2 基础设施
 
 ---
 
-## 六、Phase 1 全局进度
+## 六、Sprint 3.1 — Harness 基础设施
 
-**Phase 1 总进度：** 3/16 任务完成
+> **目标：** 在 Sprint 3 AI 系统 MVP 基础上，叠加 Harness 工程基础设施，实现 Generator / Evaluator 双轨架构、Guardrails、Guides、Sensors、工具范围管理与状态恢复能力。
+>
+> **预计周期：** 2-3 周（Week 14 - Week 16）
+>
+> **前置条件：** Sprint 3 的 TASK011-013 可用（AI 对话、上下文引擎、Diff 审查基础链路可跑通）
+
+### Sprint 3.1 任务
+
+| 状态 | 任务 ID | 任务名称 | 优先级 | 复杂度 | 预估工时 | 对应需求 | 备注 |
+|------|---------|---------|--------|--------|---------|---------|------|
+| ✅ | PHASE1-TASK017 | Guardrails 硬性保障层 | P0 | 复杂 | 3-4 天 | 需求 3.1.2 | 4 Guard 规则 + Engine + FileHandler 集成 + 66 测试通过 |
+| ⬜ | PHASE1-TASK018 | Generator/Evaluator 双 Agent 架构与编排器 | P0 | 非常复杂 | 4-5 天 | 需求 3.1.1 | Single / Dual / Panel 三模式 + 独立 session |
+| ⬜ | PHASE1-TASK019 | Guides 前馈控制与 Sensors 反馈系统 | P0 | 非常复杂 | 4-5 天 | 需求 3.1.3 + 3.1.4 | 前馈 prompt 注入 + 后馈确定性检查 |
+| ✅ | PHASE1-TASK020 | 工具范围管理与意图分类 | P1 | 中等 | 2-3 天 | 需求 3.1.5 | Rule-first intent classify + Tool Scope (完成于 2026-04-20) |
+| ⬜ | PHASE1-TASK021 | 状态机追踪器与 Harness UI 集成 | P1 | 复杂 | 3-4 天 | 需求 3.1.6 | state.json 持久化 + Evaluation/Resume UI |
+
+### Sprint 3.1 依赖关系
+
+```
+Sprint 3 基础链路（TASK011-016）
+        │
+        ▼
+  TASK017 (Guardrails) ───── 安全底座
+        │
+        ▼
+  TASK018 (双 Agent + 编排器) ─── Harness 主干
+        │
+        ├──────────────┐
+        ▼              ▼
+  TASK019 (Guides + Sensors)  TASK020 (工具范围 + 意图分类)
+        │              │
+        └──────┬───────┘
+               ▼
+        TASK021 (状态机 + Harness UI)
+```
+
+**推荐执行顺序：** TASK017 → TASK018 → TASK019 ∥ TASK020 → TASK021
+
+---
+
+## 七、Phase 1 全局进度
+
+**Phase 1 总进度：** 4/21 任务完成
 
 | Sprint | 任务数 | 已完成 | 进度 | 状态 |
 |--------|--------|--------|------|------|
 | Sprint 1 | 4 | 1 ⚠️ | 25% | 🏃 进行中 |
 | Sprint 2 | 6 | 1 | 17% | 🏃 进行中 |
 | Sprint 3 | 6 | 1 | 17% | 🏃 进行中 |
+| Sprint 3.1 | 5 | 1 | 20% | 🏃 进行中 |
 
 ---
 
-## 七、编号体系说明
+## 八、编号体系说明
 
-> **历史编号映射：** 早期 `plans/phase1-overview.md` 使用 TASK016-025 编号，现已统一为 Specs 体系。映射关系如下：
+> **历史编号映射：** 早期 `plans/phase1-overview.md` 使用 TASK016-025 编号，现已统一为 Specs 体系。
 
-| 废弃编号 | 新编号 | 说明 |
-|---------|--------|------|
-| TASK016 | TASK001 | 文件树（功能完成） |
-| TASK017 | TASK002 | 编辑器（待升级到 Tiptap） |
-| TASK018 | TASK011 | AI 对话面板 |
-| TASK019 | TASK011 | AI 网关（合并进 TASK011） |
-| TASK020 | TASK016 | Daily Log（主进程已完成） |
-| TASK021 | TASK016 | MEMORY 压缩（主进程已完成） |
-| TASK022 | TASK016 | RAG 检索（主进程已完成） |
-| TASK023 | TASK011 的一部分 | 意图路由 |
-| TASK024 | TASK013 | Diff 审查 UI |
-| TASK025 | 贯穿 Sprint 3 | 集成测试 |
+> **注意：** Sprint 3.1 使用 TASK017-021 编号，与历史废弃编号重名但属于不同体系。当前编号均以 `PHASE1-TASK` 为前缀。
 
 ---
 
-## 八、质量要求
+## 九、质量要求
 
 - TypeScript 严格模式，禁止 `any`
 - ESLint 零警告
@@ -277,7 +309,7 @@ Sprint 1+2 基础设施
 
 ---
 
-## 九、进度记录
+## 十、进度记录
 
 | 日期 | 任务 | 状态变更 | 备注 |
 |------|------|---------|------|
@@ -288,11 +320,12 @@ Sprint 1+2 基础设施
 | 2026-04-17 | — | — | Sprint 2 详细任务拆解完成，生成 6 个任务文档（TASK005-010） |
 | 2026-04-17 | TASK005 | ✅ 完成 | AutoSaveManager 实现 + IPC 集成 + SaveFailureBanner + 单元测试 17/17 通过（覆盖率 94.6%） |
 | 2026-04-18 | TASK013 | ✅ 完成 | AI Diff 审查完整链路：diffParser + diffReviewStore + DiffReviewPanel + 集成改造；type-check/lint/828 tests 全部通过 |
+| 2026-04-18 | — | — | Sprint 3.1 Harness 任务拆解完成，生成 5 个任务文档（TASK017-021） |
 
 ---
 
 **创建时间：** 2026-03-31
-**最后更新：** 2026-04-18
+**最后更新：** 2026-04-19
 **更新记录：**
 - 2026-03-31 — 创建 Sprint 1 任务列表
 - 2026-04-01 — 追加 TASK016/017/018 完成记录
@@ -300,3 +333,5 @@ Sprint 1+2 基础设施
 - 2026-04-16 — 统一编号体系，扩展为 Phase 1 全阶段任务列表（Sprint 1/2/3），标注已有代码基础和编号映射
 - 2026-04-17 — Sprint 2 详细任务拆解完成：6 个任务文档 + 已有代码基础评估 + 新增 IPC 通道清单 + 依赖关系细化
 - 2026-04-18 — TASK013 AI Diff 审查完成：diffParser + diffReviewStore + DiffReviewPanel + 集成改造，66 个新增测试全部通过
+- 2026-04-18 — Sprint 3.1 Harness 任务拆解完成：5 个任务文档（TASK017-021）+ 依赖关系图 + 编号冲突说明
+- 2026-04-19 — TASK017 Guardrails 硬性保障层完成：6 个 guardrail 模块文件 + FileHandler 集成 + shared/types 扩展 + 主进程装配 + 66 个新增测试全部通过（全量 421 测试通过）

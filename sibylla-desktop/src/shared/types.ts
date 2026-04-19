@@ -201,6 +201,45 @@ export const IPC_CHANNELS = {
   SEARCH_REINDEX: 'search:reindex',
   SEARCH_INDEX_PROGRESS: 'search:indexProgress',
 
+  HARNESS_EXECUTE: 'harness:execute',
+  HARNESS_SET_MODE: 'harness:setMode',
+  HARNESS_GET_MODE: 'harness:getMode',
+  HARNESS_DEGRADATION_OCCURRED: 'harness:degradationOccurred',
+
+  // Harness / Guardrail operations
+  /** Main → Renderer: Guardrail blocked an operation (webContents.send) */
+  HARNESS_GUARDRAIL_BLOCKED: 'harness:guardrailBlocked',
+  /** Renderer → Main: List all guardrail rules with enabled status */
+  HARNESS_LIST_GUARDRAILS: 'harness:listGuardrails',
+  /** Renderer → Main: Enable or disable a guardrail rule */
+  HARNESS_SET_GUARDRAIL_ENABLED: 'harness:setGuardrailEnabled',
+
+  // Harness / Guide operations (TASK019)
+  /** Renderer → Main: List all guides with enabled status */
+  HARNESS_LIST_GUIDES: 'harness:listGuides',
+  /** Renderer → Main: Enable or disable a guide */
+  HARNESS_SET_GUIDE_ENABLED: 'harness:setGuideEnabled',
+
+  // Harness / Tool Scope operations (TASK020)
+  /** Renderer → Main: Get tool scope for a request */
+  HARNESS_GET_TOOL_SCOPE: 'harness:getToolScope',
+  /** Renderer → Main: Get all intent profiles */
+  HARNESS_GET_INTENT_PROFILES: 'harness:getIntentProfiles',
+  /** Renderer → Main: Register a custom tool */
+  HARNESS_REGISTER_TOOL: 'harness:registerTool',
+  /** Renderer → Main: Unregister a tool */
+  HARNESS_UNREGISTER_TOOL: 'harness:unregisterTool',
+
+  // Harness / Task State Machine operations (TASK021)
+  /** Renderer → Main: List resumeable tasks */
+  HARNESS_LIST_RESUMEABLE: 'harness:listResumeable',
+  /** Renderer → Main: Resume an interrupted task */
+  HARNESS_RESUME_TASK: 'harness:resumeTask',
+  /** Renderer → Main: Abandon a task */
+  HARNESS_ABANDON_TASK: 'harness:abandonTask',
+  /** Main → Renderer: Resumeable tasks detected on startup (webContents.send) */
+  HARNESS_RESUMEABLE_DETECTED: 'harness:resumeableTaskDetected',
+
   // Event notifications (main process → renderer process)
   NOTIFICATION: 'notification',
   LOG_MESSAGE: 'log:message',
@@ -266,10 +305,10 @@ export interface IPCChannelMap {
 
   // File operations
   [IPC_CHANNELS.FILE_READ]: { params: [path: string, options?: FileReadOptions]; return: FileContent }
-  [IPC_CHANNELS.FILE_WRITE]: { params: [path: string, content: string, options?: FileWriteOptions]; return: void }
-  [IPC_CHANNELS.FILE_DELETE]: { params: [path: string]; return: void }
+  [IPC_CHANNELS.FILE_WRITE]: { params: [path: string, content: string, options?: FileWriteOptions]; return: FileOperationResult | void }
+  [IPC_CHANNELS.FILE_DELETE]: { params: [path: string]; return: FileOperationResult | void }
   [IPC_CHANNELS.FILE_COPY]: { params: [sourcePath: string, destPath: string]; return: void }
-  [IPC_CHANNELS.FILE_MOVE]: { params: [sourcePath: string, destPath: string]; return: void }
+  [IPC_CHANNELS.FILE_MOVE]: { params: [sourcePath: string, destPath: string]; return: FileOperationResult | void }
   [IPC_CHANNELS.FILE_LIST]: { params: [path: string, options?: ListFilesOptions]; return: FileInfo[] }
   [IPC_CHANNELS.FILE_INFO]: { params: [path: string]; return: FileInfo }
   [IPC_CHANNELS.FILE_EXISTS]: { params: [path: string]; return: boolean }
@@ -365,6 +404,23 @@ export interface IPCChannelMap {
   // FILE_AUTO_SAVED: Main → Renderer push, not in IPCChannelMap
   // FILE_SAVE_FAILED: Main → Renderer push, not in IPCChannelMap
   [IPC_CHANNELS.FILE_RETRY_SAVE]: { params: [filePath: string]; return: void }
+
+  // Harness / Guardrail operations
+  // HARNESS_GUARDRAIL_BLOCKED: Main → Renderer push, not in IPCChannelMap
+  [IPC_CHANNELS.HARNESS_EXECUTE]: { params: [request: AIChatRequest]; return: HarnessResult }
+  [IPC_CHANNELS.HARNESS_SET_MODE]: { params: [mode: HarnessMode]; return: void }
+  [IPC_CHANNELS.HARNESS_GET_MODE]: { params: []; return: HarnessMode }
+  // HARNESS_DEGRADATION_OCCURRED: Main → Renderer push, not in IPCChannelMap
+  [IPC_CHANNELS.HARNESS_LIST_GUARDRAILS]: { params: []; return: GuardrailRuleSummaryShared[] }
+  [IPC_CHANNELS.HARNESS_SET_GUARDRAIL_ENABLED]: { params: [request: SetGuardrailEnabledRequest]; return: void }
+  [IPC_CHANNELS.HARNESS_LIST_GUIDES]: { params: []; return: GuideSummary[] }
+  [IPC_CHANNELS.HARNESS_SET_GUIDE_ENABLED]: { params: [request: SetGuideEnabledRequest]; return: void }
+
+  // Task State Machine operations (TASK021)
+  [IPC_CHANNELS.HARNESS_LIST_RESUMEABLE]: { params: []; return: TaskStateSummary[] }
+  [IPC_CHANNELS.HARNESS_RESUME_TASK]: { params: [taskId: string]; return: TaskResumeResultShared }
+  [IPC_CHANNELS.HARNESS_ABANDON_TASK]: { params: [taskId: string]; return: void }
+  // HARNESS_RESUMEABLE_DETECTED: Main → Renderer push, not in IPCChannelMap
 }
 
 /**
@@ -635,6 +691,16 @@ export interface AIChatRequest {
   manualRefs?: string[]
   /** Skill IDs referenced via #skill-name syntax */
   skillRefs?: string[]
+  /** Classified intent for harness mode resolution */
+  intent?: 'chat' | 'modify_file' | 'question_answering' | 'brainstorm' | 'analyze' | 'search' | 'plan'
+  /** Target file path for file modification operations */
+  targetFile?: string
+  /** Explicitly requested tool IDs */
+  explicitTools?: string[]
+  /** Planned steps for multi-step task tracking (TASK021) */
+  plannedSteps?: string[]
+  /** Whether this is a long-running task (TASK021) */
+  longRunning?: boolean
 }
 
 export interface AIRagHit {
@@ -1087,6 +1153,8 @@ export interface AssembledContext {
   budgetTotal: number
   sources: ContextSource[]
   warnings: string[]
+  /** Tool definitions available in the current scope (TASK020) */
+  toolDefinitions?: readonly ToolDefinitionSummary[]
 }
 
 export interface ContextEngineConfig {
@@ -1216,4 +1284,193 @@ export interface RagSearchHit {
   path: string
   score: number
   snippet: string
+}
+
+// ─── Guardrail Shared Types ───
+
+/**
+ * Event payload broadcast when a guardrail blocks an operation.
+ * Consumed by renderer process for user notifications (TASK021).
+ */
+export interface GuardrailBlockedEvent {
+  readonly ruleId: string
+  readonly reason: string
+  readonly severity: 'block'
+  readonly path?: string
+  readonly operationType?: 'write' | 'delete' | 'rename' | 'read'
+}
+
+/**
+ * Request to enable or disable a guardrail rule.
+ */
+export interface SetGuardrailEnabledRequest {
+  readonly ruleId: string
+  readonly enabled: boolean
+}
+
+/**
+ * Summary of a guardrail rule (returned by harness:listGuardrails).
+ */
+export interface GuardrailRuleSummaryShared {
+  readonly id: string
+  readonly description: string
+  readonly enabled: boolean
+}
+
+/**
+ * Result of a file operation that may be blocked or require confirmation.
+ * Extends existing void returns to support guardrail conditional flow.
+ */
+export type FileOperationResult =
+  | { readonly status: 'completed' }
+  | {
+      readonly status: 'blocked'
+      readonly ruleId: string
+      readonly reason: string
+    }
+  | {
+      readonly status: 'pending_confirmation'
+      readonly ruleId: string
+      readonly reason: string
+    }
+
+// ─── Harness Shared Types ───
+
+export type HarnessMode = 'single' | 'dual' | 'panel'
+
+export interface HarnessConfig {
+  readonly defaultMode: HarnessMode
+  readonly maxRetries: number
+  readonly evaluatorModel?: string
+  readonly panelEvaluators?: PanelEvaluatorConfig[]
+}
+
+export interface PanelEvaluatorConfig {
+  readonly id: string
+  readonly role: string
+  readonly systemPromptOverride?: string
+}
+
+export interface HarnessResult {
+  readonly finalResponse: AIChatResponse
+  readonly mode: HarnessMode
+  readonly generatorAttempts: number
+  readonly evaluations: EvaluationReport[]
+  readonly sensorSignals: SensorSignal[]
+  readonly guardrailVerdicts: GuardrailVerdictSummary[]
+  readonly degraded: boolean
+  readonly degradeReason?: string
+}
+
+export interface EvaluationReport {
+  readonly evaluatorId: string
+  readonly verdict: 'pass' | 'fail'
+  readonly dimensions: Record<string, EvaluationDimension>
+  readonly criticalIssues: readonly string[]
+  readonly minorIssues: readonly string[]
+  readonly rationale: string
+  readonly timestamp: number
+}
+
+export interface EvaluationDimension {
+  readonly pass: boolean
+  readonly issues: readonly string[]
+}
+
+export interface SensorSignal {
+  readonly sensorId: string
+  readonly severity: 'info' | 'warn' | 'error'
+  readonly location?: { readonly file?: string; readonly line?: number; readonly span?: readonly [number, number] }
+  readonly message: string
+  readonly correctionHint: string
+}
+
+export interface GuardrailVerdictSummary {
+  readonly ruleId: string
+  readonly blocked: boolean
+  readonly reason?: string
+}
+
+export interface DegradationWarning {
+  readonly id: string
+  readonly timestamp: number
+  readonly reason: string
+  readonly originalMode: HarnessMode
+  readonly degradedTo: HarnessMode
+}
+
+export interface HarnessMeta {
+  readonly mode: HarnessMode
+  readonly degraded: boolean
+  readonly degradeReason?: string
+  readonly generatorAttempts: number
+}
+
+// ─── Guide Shared Types (TASK019) ───
+
+export interface GuideSummary {
+  readonly id: string
+  readonly category: string
+  readonly priority: number
+  readonly description: string
+  readonly enabled: boolean
+}
+
+export interface SetGuideEnabledRequest {
+  readonly guideId: string
+  readonly enabled: boolean
+}
+
+// ─── Tool Scope Shared Types (TASK020) ───
+
+/** Summary of a tool definition for renderer-side display */
+export interface ToolSummary {
+  readonly id: string
+  readonly name: string
+  readonly description: string
+  readonly tags: readonly string[]
+}
+
+/** Summary of an intent profile for renderer-side display */
+export interface IntentProfileSummary {
+  readonly intent: string
+  readonly tools: readonly string[]
+  readonly maxTools: number
+}
+
+/** Tool definition summary for context injection (no handler) */
+export interface ToolDefinitionSummary {
+  readonly id: string
+  readonly name: string
+  readonly description: string
+  readonly schema: Readonly<Record<string, unknown>>
+}
+
+// ─── Task State Machine Shared Types (TASK021) ───
+
+/** Summary of a task state for renderer-side display */
+export interface TaskStateSummary {
+  readonly taskId: string
+  readonly goal: string
+  readonly status: string
+  readonly completedSteps: number
+  readonly totalSteps: number
+  readonly updatedAt: number
+}
+
+/** Guardrail notification data for renderer-side display */
+export interface GuardrailNotificationData {
+  readonly id: string
+  readonly ruleId: string
+  /** Human-readable rule name (e.g. "系统路径保护") */
+  readonly ruleName: string
+  readonly reason: string
+  readonly severity: 'block' | 'conditional'
+  readonly timestamp: number
+}
+
+/** IPC-serializable result of task resume operation */
+export interface TaskResumeResultShared {
+  readonly state: TaskStateSummary
+  readonly resumePrompt: string
 }

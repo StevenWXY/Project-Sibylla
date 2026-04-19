@@ -52,6 +52,14 @@ import type {
   DailyLogEntry,
   RagSearchRequest,
   RagSearchHit,
+  HarnessMode,
+  HarnessResult,
+  DegradationWarning,
+  GuardrailRuleSummaryShared,
+  SetGuardrailEnabledRequest,
+  TaskStateSummary,
+  TaskResumeResultShared,
+  GuardrailNotificationData,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -184,6 +192,22 @@ interface ElectronAPI {
     search: (request: RagSearchRequest) => Promise<IPCResponse<RagSearchHit[]>>
     rebuild: () => Promise<IPCResponse<void>>
   }
+
+  // Harness operations
+  harness: {
+    execute: (request: AIChatRequest) => Promise<IPCResponse<HarnessResult>>
+    setMode: (mode: HarnessMode) => Promise<IPCResponse<void>>
+    getMode: () => Promise<IPCResponse<HarnessMode>>
+    listGuardrails: () => Promise<IPCResponse<GuardrailRuleSummaryShared[]>>
+    setGuardrailEnabled: (request: SetGuardrailEnabledRequest) => Promise<IPCResponse<void>>
+    onDegradationOccurred: (callback: (warning: DegradationWarning) => void) => () => void
+    // TASK021: Task state machine operations
+    listResumeable: () => Promise<IPCResponse<TaskStateSummary[]>>
+    resumeTask: (taskId: string) => Promise<IPCResponse<TaskResumeResultShared>>
+    abandonTask: (taskId: string) => Promise<IPCResponse<void>>
+    onResumeableTaskDetected: (callback: (tasks: TaskStateSummary[]) => void) => () => void
+    onGuardrailBlocked: (callback: (data: GuardrailNotificationData) => void) => () => void
+  }
   
   // Auth operations
   auth: {
@@ -312,6 +336,19 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.SEARCH_INDEX_STATUS,
   IPC_CHANNELS.SEARCH_REINDEX,
   IPC_CHANNELS.SEARCH_INDEX_PROGRESS,
+  // Harness operations
+  IPC_CHANNELS.HARNESS_EXECUTE,
+  IPC_CHANNELS.HARNESS_SET_MODE,
+  IPC_CHANNELS.HARNESS_GET_MODE,
+  IPC_CHANNELS.HARNESS_DEGRADATION_OCCURRED,
+  IPC_CHANNELS.HARNESS_GUARDRAIL_BLOCKED,
+  IPC_CHANNELS.HARNESS_LIST_GUARDRAILS,
+  IPC_CHANNELS.HARNESS_SET_GUARDRAIL_ENABLED,
+  // TASK021: Task state machine channels
+  IPC_CHANNELS.HARNESS_LIST_RESUMEABLE,
+  IPC_CHANNELS.HARNESS_RESUME_TASK,
+  IPC_CHANNELS.HARNESS_ABANDON_TASK,
+  IPC_CHANNELS.HARNESS_RESUMEABLE_DETECTED,
 ]
 
 /**
@@ -724,6 +761,66 @@ const api: ElectronAPI = {
 
     rebuild: async () => {
       return await safeInvoke<void>(IPC_CHANNELS.RAG_REBUILD)
+    },
+  },
+
+  // Harness operations
+  harness: {
+    execute: async (request: AIChatRequest) => {
+      return await safeInvoke<HarnessResult>(IPC_CHANNELS.HARNESS_EXECUTE, request)
+    },
+
+    setMode: async (mode: HarnessMode) => {
+      return await safeInvoke<void>(IPC_CHANNELS.HARNESS_SET_MODE, mode)
+    },
+
+    getMode: async () => {
+      return await safeInvoke<HarnessMode>(IPC_CHANNELS.HARNESS_GET_MODE)
+    },
+
+    listGuardrails: async () => {
+      return await safeInvoke<GuardrailRuleSummaryShared[]>(IPC_CHANNELS.HARNESS_LIST_GUARDRAILS)
+    },
+
+    setGuardrailEnabled: async (request: SetGuardrailEnabledRequest) => {
+      return await safeInvoke<void>(IPC_CHANNELS.HARNESS_SET_GUARDRAIL_ENABLED, request)
+    },
+
+    onDegradationOccurred: (callback: (warning: DegradationWarning) => void) => {
+      const handler = (_event: IpcRendererEvent, warning: DegradationWarning) => callback(warning)
+      ipcRenderer.on(IPC_CHANNELS.HARNESS_DEGRADATION_OCCURRED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.HARNESS_DEGRADATION_OCCURRED, handler)
+      }
+    },
+
+    // TASK021: Task state machine operations
+    listResumeable: async () => {
+      return await safeInvoke<TaskStateSummary[]>(IPC_CHANNELS.HARNESS_LIST_RESUMEABLE)
+    },
+
+    resumeTask: async (taskId: string) => {
+      return await safeInvoke<TaskResumeResultShared>(IPC_CHANNELS.HARNESS_RESUME_TASK, taskId)
+    },
+
+    abandonTask: async (taskId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.HARNESS_ABANDON_TASK, taskId)
+    },
+
+    onResumeableTaskDetected: (callback: (tasks: TaskStateSummary[]) => void) => {
+      const handler = (_event: IpcRendererEvent, tasks: TaskStateSummary[]) => callback(tasks)
+      ipcRenderer.on(IPC_CHANNELS.HARNESS_RESUMEABLE_DETECTED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.HARNESS_RESUMEABLE_DETECTED, handler)
+      }
+    },
+
+    onGuardrailBlocked: (callback: (data: GuardrailNotificationData) => void) => {
+      const handler = (_event: IpcRendererEvent, data: GuardrailNotificationData) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.HARNESS_GUARDRAIL_BLOCKED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.HARNESS_GUARDRAIL_BLOCKED, handler)
+      }
     },
   },
   

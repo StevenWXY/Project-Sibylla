@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
-import type { AIRagHit, AIMemoryState } from '../../shared/types'
+import type { AIRagHit, AIMemoryState, HarnessMeta } from '../../shared/types'
 import type { ChatMessage } from '../components/studio/types'
 
 interface AIChatState {
@@ -25,6 +25,7 @@ interface FinalizeData {
   intercepted: boolean
   warnings: string[]
   contextSources?: string[]
+  harnessMeta?: HarnessMeta
 }
 
 interface AIChatActions {
