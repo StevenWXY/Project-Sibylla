@@ -77,7 +77,7 @@ export class FileHandler extends IpcHandler {
    */
   setFileManager(fileManager: FileManager): void {
     this.fileManager = fileManager
-    console.log('[FileHandler] FileManager instance set')
+    logger.info('[FileHandler] FileManager instance set')
   }
 
   /**
@@ -87,7 +87,7 @@ export class FileHandler extends IpcHandler {
    */
   setImportManager(importManager: ImportManager): void {
     this.importManager = importManager
-    console.log('[FileHandler] ImportManager instance set')
+    logger.info('[FileHandler] ImportManager instance set')
   }
 
   /**
@@ -113,7 +113,7 @@ export class FileHandler extends IpcHandler {
       this.broadcastToAllWindows(IPC_CHANNELS.FILE_SAVE_FAILED, payload)
     })
 
-    console.log('[FileHandler] AutoSaveManager instance set')
+    logger.info('[FileHandler] AutoSaveManager instance set')
   }
 
   /**
@@ -123,7 +123,7 @@ export class FileHandler extends IpcHandler {
    */
   setGuardrailEngine(engine: GuardrailEngine): void {
     this.guardrailEngine = engine
-    console.log('[FileHandler] GuardrailEngine instance set')
+    logger.info('[FileHandler] GuardrailEngine instance set')
   }
 
   /**
@@ -134,7 +134,7 @@ export class FileHandler extends IpcHandler {
    */
   setAuthUserProvider(provider: AuthUserProvider): void {
     this.authUserProvider = provider
-    console.log('[FileHandler] AuthUserProvider instance set')
+    logger.info('[FileHandler] AuthUserProvider instance set')
   }
   
   /**
@@ -167,7 +167,7 @@ export class FileHandler extends IpcHandler {
     // Auto-save: file:notifyChange (send/on, one-way notification)
     ipcMain.on(IPC_CHANNELS.FILE_NOTIFY_CHANGE, (_event, filePath: string, content: string) => {
       if (!this.autoSaveManager) {
-        console.warn('[FileHandler] AutoSaveManager not initialized, ignoring notifyChange')
+        logger.warn('[FileHandler] AutoSaveManager not initialized, ignoring notifyChange')
         return
       }
       this.autoSaveManager.onFileChanged(filePath, content)
@@ -176,7 +176,7 @@ export class FileHandler extends IpcHandler {
     // Auto-save: file:retrySave (invoke/handle, user-initiated retry)
     ipcMain.handle(IPC_CHANNELS.FILE_RETRY_SAVE, this.safeHandle(this.retrySave.bind(this)))
     
-    console.log('[FileHandler] All handlers registered')
+    logger.info('[FileHandler] All handlers registered')
   }
   
   /**
@@ -203,7 +203,7 @@ export class FileHandler extends IpcHandler {
     if (this.fileManager) {
       // Stop file watching
       this.fileManager.stopWatching().catch(err => {
-        console.error('[FileHandler] Error stopping file watcher:', err)
+        logger.error('[FileHandler] Error stopping file watcher:', err)
       })
       // Clear reference to allow garbage collection
       this.fileManager = null
@@ -431,7 +431,7 @@ export class FileHandler extends IpcHandler {
     await this.fileManager.startWatching((watchEvent) => {
       // Check if webContents is still alive before sending
       if (!webContents || webContents.isDestroyed()) {
-        console.warn('[FileHandler] WebContents destroyed, skipping file watch event')
+        logger.warn('[FileHandler] WebContents destroyed, skipping file watch event')
         return
       }
       
@@ -446,7 +446,7 @@ export class FileHandler extends IpcHandler {
       webContents.send(IPC_CHANNELS.FILE_WATCH_EVENT, ipcEvent)
     })
     
-    console.log('[FileHandler] File watching started')
+    logger.info('[FileHandler] File watching started')
   }
   
   /**
@@ -460,7 +460,7 @@ export class FileHandler extends IpcHandler {
     }
     
     await this.fileManager.stopWatching()
-    console.log('[FileHandler] File watching stopped')
+    logger.info('[FileHandler] File watching stopped')
   }
   
   /**

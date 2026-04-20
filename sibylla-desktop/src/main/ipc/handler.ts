@@ -1,5 +1,6 @@
 import { IpcMainInvokeEvent } from 'electron'
 import { IPCResponse, ErrorType, AppError } from '../../shared/types'
+import { logger } from '../utils/logger'
 
 /**
  * Abstract base class for IPC handlers
@@ -96,7 +97,7 @@ export abstract class IpcHandler {
 
     // Always log full error details for debugging
     // In production, this can be sent to error tracking service (e.g., Sentry)
-    console.error(`[IPC Handler:${this.namespace}] Error:`, {
+    logger.error(`[IPC Handler:${this.namespace}] Error:`, {
       type,
       message: errorObj.message,
       stack: errorObj.stack,
@@ -185,20 +186,16 @@ export abstract class IpcHandler {
       const requestId = `${this.namespace}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
       
       try {
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[IPC Handler:${this.namespace}] Processing request ${requestId}`)
-        }
+        logger.debug(`[IPC Handler:${this.namespace}] Processing request ${requestId}`)
         
         const result = await handler(event, ...args)
         
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[IPC Handler:${this.namespace}] Request ${requestId} completed successfully`)
-        }
+        logger.debug(`[IPC Handler:${this.namespace}] Request ${requestId} completed successfully`)
         
         return this.wrapResponse(result, requestId)
       } catch (error) {
         // Error logs should always be output
-        console.error(`[IPC Handler:${this.namespace}] Request ${requestId} failed:`, error)
+        logger.error(`[IPC Handler:${this.namespace}] Request ${requestId} failed:`, error)
         
         const errorType = error instanceof Error
           ? this.inferErrorType(error)
@@ -216,6 +213,6 @@ export abstract class IpcHandler {
    * (e.g., close file watchers, database connections, etc.)
    */
   cleanup(): void {
-    console.debug(`[IPC Handler:${this.namespace}] Cleanup completed`)
+    logger.debug(`[IPC Handler:${this.namespace}] Cleanup completed`)
   }
 }
