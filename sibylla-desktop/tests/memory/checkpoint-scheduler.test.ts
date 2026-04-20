@@ -317,6 +317,13 @@ describe('CheckpointScheduler', () => {
         failedRecords.push(record)
       })
 
+      const mockLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      }
+
       const scheduler = new CheckpointScheduler(
         mockManager,
         failingExtractor,
@@ -325,7 +332,7 @@ describe('CheckpointScheduler', () => {
         mockCompressor,
         eventBus,
         config,
-        undefined,
+        mockLogger as unknown as typeof import('../../src/main/utils/logger').logger,
         FAST_RETRY_DELAYS,
       )
 
