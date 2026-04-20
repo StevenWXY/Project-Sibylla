@@ -24,6 +24,8 @@
 | Sprint 1 | 编辑器与文件系统 | TASK001-004 | [`sprint1-editor-filesystem.md`](../../requirements/phase1/sprint1-editor-filesystem.md) | 🏃 进行中 |
 | Sprint 2 | Git 抽象层与同步 | TASK005-010 | [`sprint2-git-sync.md`](../../requirements/phase1/sprint2-git-sync.md) | ⬜ 待开始 |
 | Sprint 3 | AI 系统 MVP | TASK011-016 | [`sprint3-ai-mvp.md`](../../requirements/phase1/sprint3-ai-mvp.md) | ⬜ 待开始 |
+| Sprint 3.1 | Harness 基础设施 | TASK017-021 | [`sprint3.1-harness-infrastructure.md`](../../requirements/phase1/sprint3.1-harness-infrastructure.md) | 🏃 进行中 |
+| Sprint 3.2 | 记忆系统 v2 | TASK022-026 | [`sprint3.2-memory.md`](../../requirements/phase1/sprint3.2-memory.md) | ⬜ 待开始 |
 
 ---
 
@@ -276,9 +278,99 @@ Sprint 3 基础链路（TASK011-016）
 
 ---
 
+## 六.2、Sprint 3.2 — 记忆系统 v2
+
+> **目标：** 将记忆系统从 v1（基础日志层）升级到 v2（智能记忆层），让 Sibylla 具备持续学习团队工作方式与项目约定的能力。核心能力：自动提取高价值信息、精炼结构化记忆、演化可追溯、Token 预算管理、混合检索。
+>
+> **预计周期：** 3-4 周（Week 17 - Week 20）
+>
+> **前置条件：** Sprint 3 的 TASK016（记忆系统 IPC 联调）可用；Sprint 3.1 的 TASK017（Guardrails）可发射 Trace 事件
+
+### Sprint 3.2 任务
+
+| 状态 | 任务 ID | 任务名称 | 优先级 | 复杂度 | 预估工时 | 对应需求 | 备注 |
+|------|---------|---------|--------|--------|---------|---------|------|
+| ⬜ | PHASE1-TASK022 | MEMORY.md v2 数据层与日志存储 | P0 | 非常复杂 | 4-5 天 | 需求 3.2.1 + LogStore | types.ts + MemoryFileManager + LogStore + 门面扩展 + AiGatewaySession |
+| ⬜ | PHASE1-TASK023 | 精选记忆提取器与演化日志 | P0 | 非常复杂 | 4-5 天 | 需求 3.2.2 + 3.2.4 | MemoryExtractor + EvolutionLog + applyExtractionReport |
+| ⬜ | PHASE1-TASK024 | 心跳检查点与压缩归档 | P0 | 非常复杂 | 4-5 天 | 需求 3.2.3 + 3.2.5 + 3.2.8 | CheckpointScheduler + MemoryCompressor + Trace 接入 |
+| ⬜ | PHASE1-TASK025 | 向量索引与混合检索引擎 | P0 | 非常复杂 | 4-5 天 | 需求 3.2.6 + 4.2.2/4.2.3 | MemoryIndexer + EmbeddingProvider + ContextEngine 集成 |
+| ⬜ | PHASE1-TASK026 | 记忆面板 UI 与 IPC 集成 | P1 | 复杂 | 3-4 天 | 需求 3.2.7 + 4.2.5/4.2.8 | MemoryPanel + memoryStore + IPC handler |
+
+### Sprint 3.2 依赖关系
+
+```
+TASK022 (数据层) ─── 所有任务的基础
+│
+├────────────────────┐
+▼                    ▼
+TASK023 (提取器)   TASK025 (向量检索) ─── 可并行
+│                    │
+▼                    ▼
+TASK024 (检查点+压缩) ── 依赖 TASK023
+│
+▼
+TASK026 (UI+IPC) ─── 依赖全部后端任务
+```
+
+**推荐执行顺序：** TASK022 → TASK023 ∥ TASK025 → TASK024 → TASK026
+
+### Sprint 3.2 已有代码基础
+
+| 已有模块 | 文件路径 | 完成度 | Sprint 3.2 使用方式 |
+|---------|---------|--------|-------------------|
+| MemoryManager v1 | `src/main/services/memory-manager.ts` | 95% | 扩展为 v2 门面，内部委托到 memory/ 子目录 |
+| LocalRagEngine | `src/main/services/local-rag-engine.ts` | 90% | 保留作为 MemoryIndexer 降级后备 |
+| AiGatewayClient | `src/main/services/ai-gateway-client.ts` | 70% | 新增非流式 chat() + createSession() |
+| ContextEngine | `src/main/services/context-engine.ts` | ~60% | 新增 memory 层集成 |
+| AIHandler | `src/main/ipc/handlers/ai.handler.ts` | 75% | 移除手动记忆截断，改用 ContextEngine memory 层 |
+
+**完全缺失、需新建的模块：**
+
+| 模块 | 对应任务 | 说明 |
+|------|---------|------|
+| types.ts | TASK022 | v2 共享类型定义 |
+| MemoryFileManager | TASK022 | MEMORY.md v2 读写与迁移 |
+| LogStore | TASK022 | JSONL 日志存储 |
+| MemoryExtractor | TASK023 | LLM 驱动精选记忆提取器 |
+| EvolutionLog | TASK023 | 记忆演化日志 |
+| CheckpointScheduler | TASK024 | 心跳检查点调度器 |
+| MemoryCompressor | TASK024 | 三阶段压缩与归档 |
+| MemoryIndexer | TASK025 | SQLite + sqlite-vec 向量索引 |
+| LocalEmbeddingProvider | TASK025 | 本地 embedding 模型 |
+| MemoryPanel + 子组件 | TASK026 | 记忆面板 UI |
+| memoryStore | TASK026 | Zustand 记忆状态管理 |
+
+### Sprint 3.2 新增 IPC 通道
+
+| IPC 通道 | 对应任务 | 方向 | 说明 |
+|---------|---------|------|------|
+| `memory:listEntries` | TASK026 | Renderer → Main | 列出所有记忆条目 |
+| `memory:listArchived` | TASK026 | Renderer → Main | 列出归档条目 |
+| `memory:search` | TASK026 | Renderer → Main | 混合检索 |
+| `memory:getEntry` | TASK026 | Renderer → Main | 获取单条记忆 |
+| `memory:getStats` | TASK026 | Renderer → Main | 获取记忆统计 |
+| `memory:updateEntry` | TASK026 | Renderer → Main | 编辑条目 |
+| `memory:deleteEntry` | TASK026 | Renderer → Main | 删除条目 |
+| `memory:lockEntry` | TASK026 | Renderer → Main | 锁定/解锁 |
+| `memory:triggerCheckpoint` | TASK026 | Renderer → Main | 手动触发检查点 |
+| `memory:triggerCompression` | TASK026 | Renderer → Main | 手动触发压缩 |
+| `memory:undoLastCompression` | TASK026 | Renderer → Main | 撤销压缩 |
+| `memory:getEvolutionHistory` | TASK026 | Renderer → Main | 查询演化历史 |
+| `memory:rebuildIndex` | TASK026 | Renderer → Main | 重建向量索引 |
+| `memory:getIndexHealth` | TASK026 | Renderer → Main | 检查索引健康 |
+| `memory:getConfig` | TASK026 | Renderer → Main | 获取记忆配置 |
+| `memory:updateConfig` | TASK026 | Renderer → Main | 更新记忆配置 |
+| `memory:checkpointStarted` | TASK026 | Main → Renderer | 检查点开始事件 |
+| `memory:checkpointCompleted` | TASK026 | Main → Renderer | 检查点完成事件 |
+| `memory:entryAdded` | TASK026 | Main → Renderer | 条目新增事件 |
+| `memory:entryUpdated` | TASK026 | Main → Renderer | 条目更新事件 |
+| `memory:entryDeleted` | TASK026 | Main → Renderer | 条目删除事件 |
+
+---
+
 ## 七、Phase 1 全局进度
 
-**Phase 1 总进度：** 4/21 任务完成
+**Phase 1 总进度：** 4/26 任务完成
 
 | Sprint | 任务数 | 已完成 | 进度 | 状态 |
 |--------|--------|--------|------|------|
@@ -286,6 +378,7 @@ Sprint 3 基础链路（TASK011-016）
 | Sprint 2 | 6 | 1 | 17% | 🏃 进行中 |
 | Sprint 3 | 6 | 1 | 17% | 🏃 进行中 |
 | Sprint 3.1 | 5 | 1 | 20% | 🏃 进行中 |
+| Sprint 3.2 | 5 | 0 | 0% | ⬜ 待开始 |
 
 ---
 
@@ -321,11 +414,12 @@ Sprint 3 基础链路（TASK011-016）
 | 2026-04-17 | TASK005 | ✅ 完成 | AutoSaveManager 实现 + IPC 集成 + SaveFailureBanner + 单元测试 17/17 通过（覆盖率 94.6%） |
 | 2026-04-18 | TASK013 | ✅ 完成 | AI Diff 审查完整链路：diffParser + diffReviewStore + DiffReviewPanel + 集成改造；type-check/lint/828 tests 全部通过 |
 | 2026-04-18 | — | — | Sprint 3.1 Harness 任务拆解完成，生成 5 个任务文档（TASK017-021） |
+| 2026-04-20 | — | — | Sprint 3.2 记忆系统 v2 任务拆解完成，生成 5 个任务文档（TASK022-026） |
 
 ---
 
 **创建时间：** 2026-03-31
-**最后更新：** 2026-04-19
+**最后更新：** 2026-04-20
 **更新记录：**
 - 2026-03-31 — 创建 Sprint 1 任务列表
 - 2026-04-01 — 追加 TASK016/017/018 完成记录
@@ -335,3 +429,4 @@ Sprint 3 基础链路（TASK011-016）
 - 2026-04-18 — TASK013 AI Diff 审查完成：diffParser + diffReviewStore + DiffReviewPanel + 集成改造，66 个新增测试全部通过
 - 2026-04-18 — Sprint 3.1 Harness 任务拆解完成：5 个任务文档（TASK017-021）+ 依赖关系图 + 编号冲突说明
 - 2026-04-19 — TASK017 Guardrails 硬性保障层完成：6 个 guardrail 模块文件 + FileHandler 集成 + shared/types 扩展 + 主进程装配 + 66 个新增测试全部通过（全量 421 测试通过）
+- 2026-04-20 — Sprint 3.2 记忆系统 v2 任务拆解完成：5 个任务文档（TASK022-026）+ 依赖关系图 + 已有代码基础评估 + 新增 IPC 通道清单
