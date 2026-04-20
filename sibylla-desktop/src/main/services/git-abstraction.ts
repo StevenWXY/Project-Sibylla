@@ -931,7 +931,7 @@ export class GitAbstraction extends EventEmitter {
       }
 
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.error(`${LOG_PREFIX} Failed to read commit`, {
+      logger.warn(`${LOG_PREFIX} Failed to read commit`, {
         oid,
         error: errorMessage,
       })
