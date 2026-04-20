@@ -111,3 +111,16 @@ export const logger = new Logger()
 if (process.env.NODE_ENV === 'development') {
   logger.setLevel(LogLevel.DEBUG)
 }
+
+// Silence logger in test environment to prevent stderr noise.
+// The vi.mock in tests/setup.ts is the primary mechanism; this is a safety net
+// in case the mock fails to apply (e.g., due to module resolution edge cases).
+if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
+  logger.setLevel(LogLevel.ERROR)
+  // Replace console methods with no-ops so even ERROR-level logs stay silent
+  const noop = () => {}
+  logger.debug = noop
+  logger.info = noop
+  logger.warn = noop
+  logger.error = noop
+}
