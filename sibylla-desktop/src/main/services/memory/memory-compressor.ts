@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs'
 import * as path from 'path'
 import { logger } from '../../utils/logger'
-import { estimateTokens, estimateTokensFromEntries, cosineSimilarity, textSimilarity } from './utils'
+import { estimateTokensFromEntries, cosineSimilarity, textSimilarity } from './utils'
 import type { AiGatewayClient } from '../ai-gateway-client'
 import type { MemoryManager } from '../memory-manager'
 import type { MemoryFileManager } from './memory-file-manager'

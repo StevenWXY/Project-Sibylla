@@ -5,8 +5,6 @@ import type {
   MemorySection,
   HybridSearchResult,
   EvolutionEvent,
-  CheckpointRecord,
-  CompressionResult,
   MemoryConfig,
   MemoryV2StatsResponse,
 } from '../../shared/types'

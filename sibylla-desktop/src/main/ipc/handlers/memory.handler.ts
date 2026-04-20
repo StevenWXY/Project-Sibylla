@@ -20,7 +20,6 @@ import type {
   SearchOptions,
   MemoryEntry,
   CheckpointRecord,
-  CompressionResult,
   EvolutionEvent,
   MemoryConfig,
 } from '../../services/memory/types'
