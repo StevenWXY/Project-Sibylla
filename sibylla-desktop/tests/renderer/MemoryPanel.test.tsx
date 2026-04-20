@@ -3,7 +3,8 @@ import React from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { useMemoryStore } from '../../src/renderer/store/memoryStore'
 
-// Mock window.electronAPI.memory
+// Extend window.electronAPI.memory with test-specific mocks
+// (setup.ts already provides basic memory mocks; we add extra methods here)
 const mockMemoryAPI = {
   listEntries: vi.fn(),
   listArchived: vi.fn(),
@@ -33,16 +34,7 @@ const mockMemoryAPI = {
   queryDailyLog: vi.fn(),
 }
 
-Object.defineProperty(globalThis, 'window', {
-  value: {
-    electronAPI: {
-      memory: mockMemoryAPI,
-      on: vi.fn(() => vi.fn()),
-      off: vi.fn(),
-    },
-  },
-  writable: true,
-})
+Object.assign(window.electronAPI.memory, mockMemoryAPI)
 
 // Lazy import after mock setup
 const { MemoryPanel } = await import('../../src/renderer/components/memory/MemoryPanel')
