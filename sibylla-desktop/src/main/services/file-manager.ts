@@ -1495,16 +1495,18 @@ export class FileManager {
    * @throws {FileManagerError} If watcher is already started
    */
   async startWatching(callback: (event: FileWatchEvent) => void): Promise<void> {
+    // Guard: reject duplicate start before entering the try/catch so this
+    // expected validation error is not logged as an unexpected failure.
+    if (this.watcher) {
+      throw new FileManagerError(
+        FILE_ERROR_CODES.WATCHER_ALREADY_STARTED,
+        'File watcher is already started'
+      )
+    }
+    
     const startTime = Date.now()
     
     try {
-      if (this.watcher) {
-        throw new FileManagerError(
-          FILE_ERROR_CODES.WATCHER_ALREADY_STARTED,
-          'File watcher is already started'
-        )
-      }
-      
       // Create and start the file watcher with forbidden paths
       const allForbiddenPaths = [
         ...FileManager.CORE_FORBIDDEN_PATHS,
