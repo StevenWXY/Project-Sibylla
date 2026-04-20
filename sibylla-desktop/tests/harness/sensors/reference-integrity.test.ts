@@ -7,15 +7,6 @@ import { ReferenceIntegritySensor } from '../../../src/main/services/harness/sen
 import type { AIChatResponse, AssembledContext } from '../../../src/shared/types'
 import type { LocalRagSearchHit } from '../../../src/main/services/local-rag-engine'
 
-vi.mock('../../../src/main/utils/logger', () => ({
-  logger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}))
-
 const mockContext: AssembledContext = {
   layers: [],
   systemPrompt: 'System prompt',

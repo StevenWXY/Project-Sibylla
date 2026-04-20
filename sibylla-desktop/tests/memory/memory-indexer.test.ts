@@ -3,16 +3,6 @@ import Database from 'better-sqlite3'
 import { MemoryIndexer } from '../../src/main/services/memory/memory-indexer'
 import type { EmbeddingProvider, MemoryEntry } from '../../src/main/services/memory/types'
 
-// Mock logger
-vi.mock('../../src/main/utils/logger', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}))
-
 // Mock MemoryFileManager to avoid file system access during rebuild
 vi.mock('../../src/main/services/memory/memory-file-manager', () => ({
   MemoryFileManager: vi.fn().mockImplementation(() => ({

@@ -9,16 +9,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GuardrailEngine } from '../../../src/main/services/harness/guardrails/engine'
 import type { FileOperation, OperationContext, GuardrailRule, GuardrailVerdict } from '../../../src/main/services/harness/guardrails/types'
 
-// Mock logger to prevent console output during tests
-vi.mock('../../../src/main/utils/logger', () => ({
-  logger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}))
-
 /** Default operation for testing */
 const defaultOp: FileOperation = {
   type: 'write',

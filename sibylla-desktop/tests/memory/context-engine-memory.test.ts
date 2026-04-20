@@ -5,16 +5,6 @@ import type { MemoryManager } from '../../src/main/services/memory-manager'
 import type { SkillEngine } from '../../src/main/services/skill-engine'
 import type { HybridSearchResult } from '../../src/main/services/memory/types'
 
-// Mock logger
-vi.mock('../../src/main/utils/logger', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}))
-
 function createMockFileManager(): FileManager {
   return {
     readFile: vi.fn().mockResolvedValue({ content: 'Test file content', encoding: 'utf-8' }),

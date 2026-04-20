@@ -6,16 +6,6 @@ vi.mock('@xenova/transformers', () => ({
   pipeline: vi.fn(),
 }))
 
-// Mock logger
-vi.mock('../../src/main/utils/logger', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}))
-
 describe('LocalEmbeddingProvider', () => {
   let provider: LocalEmbeddingProvider
 

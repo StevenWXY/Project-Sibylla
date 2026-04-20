@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     exclude: ['tests/integration/**/*.test.ts', 'tests/renderer/**/*.test.ts', 'node_modules', 'dist'],
+    setupFiles: ['tests/setup.ts'],
     testTimeout: 20000, // 20 seconds for slow performance tests on CI
     hookTimeout: 10000,
     coverage: {

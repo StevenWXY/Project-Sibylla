@@ -10,16 +10,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-// Mock logger to suppress console output in tests
-vi.mock('../../src/main/utils/logger', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}))
-
 import { FileManager } from '../../src/main/services/file-manager'
 import * as fs from 'fs/promises'
 import * as path from 'path'

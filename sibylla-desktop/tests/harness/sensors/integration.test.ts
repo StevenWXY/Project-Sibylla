@@ -13,15 +13,6 @@ import type { AIChatRequest, AIChatResponse, AssembledContext, WorkspaceConfig }
 import type { Generator } from '../../../src/main/services/harness/generator'
 import type { Sensor } from '../../../src/main/services/harness/sensors/types'
 
-vi.mock('../../../src/main/utils/logger', () => ({
-  logger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}))
-
 const mockLogger = {
   info: vi.fn(),
   warn: vi.fn(),

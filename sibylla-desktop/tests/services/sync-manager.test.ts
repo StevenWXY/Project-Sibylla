@@ -13,16 +13,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-// Mock logger to suppress console output in tests
-vi.mock('../../src/main/utils/logger', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}))
-
 import { SyncManager } from '../../src/main/services/sync-manager'
 import type { NetworkStatusProvider } from '../../src/main/services/sync-manager'
 import type { SyncManagerConfig } from '../../src/main/services/types/sync-manager.types'

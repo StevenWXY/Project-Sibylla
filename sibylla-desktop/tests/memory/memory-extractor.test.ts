@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryExtractor } from '../../src/main/services/memory/memory-extractor'
+import { logger } from '../../src/main/utils/logger'
 import type { AiGatewayClient, AiGatewaySession, AiGatewayChatResponse } from '../../src/main/services/ai-gateway-client'
 import type { ExtractionInput, ExtractionCandidate, MemoryEntry, SimilarityIndexProvider } from '../../src/main/services/memory/types'
 
@@ -189,16 +190,14 @@ describe('MemoryExtractor', () => {
       const session = createMockSession(responseContent)
       const gateway = createMockAiGateway(session)
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.mocked(logger.warn).mockClear()
 
       const extractor = new MemoryExtractor(gateway, null, { maxNewEntriesPerBatch: 20 })
 
       const report = await extractor.extract(baseInput)
 
       expect(report.added.length).toBe(25)
-      expect(warnSpy).toHaveBeenCalled()
-
-      warnSpy.mockRestore()
+      expect(logger.warn).toHaveBeenCalled()
     })
   })
 
@@ -210,31 +209,23 @@ describe('MemoryExtractor', () => {
       const session = createMockSession(responseContent, 2)
       const gateway = createMockAiGateway(session)
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.mocked(logger.warn).mockClear()
 
       const extractor = new MemoryExtractor(gateway, null, { maxRetries: 3 })
 
       const report = await extractor.extract(baseInput)
 
       expect(report.added.length).toBe(1)
-      expect(warnSpy).toHaveBeenCalled()
-
-      warnSpy.mockRestore()
+      expect(logger.warn).toHaveBeenCalled()
     })
 
     it('throws after all retries exhausted', async () => {
       const session = createMockSession('', 4)
       const gateway = createMockAiGateway(session)
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
       const extractor = new MemoryExtractor(gateway, null, { maxRetries: 3 })
 
       await expect(extractor.extract(baseInput)).rejects.toThrow('LLM call failed')
-
-      warnSpy.mockRestore()
-      errorSpy.mockRestore()
     })
   })
 

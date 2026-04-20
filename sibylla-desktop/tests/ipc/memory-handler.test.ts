@@ -9,16 +9,6 @@ vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
 }))
 
-// Mock logger
-vi.mock('../../src/main/utils/logger', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}))
-
 // Mock memory types
 vi.mock('../../src/main/services/memory/types', () => ({
   DEFAULT_MEMORY_CONFIG: {
