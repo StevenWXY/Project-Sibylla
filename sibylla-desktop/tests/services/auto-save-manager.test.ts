@@ -12,6 +12,19 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+// Mock logger to suppress console output during tests (stderr noise).
+// The global mock in tests/setup.ts may not hoist correctly for all environments,
+// so we also declare it here to ensure deterministic suppression.
+vi.mock('../../src/main/utils/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}))
+
 import { AutoSaveManager } from '../../src/main/services/auto-save-manager'
 import type { BatchCommitResult, SaveResult } from '../../src/main/services/types/auto-save.types'
 
