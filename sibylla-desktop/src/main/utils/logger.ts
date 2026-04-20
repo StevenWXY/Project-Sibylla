@@ -43,11 +43,28 @@ class Logger {
       } else if (typeof context === 'string') {
         contextStr = ` ${context}`
       } else {
-        contextStr = ` ${JSON.stringify(context)}`
+        contextStr = ` ${JSON.stringify(context, this.errorReplacer)}`
       }
     }
     
     return `[${timestamp}] [${level}] ${message}${contextStr}`
+  }
+
+  /**
+   * JSON replacer that serializes Error objects with their message and stack.
+   *
+   * Without this, `JSON.stringify(new Error('x'))` produces `{}` because
+   * Error properties (message, stack, name) are non-enumerable.
+   */
+  private errorReplacer(_key: string, value: unknown): unknown {
+    if (value instanceof Error) {
+      return {
+        name: value.name,
+        message: value.message,
+        stack: value.stack,
+      }
+    }
+    return value
   }
 
   /**

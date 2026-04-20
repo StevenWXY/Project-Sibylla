@@ -109,7 +109,7 @@ export class AutoSaveManager extends (EventEmitter as new () => TypedEventEmitte
         this.batchTimer = null
       }
       this.flush().catch((error: unknown) => {
-        logger.error(`${LOG_PREFIX} Unhandled error in flush`, { error })
+        logger.error(`${LOG_PREFIX} Unhandled error in flush`, error instanceof Error ? error : new Error(String(error)))
       })
     }, this.config.debounceMs)
 
@@ -117,7 +117,7 @@ export class AutoSaveManager extends (EventEmitter as new () => TypedEventEmitte
       this.batchTimer = setTimeout(() => {
         this.batchTimer = null
         this.flush().catch((error: unknown) => {
-          logger.error(`${LOG_PREFIX} Unhandled error in batch flush`, { error })
+          logger.error(`${LOG_PREFIX} Unhandled error in batch flush`, error instanceof Error ? error : new Error(String(error)))
         })
       }, this.config.batchWindowMs)
     }
@@ -180,11 +180,12 @@ export class AutoSaveManager extends (EventEmitter as new () => TypedEventEmitte
           message,
         })
       } catch (error: unknown) {
+        const commitError = error instanceof Error ? error : new Error(String(error))
         this.emit('error', {
           type: 'commit' as const,
-          error: error instanceof Error ? error : new Error(String(error)),
+          error: commitError,
         })
-        logger.error(`${LOG_PREFIX} Batch commit failed`, { error })
+        logger.error(`${LOG_PREFIX} Batch commit failed`, commitError)
       }
     }
 
