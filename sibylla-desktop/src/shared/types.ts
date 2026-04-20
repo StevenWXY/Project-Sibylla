@@ -160,6 +160,24 @@ export const IPC_CHANNELS = {
   // RAG operations
   RAG_SEARCH: 'rag:search',
   RAG_REBUILD: 'rag:rebuild',
+
+  // Memory v2 operations
+  MEMORY_V2_LIST_ENTRIES: 'memory:listEntries',
+  MEMORY_V2_LIST_ARCHIVED: 'memory:listArchived',
+  MEMORY_V2_SEARCH: 'memory:search',
+  MEMORY_V2_GET_ENTRY: 'memory:getEntry',
+  MEMORY_V2_GET_STATS: 'memory:getStats',
+  MEMORY_V2_UPDATE_ENTRY: 'memory:updateEntry',
+  MEMORY_V2_DELETE_ENTRY: 'memory:deleteEntry',
+  MEMORY_V2_LOCK_ENTRY: 'memory:lockEntry',
+  MEMORY_V2_TRIGGER_CHECKPOINT: 'memory:triggerCheckpoint',
+  MEMORY_V2_TRIGGER_COMPRESSION: 'memory:triggerCompression',
+  MEMORY_V2_UNDO_LAST_COMPRESSION: 'memory:undoLastCompression',
+  MEMORY_V2_GET_EVOLUTION_HISTORY: 'memory:getEvolutionHistory',
+  MEMORY_V2_REBUILD_INDEX: 'memory:rebuildIndex',
+  MEMORY_V2_GET_INDEX_HEALTH: 'memory:getIndexHealth',
+  MEMORY_V2_GET_CONFIG: 'memory:getConfig',
+  MEMORY_V2_UPDATE_CONFIG: 'memory:updateConfig',
   
   // Sync operations (SyncManager layer — distinct from git:sync which is direct Git sync)
   /** Renderer → Main: Force trigger a sync operation */
@@ -239,6 +257,20 @@ export const IPC_CHANNELS = {
   HARNESS_ABANDON_TASK: 'harness:abandonTask',
   /** Main → Renderer: Resumeable tasks detected on startup (webContents.send) */
   HARNESS_RESUMEABLE_DETECTED: 'harness:resumeableTaskDetected',
+
+  // Memory v2 push events (Main → Renderer, webContents.send)
+  /** Main → Renderer: Checkpoint has started running */
+  MEMORY_V2_CHECKPOINT_STARTED: 'memory:checkpointStarted:event',
+  /** Main → Renderer: Checkpoint completed successfully */
+  MEMORY_V2_CHECKPOINT_COMPLETED: 'memory:checkpointCompleted:event',
+  /** Main → Renderer: Checkpoint failed */
+  MEMORY_V2_CHECKPOINT_FAILED: 'memory:checkpointFailed:event',
+  /** Main → Renderer: A new memory entry was added */
+  MEMORY_V2_ENTRY_ADDED: 'memory:entryAdded:event',
+  /** Main → Renderer: A memory entry was updated */
+  MEMORY_V2_ENTRY_UPDATED: 'memory:entryUpdated:event',
+  /** Main → Renderer: A memory entry was deleted */
+  MEMORY_V2_ENTRY_DELETED: 'memory:entryDeleted:event',
 
   // Event notifications (main process → renderer process)
   NOTIFICATION: 'notification',
@@ -371,6 +403,24 @@ export interface IPCChannelMap {
   // RAG operations
   [IPC_CHANNELS.RAG_SEARCH]: { params: [request: RagSearchRequest]; return: RagSearchHit[] }
   [IPC_CHANNELS.RAG_REBUILD]: { params: []; return: void }
+
+  // Memory v2 operations
+  [IPC_CHANNELS.MEMORY_V2_LIST_ENTRIES]: { params: []; return: MemoryEntry[] }
+  [IPC_CHANNELS.MEMORY_V2_LIST_ARCHIVED]: { params: []; return: MemoryEntry[] }
+  [IPC_CHANNELS.MEMORY_V2_SEARCH]: { params: [query: string, options?: { limit?: number; sections?: MemorySection[] }]; return: HybridSearchResult[] }
+  [IPC_CHANNELS.MEMORY_V2_GET_ENTRY]: { params: [entryId: string]; return: MemoryEntry | null }
+  [IPC_CHANNELS.MEMORY_V2_GET_STATS]: { params: []; return: MemoryV2StatsResponse }
+  [IPC_CHANNELS.MEMORY_V2_UPDATE_ENTRY]: { params: [entryId: string, updates: Partial<MemoryEntry>]; return: void }
+  [IPC_CHANNELS.MEMORY_V2_DELETE_ENTRY]: { params: [entryId: string]; return: void }
+  [IPC_CHANNELS.MEMORY_V2_LOCK_ENTRY]: { params: [entryId: string, locked: boolean]; return: void }
+  [IPC_CHANNELS.MEMORY_V2_TRIGGER_CHECKPOINT]: { params: []; return: void }
+  [IPC_CHANNELS.MEMORY_V2_TRIGGER_COMPRESSION]: { params: []; return: CompressionResult }
+  [IPC_CHANNELS.MEMORY_V2_UNDO_LAST_COMPRESSION]: { params: []; return: void }
+  [IPC_CHANNELS.MEMORY_V2_GET_EVOLUTION_HISTORY]: { params: [entryId?: string]; return: EvolutionEvent[] }
+  [IPC_CHANNELS.MEMORY_V2_REBUILD_INDEX]: { params: []; return: void }
+  [IPC_CHANNELS.MEMORY_V2_GET_INDEX_HEALTH]: { params: []; return: { healthy: boolean; entryCount: number } }
+  [IPC_CHANNELS.MEMORY_V2_GET_CONFIG]: { params: []; return: MemoryConfig }
+  [IPC_CHANNELS.MEMORY_V2_UPDATE_CONFIG]: { params: [config: Partial<MemoryConfig>]; return: void }
 
   // Search operations
   [IPC_CHANNELS.SEARCH_QUERY]: { params: [params: SearchQueryParams]; return: SearchResult[] }
@@ -1130,7 +1180,7 @@ export interface ConflictResolution {
  * context model (always-load, semantic, manual-reference).
  */
 
-export type ContextLayerType = 'always' | 'manual' | 'skill'
+export type ContextLayerType = 'always' | 'manual' | 'skill' | 'memory'
 
 export interface ContextSource {
   filePath: string
@@ -1226,8 +1276,132 @@ export interface SearchIndexProgress {
   error?: string
 }
 
-// ─── Memory IPC Types ───
+// ─── Memory Section Type (v2) ───
 
+export type MemorySection =
+  | 'user_preference'
+  | 'technical_decision'
+  | 'common_issue'
+  | 'project_convention'
+  | 'risk_note'
+  | 'glossary'
+
+// ─── Memory v2 IPC Types ───
+
+export interface MemoryV2StatsResponse {
+  totalTokens: number
+  entryCount: number
+  lastCheckpoint: string
+  /** Section → entry count. Uses string key because dynamic sections may exist. */
+  sections: Record<string, number>
+}
+
+/**
+ * MemoryConfig — mirrors memory/types.ts MemoryConfig for IPC transport.
+ * Field names aligned with main-process authoritative definition.
+ */
+export interface MemoryConfig {
+  checkpointIntervalMs: number
+  interactionThreshold: number
+  extractorModel: string
+  compressionThreshold: number
+  compressionTargetMin: number
+  compressionTargetMax: number
+  searchWeights: { vector: number; bm25: number; timeDecay: number }
+  embeddingProvider: 'local' | 'cloud'
+}
+
+/** Checkpoint trigger — string union matching main-process CheckpointTrigger */
+export type CheckpointTrigger = 'timer' | 'interaction_count' | 'manual' | 'key_event'
+
+/**
+ * CheckpointRecord — mirrors memory/types.ts CheckpointRecord.
+ * Uses startedAt/completedAt (not timestamp), and full status union.
+ */
+export interface CheckpointRecord {
+  id: string
+  trigger: CheckpointTrigger
+  startedAt: string
+  completedAt?: string
+  status: 'running' | 'success' | 'failed' | 'aborted'
+  errorMessage?: string
+}
+
+/**
+ * CompressionResult — serializable summary for IPC transport.
+ * Main process CompressionResult contains full MemoryEntry objects;
+ * this flattened version carries only counts for renderer consumption.
+ */
+export interface CompressionResult {
+  discardedCount: number
+  mergedCount: number
+  archivedCount: number
+  beforeTokens: number
+  afterTokens: number
+}
+
+/**
+ * EvolutionEventType — aligned with memory/types.ts EvolutionEventType.
+ * Includes manual-edit, lock, unlock that the main process actually emits.
+ */
+export type EvolutionEventType =
+  | 'add'
+  | 'update'
+  | 'merge'
+  | 'archive'
+  | 'delete'
+  | 'manual-edit'
+  | 'lock'
+  | 'unlock'
+
+/**
+ * EvolutionEvent — mirrors memory/types.ts EvolutionEvent for IPC transport.
+ * Uses entryId (singular) matching the main-process schema.
+ */
+export interface EvolutionEvent {
+  id: string
+  type: EvolutionEventType
+  timestamp: string
+  entryId: string
+  section: MemorySection
+  before?: { content?: string; confidence?: number }
+  after?: { content?: string; confidence?: number }
+  trigger: { source: string; checkpointId?: string; userId?: string }
+  rationale?: string
+}
+
+/**
+ * HybridSearchResult — mirrors memory/types.ts HybridSearchResult.
+ * Includes decomposed scoring fields for transparency in UI.
+ */
+export interface HybridSearchResult {
+  id: string
+  section: MemorySection
+  content: string
+  confidence: number
+  hits: number
+  isArchived: boolean
+  vecScore: number
+  bm25Score: number
+  finalScore: number
+}
+
+export interface MemoryEntry {
+  id: string
+  section: MemorySection
+  content: string
+  confidence: number
+  hits: number
+  createdAt: string
+  updatedAt: string
+  sourceLogIds: string[]
+  locked: boolean
+  tags: string[]
+}
+
+// ─── Memory IPC Types (v1 — deprecated) ───
+
+/** @deprecated Use MemoryFileManager + MemoryV2StatsResponse instead */
 export interface MemorySnapshotResponse {
   content: string
   tokenCount: number
@@ -1238,6 +1412,7 @@ export interface MemoryUpdateRequest {
   updates: MemoryUpdateItem[]
 }
 
+/** @deprecated Use MemoryEntry update via memory:updateEntry instead */
 export interface MemoryUpdateItem {
   section: string
   content: string
@@ -1262,6 +1437,7 @@ export interface DailyLogQueryRequest {
   date: string
 }
 
+/** @deprecated Use LogStore + getLogsSince instead */
 export interface DailyLogEntry {
   timestamp: string
   type: string
@@ -1280,6 +1456,7 @@ export interface RagSearchRequest {
   limit?: number
 }
 
+/** @deprecated Use HybridSearchResult instead */
 export interface RagSearchHit {
   path: string
   score: number

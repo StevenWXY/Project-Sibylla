@@ -32,6 +32,7 @@ export interface HarnessContextRequest extends ContextAssemblyRequest {
 
 interface BudgetAllocation {
   alwaysTokens: number
+  memoryTokens: number
   skillTokens: number
   manualTokens: number
   overBudget: boolean
@@ -87,24 +88,29 @@ export class ContextEngine {
     const warnings: string[] = []
     const totalBudget = this.config.maxContextTokens - this.config.systemPromptReserve
 
-    const alwaysSources = await this.collectAlwaysLoad(request)
-    const skillSources = await this.collectSkillRefs(request.skillRefs ?? [])
-    const manualSources = await this.collectManualRefs(request.manualRefs)
+    const [alwaysSources, memorySources, skillSources, manualSources] = await Promise.all([
+      this.collectAlwaysLoad(request),
+      this.collectMemoryContext(request),
+      this.collectSkillRefs(request.skillRefs ?? []),
+      this.collectManualRefs(request.manualRefs),
+    ])
 
-    const allocation = this.allocateBudget(alwaysSources, skillSources, manualSources, totalBudget, warnings)
+    const allocation = this.allocateBudget(alwaysSources, memorySources, skillSources, manualSources, totalBudget, warnings)
 
     const adjustedAlways = this.truncateToBudget(alwaysSources, allocation.alwaysTokens, warnings, 'always-load')
+    const adjustedMemory = this.truncateToBudget(memorySources, allocation.memoryTokens, warnings, 'memory')
     const adjustedSkill = this.truncateToBudget(skillSources, allocation.skillTokens, warnings, 'skill')
     const adjustedManual = this.truncateToBudget(manualSources, allocation.manualTokens, warnings, 'manual-ref')
 
-    const allSources = [...adjustedAlways, ...adjustedSkill, ...adjustedManual]
-    const layers = this.buildLayers(adjustedAlways, adjustedSkill, adjustedManual)
-    const systemPrompt = this.buildSystemPrompt(adjustedAlways, adjustedSkill, adjustedManual)
+    const allSources = [...adjustedAlways, ...adjustedMemory, ...adjustedSkill, ...adjustedManual]
+    const layers = this.buildLayers(adjustedAlways, adjustedMemory, adjustedSkill, adjustedManual)
+    const systemPrompt = this.buildSystemPrompt(adjustedAlways, adjustedMemory, adjustedSkill, adjustedManual)
 
     const totalTokens = allSources.reduce((sum, s) => sum + s.tokenCount, 0)
 
     logger.info('[ContextEngine] Context assembled', {
       alwaysSources: adjustedAlways.length,
+      memorySources: adjustedMemory.length,
       skillSources: adjustedSkill.length,
       manualSources: adjustedManual.length,
       totalTokens,
@@ -234,6 +240,31 @@ export class ContextEngine {
     return sources
   }
 
+  /**
+   * Collect memory context from MemoryManager search.
+   * Falls back to empty array if memory system is unavailable.
+   */
+  private async collectMemoryContext(request: ContextAssemblyRequest): Promise<ContextSource[]> {
+    try {
+      const results = await this.memoryManager.search(request.userMessage, {
+        limit: 5,
+        includeArchived: false,
+      })
+      return results.map((result) => ({
+        filePath: `memory:${result.section}/${result.id}`,
+        content: result.content,
+        tokenCount: this.estimateTokens(result.content),
+        layer: 'memory' as ContextLayerType,
+      }))
+    } catch (err) {
+      // Memory search unavailable — gracefully skip memory layer
+      logger.debug('[ContextEngine] Memory search unavailable, skipping memory layer', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return []
+    }
+  }
+
   private async collectSkillRefs(skillRefs: string[]): Promise<ContextSource[]> {
     if (!this.skillEngine || skillRefs.length === 0) return []
     const sources: ContextSource[] = []
@@ -284,32 +315,35 @@ export class ContextEngine {
 
   private allocateBudget(
     alwaysSources: ContextSource[],
+    memorySources: ContextSource[],
     skillSources: ContextSource[],
     manualSources: ContextSource[],
     totalBudget: number,
     warnings: string[]
   ): BudgetAllocation {
     const alwaysTokens = alwaysSources.reduce((sum, s) => sum + s.tokenCount, 0)
+    const memoryTokens = memorySources.reduce((sum, s) => sum + s.tokenCount, 0)
     const skillTokens = skillSources.reduce((sum, s) => sum + s.tokenCount, 0)
     const manualTokens = manualSources.reduce((sum, s) => sum + s.tokenCount, 0)
-    const fixedTokens = alwaysTokens + skillTokens + manualTokens
+    const fixedTokens = alwaysTokens + memoryTokens + skillTokens + manualTokens
 
     if (fixedTokens <= totalBudget) {
-      return { alwaysTokens, skillTokens, manualTokens, overBudget: false }
+      return { alwaysTokens, memoryTokens, skillTokens, manualTokens, overBudget: false }
     }
 
     warnings.push(
       `Context exceeds budget: ${fixedTokens} tokens used, ${totalBudget} available. Truncating.`
     )
 
-    const alwaysRatio = 0.6
-    const skillRatio = 0.25
-    const alwaysAllocation = Math.floor(totalBudget * alwaysRatio)
-    const skillAllocation = Math.floor(totalBudget * skillRatio)
-    const manualAllocation = totalBudget - alwaysAllocation - skillAllocation
+    // Token budget: always 55%, memory 15%, skill 15%, manual 15%
+    const alwaysAllocation = Math.floor(totalBudget * 0.55)
+    const memoryAllocation = Math.floor(totalBudget * 0.15)
+    const skillAllocation = Math.floor(totalBudget * 0.15)
+    const manualAllocation = totalBudget - alwaysAllocation - memoryAllocation - skillAllocation
 
     return {
       alwaysTokens: alwaysAllocation,
+      memoryTokens: memoryAllocation,
       skillTokens: skillAllocation,
       manualTokens: manualAllocation,
       overBudget: true,
@@ -376,6 +410,7 @@ export class ContextEngine {
 
   private buildLayers(
     alwaysSources: ContextSource[],
+    memorySources: ContextSource[],
     skillSources: ContextSource[],
     manualSources: ContextSource[]
   ): ContextLayer[] {
@@ -386,6 +421,14 @@ export class ContextEngine {
         type: 'always',
         sources: alwaysSources,
         totalTokens: alwaysSources.reduce((sum, s) => sum + s.tokenCount, 0),
+      })
+    }
+
+    if (memorySources.length > 0) {
+      layers.push({
+        type: 'memory',
+        sources: memorySources,
+        totalTokens: memorySources.reduce((sum, s) => sum + s.tokenCount, 0),
       })
     }
 
@@ -410,6 +453,7 @@ export class ContextEngine {
 
   private buildSystemPrompt(
     alwaysSources: ContextSource[],
+    memorySources: ContextSource[],
     skillSources: ContextSource[],
     manualSources: ContextSource[]
   ): string {
@@ -417,6 +461,10 @@ export class ContextEngine {
 
     for (const source of alwaysSources) {
       segments.push(`--- Always-Load: ${source.filePath} ---\n${source.content}`)
+    }
+
+    for (const source of memorySources) {
+      segments.push(`--- Memory: ${source.filePath} ---\n${source.content}`)
     }
 
     for (const source of skillSources) {

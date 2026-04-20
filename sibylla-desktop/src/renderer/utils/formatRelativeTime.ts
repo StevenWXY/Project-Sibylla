@@ -1,4 +1,7 @@
-export function formatRelativeTime(timestampMs: number): string {
+export function formatRelativeTime(timestampMs: number): string
+export function formatRelativeTime(isoTimestamp: string): string
+export function formatRelativeTime(input: number | string): string {
+  const timestampMs = typeof input === 'string' ? new Date(input).getTime() : input
   const diff = Date.now() - timestampMs
   if (diff < 0) return '刚刚'
   const seconds = Math.floor(diff / 1000)

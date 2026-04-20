@@ -3,6 +3,22 @@ import * as path from 'path'
 import { FileLock } from './file-lock'
 import { logger } from '../utils/logger'
 import type { DailyLogEntry } from '../../shared/types'
+import type { MemoryEntry as V2MemoryEntry } from './memory/types'
+import type {
+  LogEntry as V2LogEntry,
+  ExtractionReport,
+  HarnessTraceEvent as V2HarnessTraceEvent,
+  CompressionResult,
+  CheckpointRecord,
+  HybridSearchResult,
+  SearchOptions,
+  EmbeddingProvider,
+} from './memory/types'
+import type { MemoryIndexer } from './memory/memory-indexer'
+import { MemoryFileManager } from './memory/memory-file-manager'
+import { LogStore } from './memory/log-store'
+import { EvolutionLog } from './memory/evolution-log'
+import { MemoryEventBus } from './memory/memory-event-bus'
 
 export type MemoryLogType =
   | 'user-interaction'
@@ -57,6 +73,16 @@ const MEMORY_ARCHIVE_DIR = '.sibylla/memory/archives'
 const MEMORY_TARGET_TOKENS = 10000
 const MEMORY_MAX_TOKENS = 12000
 
+export interface V2Components {
+  fileManager: MemoryFileManager
+  logStore: LogStore
+  evolutionLog?: EvolutionLog
+  compressor?: { compress: () => Promise<CompressionResult>; undoLastCompression: () => Promise<void> }
+  scheduler?: { triggerManualCheckpoint: () => Promise<void>; getLastCheckpoint: () => Date; isCheckpointRunning: () => boolean }
+  indexer?: MemoryIndexer
+  embeddingProvider?: EmbeddingProvider
+}
+
 function estimateTokens(input: string): number {
   return Math.max(1, Math.ceil(input.length / 4))
 }
@@ -102,19 +128,73 @@ export class MemoryManager {
   private workspacePath: string | null = null
   private readonly fileLock = new FileLock()
   private appendQueue: Promise<void> = Promise.resolve()
+  private _v2Components?: V2Components
+  private eventBus?: MemoryEventBus
+
+  constructor(v2Components?: V2Components) {
+    this._v2Components = v2Components
+  }
+
+  get v2Components(): V2Components | undefined {
+    return this._v2Components
+  }
+
+  setV2Components(components: V2Components): void {
+    this._v2Components = components
+  }
+
+  setEventBus(bus: MemoryEventBus): void {
+    this.eventBus = bus
+  }
 
   setWorkspacePath(workspacePath: string | null): void {
     this.workspacePath = workspacePath
+    // Update workspace-dependent sub-components while preserving existing references.
+    // Full v2Components replacement (with indexer, scheduler, etc.) should be done
+    // via setV2Components() when the new workspace is fully initialized.
+    if (workspacePath && this._v2Components) {
+      this._v2Components = {
+        ...this._v2Components,
+        fileManager: new MemoryFileManager(workspacePath),
+        logStore: new LogStore(workspacePath),
+      }
+    }
   }
 
   async appendLog(entry: MemoryLogEntry): Promise<void> {
     this.appendQueue = this.appendQueue.then(async () => {
       await this.appendLogInternal(entry)
+      if (this.v2Components?.logStore) {
+        try {
+          const v2Entry = this.mapV1ToV2LogEntry(entry)
+          await this.v2Components.logStore.append(v2Entry)
+        } catch (error) {
+          logger.error('[MemoryManager] v2 LogStore append failed', {
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
     })
     return this.appendQueue
   }
 
   async getMemorySnapshot(): Promise<MemorySnapshot> {
+    if (this.v2Components?.fileManager) {
+      try {
+        const snapshot = await this.v2Components.fileManager.load()
+        const content = this.v2Components.fileManager.serialize(snapshot)
+        const tokenCount = snapshot.metadata.totalTokens
+        return {
+          content,
+          tokenCount,
+          tokenDebt: Math.max(0, tokenCount - MEMORY_TARGET_TOKENS),
+        }
+      } catch (error) {
+        logger.warn('[MemoryManager] v2 fileManager load failed, falling back to v1', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
     const workspacePath = this.ensureWorkspacePath()
     const memoryPath = path.join(workspacePath, MEMORY_FILE)
     const content = await this.readMemory(memoryPath)
@@ -126,6 +206,7 @@ export class MemoryManager {
     }
   }
 
+  /** @deprecated Use v2 updateEntry or applyExtractionReport instead */
   async updateMemory(updates: MemoryUpdate[]): Promise<MemorySnapshot> {
     const workspacePath = this.ensureWorkspacePath()
     const memoryPath = path.join(workspacePath, MEMORY_FILE)
@@ -277,6 +358,10 @@ export class MemoryManager {
       throw new Error('Workspace is not opened')
     }
     return this.workspacePath
+  }
+
+  getWorkspacePathOrFail(): string {
+    return this.ensureWorkspacePath()
   }
 
   private async appendLogInternal(entry: MemoryLogEntry): Promise<void> {
@@ -504,6 +589,327 @@ export class MemoryManager {
     ].join('\n')
   }
 
+  async getLogsSince(timestamp: string): Promise<V2LogEntry[]> {
+    if (!this.v2Components?.logStore) {
+      throw new Error('v2 not available: LogStore not initialized')
+    }
+    return this.v2Components.logStore.getSince(timestamp)
+  }
+
+  async getAllEntries(): Promise<V2MemoryEntry[]> {
+    if (!this.v2Components?.fileManager) {
+      throw new Error('v2 not available: MemoryFileManager not initialized')
+    }
+    const snapshot = await this.v2Components.fileManager.load()
+    return snapshot.entries
+  }
+
+  async getEntry(entryId: string): Promise<V2MemoryEntry | null> {
+    if (!this.v2Components?.fileManager) {
+      throw new Error('v2 not available: MemoryFileManager not initialized')
+    }
+    const snapshot = await this.v2Components.fileManager.load()
+    return snapshot.entries.find((e) => e.id === entryId) ?? null
+  }
+
+  async updateEntry(entryId: string, content: string): Promise<void> {
+    if (!this.v2Components?.fileManager) {
+      throw new Error('v2 not available: MemoryFileManager not initialized')
+    }
+    const snapshot = await this.v2Components.fileManager.load()
+    const entryIndex = snapshot.entries.findIndex((e) => e.id === entryId)
+    if (entryIndex === -1) {
+      throw new Error(`Entry not found: ${entryId}`)
+    }
+    const before = { ...snapshot.entries[entryIndex] }
+    snapshot.entries[entryIndex] = {
+      ...snapshot.entries[entryIndex],
+      content,
+      updatedAt: new Date().toISOString(),
+    }
+    snapshot.metadata.totalTokens = this.v2Components.fileManager.estimateTokens(
+      this.v2Components.fileManager.serialize(snapshot),
+    )
+    await this.v2Components.fileManager.save(snapshot)
+
+    await this.v2Components.evolutionLog?.append({
+      id: `ev-${Date.now()}-${entryId}`,
+      timestamp: new Date().toISOString(),
+      type: 'manual-edit',
+      entryId,
+      section: before.section,
+      before: { content: before.content },
+      after: { content },
+      trigger: { source: 'manual' },
+      rationale: 'User manually edited entry via memory panel',
+    })
+
+    this.eventBus?.emitEntryUpdated(snapshot.entries[entryIndex])
+  }
+
+  async deleteEntry(entryId: string): Promise<void> {
+    if (!this.v2Components?.fileManager) {
+      throw new Error('v2 not available: MemoryFileManager not initialized')
+    }
+    const snapshot = await this.v2Components.fileManager.load()
+    const entry = snapshot.entries.find((e) => e.id === entryId)
+    if (!entry) {
+      throw new Error(`Entry not found: ${entryId}`)
+    }
+
+    await this.v2Components.evolutionLog?.append({
+      id: `ev-${Date.now()}-${entryId}`,
+      timestamp: new Date().toISOString(),
+      type: 'delete',
+      entryId,
+      section: entry.section,
+      before: { content: entry.content },
+      trigger: { source: 'manual' },
+      rationale: 'User manually deleted entry via memory panel',
+    })
+
+    snapshot.entries = snapshot.entries.filter((e) => e.id !== entryId)
+    snapshot.metadata.entryCount = snapshot.entries.length
+    snapshot.metadata.totalTokens = this.v2Components.fileManager.estimateTokens(
+      this.v2Components.fileManager.serialize(snapshot),
+    )
+    await this.v2Components.fileManager.save(snapshot)
+
+    // Remove from search index
+    await this.v2Components.indexer?.remove(entryId)
+
+    this.eventBus?.emitEntryDeleted(entryId)
+  }
+
+  async lockEntry(entryId: string, locked: boolean): Promise<void> {
+    if (!this.v2Components?.fileManager) {
+      throw new Error('v2 not available: MemoryFileManager not initialized')
+    }
+    const snapshot = await this.v2Components.fileManager.load()
+    const entryIndex = snapshot.entries.findIndex((e) => e.id === entryId)
+    if (entryIndex === -1) {
+      throw new Error(`Entry not found: ${entryId}`)
+    }
+    snapshot.entries[entryIndex] = {
+      ...snapshot.entries[entryIndex],
+      locked,
+      updatedAt: new Date().toISOString(),
+    }
+    await this.v2Components.fileManager.save(snapshot)
+
+    await this.v2Components.evolutionLog?.append({
+      id: `ev-${Date.now()}-${entryId}`,
+      timestamp: new Date().toISOString(),
+      type: locked ? 'lock' : 'unlock',
+      entryId,
+      section: snapshot.entries[entryIndex].section,
+      trigger: { source: 'manual' },
+      rationale: locked ? 'User locked entry' : 'User unlocked entry',
+    })
+
+    this.eventBus?.emitEntryUpdated(snapshot.entries[entryIndex])
+  }
+
+  async applyExtractionReport(report: ExtractionReport): Promise<{ compressionNeeded: boolean }> {
+    if (!this.v2Components?.fileManager) {
+      throw new Error('v2 not available: MemoryFileManager not initialized')
+    }
+
+    const snapshot = await this.v2Components.fileManager.load()
+    const checkpointId = `chk-${Date.now()}`
+    let evCounter = 0
+
+    // Stage 1: Add new entries extracted by MemoryExtractor
+    for (const entry of report.added) {
+      snapshot.entries.push(entry)
+      evCounter += 1
+      await this.v2Components.evolutionLog?.append({
+        id: `ev-${Date.now()}-${evCounter}-${entry.id}`,
+        timestamp: new Date().toISOString(),
+        type: 'add',
+        entryId: entry.id,
+        section: entry.section,
+        after: { content: entry.content, confidence: entry.confidence },
+        trigger: { source: 'checkpoint', checkpointId },
+        rationale: 'extracted by MemoryExtractor',
+      })
+    }
+
+    // Stage 2: Merge existing entries with newly extracted ones
+    for (const mergeRecord of report.merged) {
+      const existingIndex = snapshot.entries.findIndex((e) => e.id === mergeRecord.existing)
+      if (existingIndex === -1) continue
+
+      const before = { ...snapshot.entries[existingIndex] }
+
+      const afterEntry = report.added.find((e) => e.id === mergeRecord.merged)
+      if (afterEntry) {
+        snapshot.entries[existingIndex] = afterEntry
+      }
+
+      const afterState = snapshot.entries[existingIndex]
+      evCounter += 1
+      await this.v2Components.evolutionLog?.append({
+        id: `ev-${Date.now()}-${evCounter}-${mergeRecord.existing}`,
+        timestamp: new Date().toISOString(),
+        type: 'merge',
+        entryId: mergeRecord.existing,
+        section: before.section,
+        before: { content: before.content, confidence: before.confidence },
+        after: afterState
+          ? { content: afterState.content, confidence: afterState.confidence }
+          : undefined,
+        trigger: { source: 'checkpoint', checkpointId },
+        rationale: 'merged by MemoryExtractor',
+      })
+    }
+
+    // Stage 3: Log discarded candidates for traceability
+    for (const discarded of report.discarded) {
+      evCounter += 1
+      await this.v2Components.evolutionLog?.append({
+        id: `ev-${Date.now()}-${evCounter}-discarded`,
+        timestamp: new Date().toISOString(),
+        type: 'delete',
+        entryId: 'discarded',
+        section: 'project_convention' as const,
+        rationale: discarded.reason,
+        trigger: { source: 'checkpoint', checkpointId },
+      })
+    }
+
+    const totalTokens = this.v2Components.fileManager.estimateTokens(
+      this.v2Components.fileManager.serialize(snapshot),
+    )
+    snapshot.metadata.totalTokens = totalTokens
+    snapshot.metadata.entryCount = snapshot.entries.length
+    snapshot.metadata.lastCheckpoint = new Date().toISOString()
+
+    await this.v2Components.fileManager.save(snapshot)
+
+    const compressionNeeded = totalTokens > 12000
+    return { compressionNeeded }
+  }
+
+  async getWorkspaceContext(): Promise<{ name: string; description?: string }> {
+    const workspacePath = this.ensureWorkspacePath()
+    try {
+      const configPath = path.join(workspacePath, '.sibylla', 'config.json')
+      const raw = await fs.readFile(configPath, 'utf-8')
+      const config = JSON.parse(raw) as { name?: string; description?: string }
+      return { name: config.name ?? 'Unknown', description: config.description }
+    } catch {
+      return { name: 'Unknown' }
+    }
+  }
+
+  async appendHarnessTraceV2(event: V2HarnessTraceEvent): Promise<void> {
+    if (!this.v2Components?.logStore) {
+      throw new Error('v2 not available: LogStore not initialized')
+    }
+    const logEntry: V2LogEntry = {
+      id: event.id,
+      type: 'harness_trace',
+      timestamp: event.timestamp,
+      sessionId: event.sessionId,
+      summary: `${event.traceType}`,
+      details: event.details,
+      traceType: event.traceType,
+      severity: event.severity,
+    }
+    await this.v2Components.logStore.append(logEntry)
+    void this.detectKeyEvents(event)
+  }
+
+  private async detectKeyEvents(event: V2HarnessTraceEvent): Promise<void> {
+    if (event.traceType !== 'guardrail_triggered') return
+
+    const ruleId = event.details['ruleId']
+    if (typeof ruleId !== 'string') return
+
+    if (!this.v2Components?.logStore) return
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const count = await this.v2Components.logStore.countByFilter({
+      type: 'harness_trace',
+      traceType: 'guardrail_triggered',
+      since,
+      details: { ruleId },
+    })
+
+    if (count >= 5) {
+      this.eventBus?.emitGuardrailRepeated(ruleId, count)
+    }
+  }
+
+  async compress(): Promise<CompressionResult> {
+    if (!this.v2Components?.compressor) {
+      throw new Error('v2 not available: MemoryCompressor not initialized')
+    }
+    return await this.v2Components.compressor.compress()
+  }
+
+  async getAllArchivedEntries(): Promise<V2MemoryEntry[]> {
+    if (!this.v2Components?.fileManager) {
+      throw new Error('v2 not available: MemoryFileManager not initialized')
+    }
+    return await this.v2Components.fileManager.loadArchive()
+  }
+
+  async search(query: string, options?: SearchOptions): Promise<HybridSearchResult[]> {
+    // Prefer MemoryIndexer if available
+    if (this.v2Components?.indexer) {
+      try {
+        return await this.v2Components.indexer.search(query, options)
+      } catch (err) {
+        logger.warn('[MemoryManager] MemoryIndexer search failed, falling back to LocalRagEngine', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+
+    // Graceful fallback: return empty when v2 is unavailable.
+    // Callers (ContextEngine, AIHandler) fall back to LocalRagEngine independently.
+    if (!this.v2Components?.fileManager) {
+      logger.debug('[MemoryManager] search() skipped — v2 not available')
+      return []
+    }
+    logger.info('[MemoryManager] search() fallback — no MemoryIndexer available')
+    return []
+  }
+
+  async undoLastCompression(): Promise<void> {
+    if (!this.v2Components?.compressor) {
+      throw new Error('v2 not available: MemoryCompressor not initialized')
+    }
+    await this.v2Components.compressor.undoLastCompression()
+  }
+
+  async triggerManualCheckpoint(): Promise<CheckpointRecord | null> {
+    if (!this.v2Components?.scheduler) {
+      throw new Error('v2 not available: CheckpointScheduler not initialized')
+    }
+    await this.v2Components.scheduler.triggerManualCheckpoint()
+    return null
+  }
+
+  async getStats(): Promise<{ totalTokens: number; entryCount: number; lastCheckpoint: string; sections: Record<string, number> }> {
+    if (!this.v2Components?.fileManager) {
+      throw new Error('v2 not available: MemoryFileManager not initialized')
+    }
+    const snapshot = await this.v2Components.fileManager.load()
+    const sections: Record<string, number> = {}
+    for (const entry of snapshot.entries) {
+      sections[entry.section] = (sections[entry.section] ?? 0) + 1
+    }
+    return {
+      totalTokens: snapshot.metadata.totalTokens,
+      entryCount: snapshot.metadata.entryCount,
+      lastCheckpoint: snapshot.metadata.lastCheckpoint,
+      sections,
+    }
+  }
+
   async appendHarnessTrace(traceId: string, event: HarnessTraceEvent): Promise<void> {
     await this.appendLog({
       type: 'harness-trace',
@@ -513,5 +919,22 @@ export class MemoryManager {
       details: event.details,
       tags: ['harness', event.component],
     })
+  }
+
+  private mapV1ToV2LogEntry(entry: MemoryLogEntry): V2LogEntry {
+    const timestamp = entry.timestamp ?? new Date().toISOString()
+    const day = dateOnly(timestamp).replace(/-/g, '')
+    return {
+      id: `log-${day}-${Date.now().toString(36)}`,
+      type: entry.type === 'harness-trace' ? 'harness_trace' : entry.type,
+      timestamp,
+      sessionId: entry.sessionId,
+      summary: entry.summary,
+      details: entry.details ? { items: entry.details } : undefined,
+      tags: entry.tags,
+      relatedFiles: entry.relatedFiles,
+      operator: entry.operator,
+      traceType: entry.type === 'harness-trace' ? 'guardrail_triggered' : undefined,
+    }
   }
 }

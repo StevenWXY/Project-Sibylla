@@ -182,16 +182,12 @@ export class AIHandler extends IpcHandler {
       const assembled = await this.contextEngine.assembleContext(contextRequest)
 
       const ragHits = useRag ? await this.queryRagSafely(normalized.message) : []
-      const memorySnapshot = await this.memoryManager.getMemorySnapshot()
-      const compactMemoryContext = memorySnapshot.content.slice(0, 5000)
       const ragContext = ragHits
         .map((hit, index) => `[${index + 1}] ${hit.path}\n${hit.snippet}`)
         .join('\n\n')
 
+      // Memory context is now provided by ContextEngine memory layer
       const systemSegments = [assembled.systemPrompt]
-      if (compactMemoryContext.length > 0) {
-        systemSegments.push(`当前 MEMORY 摘要（截断）:\n${compactMemoryContext}`)
-      }
       if (ragContext.length > 0) {
         systemSegments.push(`本地 RAG 命中上下文:\n${ragContext}`)
       }
@@ -462,16 +458,12 @@ export class AIHandler extends IpcHandler {
     const assembled = await this.contextEngine.assembleContext(contextRequest)
 
     const ragHits = useRag ? await this.queryRagSafely(request.message) : []
-    const memorySnapshot = await this.memoryManager.getMemorySnapshot()
-    const compactMemoryContext = memorySnapshot.content.slice(0, 5000)
     const ragContext = ragHits
       .map((hit, index) => `[${index + 1}] ${hit.path}\n${hit.snippet}`)
       .join('\n\n')
 
+    // Memory context is now provided by ContextEngine memory layer
     const systemSegments = [assembled.systemPrompt]
-    if (compactMemoryContext.length > 0) {
-      systemSegments.push(`当前 MEMORY 摘要（截断）:\n${compactMemoryContext}`)
-    }
     if (ragContext.length > 0) {
       systemSegments.push(`本地 RAG 命中上下文:\n${ragContext}`)
     }
@@ -583,6 +575,26 @@ export class AIHandler extends IpcHandler {
   }
 
   private async queryRagSafely(query: string): Promise<LocalRagSearchHit[]> {
+    // Try MemoryIndexer first (via MemoryManager)
+    try {
+      const indexer = this.memoryManager.v2Components?.indexer
+      if (indexer) {
+        const results = await indexer.search(query, { limit: 5 })
+        if (results.length > 0) {
+          return results.map((r) => ({
+            path: `memory:${r.section}/${r.id}`,
+            score: r.finalScore,
+            snippet: r.content.slice(0, 200),
+          }))
+        }
+      }
+    } catch (err) {
+      logger.warn('[AIHandler] MemoryIndexer search failed, falling back to LocalRagEngine', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    // Fallback: LocalRagEngine
     try {
       return await this.ragEngine.search(query, { limit: 5 })
     } catch (error) {

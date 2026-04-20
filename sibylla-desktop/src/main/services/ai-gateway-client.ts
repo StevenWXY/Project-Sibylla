@@ -36,7 +36,7 @@ export class AiGatewayClient {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
   }
 
-  createSession(options: { role: 'generator' | 'evaluator' }, accessToken?: string): AiGatewaySession {
+  createSession(options: { role: AiGatewaySessionRole }, accessToken?: string): AiGatewaySession {
     return new AiGatewaySession(this, options.role, accessToken)
   }
 
@@ -160,13 +160,16 @@ export class AiGatewayClient {
   }
 }
 
+export type AiGatewaySessionRole = 'generator' | 'evaluator' | 'memory-extractor' | 'memory-compressor'
+
 export class AiGatewaySession {
   readonly sessionId: string
-  readonly role: 'generator' | 'evaluator'
+  readonly role: AiGatewaySessionRole
   private readonly client: AiGatewayClient
   private readonly accessToken?: string
+  private chatCallCount = 0
 
-  constructor(client: AiGatewayClient, role: 'generator' | 'evaluator', accessToken?: string) {
+  constructor(client: AiGatewayClient, role: AiGatewaySessionRole, accessToken?: string) {
     this.client = client
     this.role = role
     this.sessionId = `session-${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -174,6 +177,7 @@ export class AiGatewaySession {
   }
 
   async chat(request: AiGatewayChatRequest): Promise<AiGatewayChatResponse> {
+    this.chatCallCount += 1
     return this.client.chat(request, this.accessToken)
   }
 
@@ -188,6 +192,10 @@ export class AiGatewaySession {
    * this method must be updated to perform actual cleanup.
    */
   close(): void {
-    // Intentional noop: no persistent connection to tear down
+    logger.info('[AiGatewaySession] Session closed', {
+      sessionId: this.sessionId,
+      role: this.role,
+      chatCalls: this.chatCallCount,
+    })
   }
 }

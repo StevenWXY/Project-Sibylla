@@ -1,6 +1,6 @@
 import React from 'react'
 import { useAppStore, selectSidebarCollapsed } from '../../store/appStore'
-import { ChevronLeft, ChevronRight, Home, FileText, Settings } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Home, FileText, Settings, Brain } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { PixelOctoIcon } from '../brand/PixelOctoIcon'
 
@@ -80,6 +80,11 @@ export function Sidebar() {
           <SidebarItem 
             icon={<FileText size={20} />} 
             label="文档" 
+            collapsed={sidebarCollapsed} 
+          />
+          <SidebarItem 
+            icon={<Brain size={20} />} 
+            label="精选记忆" 
             collapsed={sidebarCollapsed} 
           />
           <SidebarItem 

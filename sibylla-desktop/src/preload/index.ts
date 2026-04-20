@@ -60,6 +60,14 @@ import type {
   TaskStateSummary,
   TaskResumeResultShared,
   GuardrailNotificationData,
+  // Memory v2 types
+  MemoryEntry,
+  MemoryV2StatsResponse,
+  HybridSearchResult,
+  EvolutionEvent,
+  CheckpointRecord,
+  CompressionResult,
+  MemoryConfig,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -181,10 +189,40 @@ interface ElectronAPI {
 
   // Memory operations
   memory: {
+    /** @deprecated v1 — Use listEntries + getStats instead */
     snapshot: () => Promise<IPCResponse<MemorySnapshotResponse>>
+    /** @deprecated v1 — Use updateEntry instead */
     update: (request: MemoryUpdateRequest) => Promise<IPCResponse<MemorySnapshotResponse>>
+    /** @deprecated v1 */
     flush: (request: MemoryFlushRequest) => Promise<IPCResponse<MemoryFlushResponse>>
+    /** @deprecated v1 */
     queryDailyLog: (request: DailyLogQueryRequest) => Promise<IPCResponse<DailyLogEntry[]>>
+
+    // v2 operations
+    listEntries: () => Promise<IPCResponse<MemoryEntry[]>>
+    listArchived: () => Promise<IPCResponse<MemoryEntry[]>>
+    search: (query: string, options?: { limit?: number; sections?: string[] }) => Promise<IPCResponse<HybridSearchResult[]>>
+    getEntry: (id: string) => Promise<IPCResponse<MemoryEntry | null>>
+    getStats: () => Promise<IPCResponse<MemoryV2StatsResponse>>
+    updateEntry: (id: string, updates: Partial<MemoryEntry>) => Promise<IPCResponse<void>>
+    deleteEntry: (id: string) => Promise<IPCResponse<void>>
+    lockEntry: (id: string, locked: boolean) => Promise<IPCResponse<void>>
+    triggerCheckpoint: () => Promise<IPCResponse<void>>
+    triggerCompression: () => Promise<IPCResponse<CompressionResult>>
+    undoLastCompression: () => Promise<IPCResponse<void>>
+    getEvolutionHistory: (entryId?: string) => Promise<IPCResponse<EvolutionEvent[]>>
+    rebuildIndex: () => Promise<IPCResponse<void>>
+    getIndexHealth: () => Promise<IPCResponse<{ healthy: boolean; entryCount: number }>>
+    getConfig: () => Promise<IPCResponse<MemoryConfig>>
+    updateConfig: (patch: Partial<MemoryConfig>) => Promise<IPCResponse<void>>
+
+    // v2 event listeners (Main → Renderer push)
+    onCheckpointStarted: (callback: (record: CheckpointRecord) => void) => () => void
+    onCheckpointCompleted: (callback: (record: CheckpointRecord) => void) => () => void
+    onCheckpointFailed: (callback: (record: CheckpointRecord) => void) => () => void
+    onEntryAdded: (callback: (entry: MemoryEntry) => void) => () => void
+    onEntryUpdated: (callback: (entry: MemoryEntry) => void) => () => void
+    onEntryDeleted: (callback: (entryId: string) => void) => () => void
   }
 
   // RAG operations
@@ -323,6 +361,30 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.MEMORY_UPDATE,
   IPC_CHANNELS.MEMORY_FLUSH,
   IPC_CHANNELS.MEMORY_DAILY_LOG_QUERY,
+  // Memory v2 operations
+  IPC_CHANNELS.MEMORY_V2_LIST_ENTRIES,
+  IPC_CHANNELS.MEMORY_V2_LIST_ARCHIVED,
+  IPC_CHANNELS.MEMORY_V2_SEARCH,
+  IPC_CHANNELS.MEMORY_V2_GET_ENTRY,
+  IPC_CHANNELS.MEMORY_V2_GET_STATS,
+  IPC_CHANNELS.MEMORY_V2_UPDATE_ENTRY,
+  IPC_CHANNELS.MEMORY_V2_DELETE_ENTRY,
+  IPC_CHANNELS.MEMORY_V2_LOCK_ENTRY,
+  IPC_CHANNELS.MEMORY_V2_TRIGGER_CHECKPOINT,
+  IPC_CHANNELS.MEMORY_V2_TRIGGER_COMPRESSION,
+  IPC_CHANNELS.MEMORY_V2_UNDO_LAST_COMPRESSION,
+  IPC_CHANNELS.MEMORY_V2_GET_EVOLUTION_HISTORY,
+  IPC_CHANNELS.MEMORY_V2_REBUILD_INDEX,
+  IPC_CHANNELS.MEMORY_V2_GET_INDEX_HEALTH,
+  IPC_CHANNELS.MEMORY_V2_GET_CONFIG,
+  IPC_CHANNELS.MEMORY_V2_UPDATE_CONFIG,
+  // Memory v2 push events
+  IPC_CHANNELS.MEMORY_V2_CHECKPOINT_STARTED,
+  IPC_CHANNELS.MEMORY_V2_CHECKPOINT_COMPLETED,
+  IPC_CHANNELS.MEMORY_V2_CHECKPOINT_FAILED,
+  IPC_CHANNELS.MEMORY_V2_ENTRY_ADDED,
+  IPC_CHANNELS.MEMORY_V2_ENTRY_UPDATED,
+  IPC_CHANNELS.MEMORY_V2_ENTRY_DELETED,
   // RAG operations
   IPC_CHANNELS.RAG_SEARCH,
   IPC_CHANNELS.RAG_REBUILD,
@@ -736,6 +798,7 @@ const api: ElectronAPI = {
 
   // Memory operations
   memory: {
+    // v1 (deprecated, kept for backward compatibility)
     snapshot: async () => {
       return await safeInvoke<MemorySnapshotResponse>(IPC_CHANNELS.MEMORY_SNAPSHOT)
     },
@@ -750,6 +813,120 @@ const api: ElectronAPI = {
 
     queryDailyLog: async (request: DailyLogQueryRequest) => {
       return await safeInvoke<DailyLogEntry[]>(IPC_CHANNELS.MEMORY_DAILY_LOG_QUERY, request)
+    },
+
+    // v2 operations
+    listEntries: async () => {
+      return await safeInvoke<MemoryEntry[]>(IPC_CHANNELS.MEMORY_V2_LIST_ENTRIES)
+    },
+
+    listArchived: async () => {
+      return await safeInvoke<MemoryEntry[]>(IPC_CHANNELS.MEMORY_V2_LIST_ARCHIVED)
+    },
+
+    search: async (query: string, options?: { limit?: number; sections?: string[] }) => {
+      return await safeInvoke<HybridSearchResult[]>(IPC_CHANNELS.MEMORY_V2_SEARCH, query, options)
+    },
+
+    getEntry: async (id: string) => {
+      return await safeInvoke<MemoryEntry | null>(IPC_CHANNELS.MEMORY_V2_GET_ENTRY, id)
+    },
+
+    getStats: async () => {
+      return await safeInvoke<MemoryV2StatsResponse>(IPC_CHANNELS.MEMORY_V2_GET_STATS)
+    },
+
+    updateEntry: async (id: string, updates: Partial<MemoryEntry>) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MEMORY_V2_UPDATE_ENTRY, id, updates)
+    },
+
+    deleteEntry: async (id: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MEMORY_V2_DELETE_ENTRY, id)
+    },
+
+    lockEntry: async (id: string, locked: boolean) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MEMORY_V2_LOCK_ENTRY, id, locked)
+    },
+
+    triggerCheckpoint: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.MEMORY_V2_TRIGGER_CHECKPOINT)
+    },
+
+    triggerCompression: async () => {
+      return await safeInvoke<CompressionResult>(IPC_CHANNELS.MEMORY_V2_TRIGGER_COMPRESSION)
+    },
+
+    undoLastCompression: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.MEMORY_V2_UNDO_LAST_COMPRESSION)
+    },
+
+    getEvolutionHistory: async (entryId?: string) => {
+      return await safeInvoke<EvolutionEvent[]>(IPC_CHANNELS.MEMORY_V2_GET_EVOLUTION_HISTORY, entryId)
+    },
+
+    rebuildIndex: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.MEMORY_V2_REBUILD_INDEX)
+    },
+
+    getIndexHealth: async () => {
+      return await safeInvoke<{ healthy: boolean; entryCount: number }>(IPC_CHANNELS.MEMORY_V2_GET_INDEX_HEALTH)
+    },
+
+    getConfig: async () => {
+      return await safeInvoke<MemoryConfig>(IPC_CHANNELS.MEMORY_V2_GET_CONFIG)
+    },
+
+    updateConfig: async (patch: Partial<MemoryConfig>) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MEMORY_V2_UPDATE_CONFIG, patch)
+    },
+
+    // v2 event listeners
+    onCheckpointStarted: (callback: (record: CheckpointRecord) => void) => {
+      const handler = (_event: IpcRendererEvent, record: CheckpointRecord) => callback(record)
+      ipcRenderer.on(IPC_CHANNELS.MEMORY_V2_CHECKPOINT_STARTED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.MEMORY_V2_CHECKPOINT_STARTED, handler)
+      }
+    },
+
+    onCheckpointCompleted: (callback: (record: CheckpointRecord) => void) => {
+      const handler = (_event: IpcRendererEvent, record: CheckpointRecord) => callback(record)
+      ipcRenderer.on(IPC_CHANNELS.MEMORY_V2_CHECKPOINT_COMPLETED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.MEMORY_V2_CHECKPOINT_COMPLETED, handler)
+      }
+    },
+
+    onCheckpointFailed: (callback: (record: CheckpointRecord) => void) => {
+      const handler = (_event: IpcRendererEvent, record: CheckpointRecord) => callback(record)
+      ipcRenderer.on(IPC_CHANNELS.MEMORY_V2_CHECKPOINT_FAILED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.MEMORY_V2_CHECKPOINT_FAILED, handler)
+      }
+    },
+
+    onEntryAdded: (callback: (entry: MemoryEntry) => void) => {
+      const handler = (_event: IpcRendererEvent, entry: MemoryEntry) => callback(entry)
+      ipcRenderer.on(IPC_CHANNELS.MEMORY_V2_ENTRY_ADDED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.MEMORY_V2_ENTRY_ADDED, handler)
+      }
+    },
+
+    onEntryUpdated: (callback: (entry: MemoryEntry) => void) => {
+      const handler = (_event: IpcRendererEvent, entry: MemoryEntry) => callback(entry)
+      ipcRenderer.on(IPC_CHANNELS.MEMORY_V2_ENTRY_UPDATED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.MEMORY_V2_ENTRY_UPDATED, handler)
+      }
+    },
+
+    onEntryDeleted: (callback: (entryId: string) => void) => {
+      const handler = (_event: IpcRendererEvent, entryId: string) => callback(entryId)
+      ipcRenderer.on(IPC_CHANNELS.MEMORY_V2_ENTRY_DELETED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.MEMORY_V2_ENTRY_DELETED, handler)
+      }
     },
   },
 
