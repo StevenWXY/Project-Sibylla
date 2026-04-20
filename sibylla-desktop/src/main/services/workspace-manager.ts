@@ -73,6 +73,8 @@ export class WorkspaceManager {
 
     // Save original FileManager root to restore on failure
     const originalRoot = this.fileManager.getWorkspaceRoot()
+    // Track whether we've started modifying the filesystem (after validation passes)
+    let directoryCreationStarted = false
 
     try {
       // Step 0: Validate input options
@@ -82,6 +84,7 @@ export class WorkspaceManager {
       await this.validateWorkspacePath(options.path)
 
       // Step 2: Update FileManager workspace root early so it can be used for file operations
+      directoryCreationStarted = true
       await this.fileManager.updateWorkspaceRoot(options.path)
       logger.info('Updated FileManager workspace root for creation', { path: options.path })
 
@@ -164,18 +167,24 @@ export class WorkspaceManager {
       
       try {
         // Step 1: Restore FileManager root to original state
-        await this.fileManager.updateWorkspaceRoot(originalRoot)
-        logger.info('Restored FileManager workspace root after failure', { originalRoot })
+        if (directoryCreationStarted) {
+          await this.fileManager.updateWorkspaceRoot(originalRoot)
+          logger.info('Restored FileManager workspace root after failure', { originalRoot })
+        }
         
         // Step 2: Reset internal workspace state
         this.currentWorkspace = null
         this.currentWorkspacePath = null
         
-        // Step 3: Clean up partial workspace directory
-        const exists = await this.fileManager.exists(options.path)
-        if (exists) {
-          await this.fileManager.deleteDirectory(options.path, { recursive: true })
-          logger.info('Cleaned up partial workspace after failure')
+        // Step 3: Clean up partial workspace directory (only if we started creating it)
+        // If the error occurred during validation (before directoryCreationStarted),
+        // the directory was pre-existing and should NOT be deleted.
+        if (directoryCreationStarted) {
+          const exists = await this.fileManager.exists(options.path)
+          if (exists) {
+            await this.fileManager.deleteDirectory(options.path, { recursive: true })
+            logger.info('Cleaned up partial workspace after failure')
+          }
         }
       } catch (cleanupError) {
         cleanupFailed = true
