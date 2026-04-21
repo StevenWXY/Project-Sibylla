@@ -27,10 +27,12 @@ import { SecretLeakGuard } from './secret-leak'
 import { PersonalSpaceGuard } from './personal-space'
 import { BulkOperationGuard } from './bulk-operation'
 import { logger } from '../../../utils/logger'
+import type { Tracer } from '../../trace/tracer'
 
 export class GuardrailEngine {
   private readonly rules: GuardrailRule[]
   private readonly enabledRules: Map<string, boolean>
+  private tracer?: Tracer
 
   constructor() {
     // Fixed execution order — see class docblock for rationale
@@ -45,6 +47,10 @@ export class GuardrailEngine {
     this.enabledRules = new Map(this.rules.map(rule => [rule.id, true]))
   }
 
+  setTracer(tracer: Tracer): void {
+    this.tracer = tracer
+  }
+
   /**
    * Execute all enabled guardrail rules sequentially.
    *
@@ -52,6 +58,17 @@ export class GuardrailEngine {
    * Any exception thrown by a rule triggers fail-closed behavior.
    */
   async check(op: FileOperation, ctx: OperationContext): Promise<GuardrailVerdict> {
+    if (!this.tracer?.isEnabled()) {
+      return this.checkInternal(op, ctx)
+    }
+    return this.tracer.withSpan('harness.guardrail', async (span) => {
+      const verdict = await this.checkInternal(op, ctx)
+      span.setAttribute('rule.verdict', verdict.allow ? 'allow' : 'blocked')
+      return verdict
+    }, { kind: 'system' })
+  }
+
+  private async checkInternal(op: FileOperation, ctx: OperationContext): Promise<GuardrailVerdict> {
     for (const rule of this.rules) {
       // Skip disabled rules
       if (!this.enabledRules.get(rule.id)) {

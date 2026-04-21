@@ -135,6 +135,10 @@ export class EvolutionLog {
       lines.push(`- **Rationale:** ${event.rationale}`)
     }
 
+    if (event.traceSpanId) {
+      lines.push(`- **TraceSpanId:** ${event.traceSpanId}`)
+    }
+
     if (event.before) {
       lines.push('')
       lines.push('### Before')
@@ -184,6 +188,9 @@ export class EvolutionLog {
       const rationaleMatch = block.match(/- \*\*Rationale:\*\*\s+(.+)/)
       const rationale = rationaleMatch?.[1]
 
+      const traceSpanIdMatch = block.match(/- \*\*TraceSpanId:\*\*\s+(\S+)/)
+      const traceSpanId = traceSpanIdMatch?.[1]
+
       const before = this.extractJsonBlock(block, 'Before')
       const after = this.extractJsonBlock(block, 'After')
 
@@ -202,6 +209,7 @@ export class EvolutionLog {
           checkpointId: checkpointId ?? undefined,
         },
         rationale: rationale ?? undefined,
+        traceSpanId: traceSpanId ?? undefined,
       }
     } catch (err) {
       this.loggerInstance.warn('memory.evolution.parse.malformed', {

@@ -26,6 +26,7 @@
 | Sprint 3 | AI 系统 MVP | TASK011-016 | [`sprint3-ai-mvp.md`](../../requirements/phase1/sprint3-ai-mvp.md) | ⬜ 待开始 |
 | Sprint 3.1 | Harness 基础设施 | TASK017-021 | [`sprint3.1-harness-infrastructure.md`](../../requirements/phase1/sprint3.1-harness-infrastructure.md) | 🏃 进行中 |
 | Sprint 3.2 | 记忆系统 v2 | TASK022-026 | [`sprint3.2-memory.md`](../../requirements/phase1/sprint3.2-memory.md) | ⬜ 待开始 |
+| Sprint 3.3 | Trace 系统与可观测性 | TASK027-029 | [`sprint3.3-trace.md`](../../requirements/phase1/sprint3.3-trace.md) | ⬜ 待开始 |
 
 ---
 
@@ -368,9 +369,116 @@ TASK026 (UI+IPC) ─── 依赖全部后端任务
 
 ---
 
+## 六.3、Sprint 3.3 — Trace 系统、任务台账与可观测性
+
+> **目标：** 构建 Sibylla 的可观测性基础设施——统一的 Tracer SDK 让每一次 AI 调用的完整生命周期可追溯，progress.md 任务台账让用户一眼看出 AI 正在做什么，Trace Inspector / PerformanceMonitor / ReplayEngine 让开发者和用户都能理解和诊断 AI 行为。
+>
+> **预计周期：** 3-4 周（Week 21 - Week 24）
+>
+> **前置条件：** Sprint 3.1 的 TASK017-021 可用（Harness 组件是 Trace 的主要生产方）；Sprint 3.2 的 TASK022-026 可用（演化日志新增 traceSpanId 交叉引用）
+
+### Sprint 3.3 任务
+
+| 状态 | 任务 ID | 任务名称 | 优先级 | 复杂度 | 预估工时 | 对应需求 | 任务文档 | 备注 |
+|------|---------|---------|--------|--------|---------|---------|---------|------|
+| ⬜ | PHASE1-TASK027 | Tracer SDK 与 Trace 持久化存储 | P0 | 非常复杂 | 4-5 天 | 需求 3.3.1 + 3.3.2 | [`task027`](./phase1-task027_tracer-sdk-trace-store.md) | Span 模型 + TraceStore + AppEventBus + 可选注入集成 |
+| ⬜ | PHASE1-TASK028 | progress.md 任务台账与 AI 自声明集成 | P0 | 非常复杂 | 4-5 天 | 需求 3.3.3 + 3.3.4 | [`task028`](./phase1-task028_progress-ledger-task-declaration.md) | ProgressLedger + TaskDeclarationParser + AIHandler 集成 |
+| ⬜ | PHASE1-TASK029 | 可观测性 UI 与性能监控 | P1 | 非常复杂 | 5-6 天 | 需求 3.3.5-3.3.9 | [`task029`](./phase1-task029_observability-ui-performance.md) | ExecutionTrace + TraceInspector + ProgressPanel + PerformanceMonitor + ReplayEngine + TraceExporter |
+
+### Sprint 3.3 依赖关系
+
+```
+Sprint 3.1 Harness 基础设施（TASK017-021）
+Sprint 3.2 记忆系统 v2（TASK022-026）
+        │
+        ▼
+  TASK027 (Tracer SDK + TraceStore + AppEventBus) ─── 地基
+        │
+        ▼
+  TASK028 (ProgressLedger + AI 自声明) ─── 依赖 TASK027 的 Tracer / TraceStore / AppEventBus
+        │
+        ▼
+  TASK029 (可观测性 UI + PerformanceMonitor + Replay + Export) ─── 依赖 TASK027 + TASK028
+```
+
+**推荐执行顺序：** TASK027 → TASK028 → TASK029（严格串行）
+
+### Sprint 3.3 已有代码基础
+
+| 已有模块 | 文件路径 | 完成度 | Sprint 3.3 使用方式 |
+|---------|---------|--------|-------------------|
+| TaskStateMachine | `src/main/services/harness/task-state-machine.ts` | 100% | ProgressLedger 委托 TSM 做持久化 |
+| HarnessOrchestrator | `src/main/services/harness/orchestrator.ts` | 80% | 可选注入 Tracer + 声明提示注入 |
+| GuardrailEngine | `src/main/services/harness/guardrails/*.ts` | 100% | 可选注入 Tracer |
+| AIHandler | `src/main/ipc/handlers/ai.handler.ts` | 75% | 后置解析 task-declare 块 |
+| ContextEngine | `src/main/services/context-engine.ts` | ~60% | 可选注入 Tracer |
+| FileManager | `src/main/services/file-manager.ts` | 100% | 可选注入 Tracer |
+| MemoryManager | `src/main/services/memory-manager.ts` | 95% | 新增 getSnapshotAt() + traceSpanId |
+| StudioAIPanel | `src/renderer/components/studio/StudioAIPanel.tsx` | 80% | 消息气泡挂载 ExecutionTrace |
+| DatabaseManager | `src/main/services/database-manager.ts` | 100% | TraceStore SQLite 模式参照 |
+
+**完全缺失、需新建的模块：**
+
+| 模块 | 对应任务 | 说明 |
+|------|---------|------|
+| types.ts (trace) | TASK027 | Span / SpanContext / SpanEvent / SerializedSpan / SpanKind / SpanStatus |
+| NoOpSpan | TASK027 | 禁用模式零开销空实现 |
+| SpanImpl | TASK027 | Span 具体实现 |
+| Tracer | TASK027 | Tracer 主类 |
+| TraceStore | TASK027 | SQLite 持久化 |
+| AppEventBus | TASK027 | 全局事件总线 |
+| types.ts (progress) | TASK028 | TaskRecord / TaskState / ProgressSnapshot |
+| ProgressLedger | TASK028 | progress.md 管理器 |
+| TaskDeclarationParser | TASK028 | AI 输出块解析器 |
+| progress IPC handler | TASK028 | 任务查询/编辑 IPC |
+| PerformanceMonitor | TASK029 | 性能聚合与告警 |
+| ReplayEngine | TASK029 | 回放与快照重建 |
+| TraceExporter | TASK029 | 导出与脱敏 |
+| ExecutionTrace.tsx | TASK029 | 对话气泡执行轨迹 |
+| TraceInspector.tsx + 子组件 | TASK029 | 开发者面板（火焰图/树形/时间线/详情/搜索/导出） |
+| ProgressPanel.tsx + 子组件 | TASK029 | 任务面板 |
+| traceStore (Zustand) | TASK029 | Trace Inspector 状态 |
+| progressStore (Zustand) | TASK029 | Progress 面板状态 |
+
+### Sprint 3.3 新增 IPC 通道
+
+| IPC 通道 | 对应任务 | 方向 | 说明 |
+|---------|---------|------|------|
+| `trace:getTraceTree` | TASK029 | Renderer → Main | 按 trace_id 查询 Span 树 |
+| `trace:query` | TASK029 | Renderer → Main | 按过滤条件查询 Span |
+| `trace:getRecent` | TASK029 | Renderer → Main | 获取最近 Trace 列表 |
+| `trace:getStats` | TASK029 | Renderer → Main | 获取 Trace 统计 |
+| `trace:lockTrace` | TASK029 | Renderer → Main | 锁定 Trace |
+| `trace:unlockTrace` | TASK029 | Renderer → Main | 解锁 Trace |
+| `trace:cleanupNow` | TASK029 | Renderer → Main | 手动清理 |
+| `trace:previewExport` | TASK029 | Renderer → Main | 导出预检 |
+| `trace:export` | TASK029 | Renderer → Main | 导出 Trace |
+| `trace:import` | TASK029 | Renderer → Main | 导入 Trace |
+| `trace:rebuildSnapshot` | TASK029 | Renderer → Main | 重建快照 |
+| `trace:rerun` | TASK029 | Renderer → Main | 重新执行 |
+| `performance:getMetrics` | TASK029 | Renderer → Main | 获取性能指标 |
+| `performance:getAlerts` | TASK029 | Renderer → Main | 获取告警列表 |
+| `performance:suppressAlert` | TASK029 | Renderer → Main | 屏蔽告警 |
+| `progress:getSnapshot` | TASK028 | Renderer → Main | 获取任务台账快照 |
+| `progress:getTask` | TASK028 | Renderer → Main | 获取单条任务 |
+| `progress:editUserNote` | TASK028 | Renderer → Main | 编辑用户备注 |
+| `progress:getArchive` | TASK028 | Renderer → Main | 获取归档 |
+| `trace:spanEnded` | TASK027 | Main → Renderer | Span 结束事件 |
+| `trace:update` | TASK027 | Main → Renderer | Trace 更新事件 |
+| `performance:metrics` | TASK029 | Main → Renderer | 性能指标推送 |
+| `performance:alert` | TASK029 | Main → Renderer | 性能告警推送 |
+| `performance:alertCleared` | TASK029 | Main → Renderer | 告警清除推送 |
+| `progress:taskDeclared` | TASK028 | Main → Renderer | 任务声明事件 |
+| `progress:taskUpdated` | TASK028 | Main → Renderer | 任务更新事件 |
+| `progress:taskCompleted` | TASK028 | Main → Renderer | 任务完成事件 |
+| `progress:taskFailed` | TASK028 | Main → Renderer | 任务失败事件 |
+| `progress:userEditConflict` | TASK028 | Main → Renderer | 用户编辑冲突事件 |
+
+---
+
 ## 七、Phase 1 全局进度
 
-**Phase 1 总进度：** 4/26 任务完成
+**Phase 1 总进度：** 4/29 任务完成
 
 | Sprint | 任务数 | 已完成 | 进度 | 状态 |
 |--------|--------|--------|------|------|
@@ -379,6 +487,7 @@ TASK026 (UI+IPC) ─── 依赖全部后端任务
 | Sprint 3 | 6 | 1 | 17% | 🏃 进行中 |
 | Sprint 3.1 | 5 | 1 | 20% | 🏃 进行中 |
 | Sprint 3.2 | 5 | 0 | 0% | ⬜ 待开始 |
+| Sprint 3.3 | 3 | 0 | 0% | ⬜ 待开始 |
 
 ---
 
@@ -415,11 +524,12 @@ TASK026 (UI+IPC) ─── 依赖全部后端任务
 | 2026-04-18 | TASK013 | ✅ 完成 | AI Diff 审查完整链路：diffParser + diffReviewStore + DiffReviewPanel + 集成改造；type-check/lint/828 tests 全部通过 |
 | 2026-04-18 | — | — | Sprint 3.1 Harness 任务拆解完成，生成 5 个任务文档（TASK017-021） |
 | 2026-04-20 | — | — | Sprint 3.2 记忆系统 v2 任务拆解完成，生成 5 个任务文档（TASK022-026） |
+| 2026-04-21 | — | — | Sprint 3.3 Trace 系统、任务台账与可观测性任务拆解完成，生成 3 个任务文档（TASK027-029） |
 
 ---
 
 **创建时间：** 2026-03-31
-**最后更新：** 2026-04-20
+**最后更新：** 2026-04-21
 **更新记录：**
 - 2026-03-31 — 创建 Sprint 1 任务列表
 - 2026-04-01 — 追加 TASK016/017/018 完成记录
@@ -430,3 +540,4 @@ TASK026 (UI+IPC) ─── 依赖全部后端任务
 - 2026-04-18 — Sprint 3.1 Harness 任务拆解完成：5 个任务文档（TASK017-021）+ 依赖关系图 + 编号冲突说明
 - 2026-04-19 — TASK017 Guardrails 硬性保障层完成：6 个 guardrail 模块文件 + FileHandler 集成 + shared/types 扩展 + 主进程装配 + 66 个新增测试全部通过（全量 421 测试通过）
 - 2026-04-20 — Sprint 3.2 记忆系统 v2 任务拆解完成：5 个任务文档（TASK022-026）+ 依赖关系图 + 已有代码基础评估 + 新增 IPC 通道清单
+- 2026-04-21 — Sprint 3.3 Trace 系统、任务台账与可观测性任务拆解完成：3 个任务文档（TASK027-029）+ 依赖关系图 + 已有代码基础评估 + 新增 IPC 通道清单

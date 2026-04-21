@@ -3,6 +3,7 @@ import type { Sensor } from './types'
 import { SENSOR_TIMEOUT_MS, MAX_CORRECTION_ROUNDS } from './types'
 import type { Generator } from '../generator'
 import type { logger as loggerType } from '../../../utils/logger'
+import type { Tracer } from '../../trace/tracer'
 
 export interface SensorFeedbackResult {
   readonly response: AIChatResponse
@@ -11,10 +12,16 @@ export interface SensorFeedbackResult {
 }
 
 export class SensorFeedbackLoop {
+  private tracer?: Tracer
+
   constructor(
     private readonly sensors: readonly Sensor[],
     private readonly logger: typeof loggerType,
   ) {}
+
+  setTracer(tracer: Tracer): void {
+    this.tracer = tracer
+  }
 
   async process(
     initialResponse: AIChatResponse,
@@ -22,6 +29,18 @@ export class SensorFeedbackLoop {
     generator: Generator,
     request: AIChatRequest,
   ): Promise<SensorFeedbackResult> {
+    if (!this.tracer?.isEnabled()) {
+      return this.processInternal(initialResponse, context, generator, request)
+    }
+    return this.tracer.withSpan('harness.sensor', async (span) => {
+      const result = await this.processInternal(initialResponse, context, generator, request)
+      span.setAttribute('sensor.signal_count', result.signals.length)
+      span.setAttribute('sensor.corrections', result.corrections)
+      return result
+    }, { kind: 'system' })
+  }
+
+  private async processInternal(
     let current = initialResponse
     const allSignals: SensorSignal[] = []
 

@@ -26,6 +26,9 @@ import { FileManager } from '../../services/file-manager'
 import { ContextEngine, type ContextAssemblyRequest } from '../../services/context-engine'
 import { SkillEngine } from '../../services/skill-engine'
 import type { HarnessOrchestrator } from '../../services/harness/orchestrator'
+import type { ProgressLedger } from '../../services/progress/progress-ledger'
+import { TaskDeclarationParser, stripDeclarationBlocks } from '../../services/ai/task-declaration-parser'
+import type { ChecklistItemStatus } from '../../services/progress/types'
 
 type StreamErrorCode = AIStreamError['code']
 
@@ -37,6 +40,7 @@ export class AIHandler extends IpcHandler {
   private streamListener: ((...args: unknown[]) => void) | null = null
   private abortListener: ((...args: unknown[]) => void) | null = null
   private harnessOrchestrator: HarnessOrchestrator | null = null
+  private progressLedger: ProgressLedger | null = null
 
   constructor(
     private readonly gatewayClient: AiGatewayClient,
@@ -53,6 +57,10 @@ export class AIHandler extends IpcHandler {
 
   setHarnessOrchestrator(orchestrator: HarnessOrchestrator): void {
     this.harnessOrchestrator = orchestrator
+  }
+
+  setProgressLedger(ledger: ProgressLedger): void {
+    this.progressLedger = ledger
   }
 
   register(): void {
@@ -225,6 +233,10 @@ export class AIHandler extends IpcHandler {
       const finalContent = fullContent.join('')
       const estimatedInputTokens = this.estimateTokens(systemSegments.join('\n\n') + normalized.message)
       const estimatedOutputTokens = this.estimateTokens(finalContent)
+
+      await this.processDeclarationBlocks(finalContent, normalized, streamId)
+
+      const cleanedContent = stripDeclarationBlocks(finalContent)
       const totalTokens = estimatedInputTokens + estimatedOutputTokens
       const usage = {
         inputTokens: estimatedInputTokens,
@@ -243,7 +255,7 @@ export class AIHandler extends IpcHandler {
         type: 'user-interaction',
         operator: 'ai',
         sessionId,
-        summary: finalContent.slice(0, 120),
+        summary: cleanedContent.slice(0, 120),
         details: [
           `streamId=${streamId}`,
           `totalTokens=${totalTokens}`,
@@ -265,7 +277,7 @@ export class AIHandler extends IpcHandler {
 
       const streamEnd: AIStreamEnd = {
         id: streamId,
-        content: finalContent,
+        content: cleanedContent,
         usage,
         ragHits: ragHitResults,
         memory: {
@@ -370,11 +382,21 @@ export class AIHandler extends IpcHandler {
         sender.send(IPC_CHANNELS.AI_STREAM_CHUNK, contentChunk)
       }
 
+      if (this.progressLedger && result.finalResponse.content) {
+        await this.processDeclarationBlocks(
+          result.finalResponse.content,
+          request,
+          streamId,
+        )
+      }
+
+      const cleanedHarnessContent = stripDeclarationBlocks(result.finalResponse.content)
+
       // Send stream end
       if (!sender.isDestroyed()) {
         const streamEnd: AIStreamEnd = {
           id: streamId,
-          content: result.finalResponse.content,
+          content: cleanedHarnessContent,
           usage: result.finalResponse.usage,
           ragHits: result.finalResponse.ragHits,
           memory: result.finalResponse.memory,
@@ -633,6 +655,59 @@ export class AIHandler extends IpcHandler {
       this.skillEngine.handleFileChange({
         type: event.type as 'add' | 'change' | 'unlink',
         path: event.path,
+      })
+    }
+  }
+
+  private async processDeclarationBlocks(
+    finalContent: string,
+    request: AIChatRequest,
+    _streamId: string,
+  ): Promise<void> {
+    if (!this.progressLedger || !finalContent) return
+
+    try {
+      const parser = new TaskDeclarationParser()
+      const blocks = parser.parseNewBlocks(finalContent)
+      let taskId: string | null = null
+
+      for (const block of blocks) {
+        try {
+          if (block.type === 'declare') {
+            const task = await this.progressLedger.declare({
+              title: block.data.title,
+              traceId: request.traceId,
+              conversationId: request.sessionId,
+              plannedChecklist: block.data.planned_steps,
+            })
+            taskId = task.id
+          } else if (block.type === 'update' && taskId) {
+            await this.progressLedger.update(taskId, {
+              checklistUpdates: block.data.checklistUpdates?.map((u) => ({
+                index: u.index,
+                status: u.status as ChecklistItemStatus,
+              })),
+              newChecklistItems: block.data.newChecklistItems,
+              output: block.data.output,
+            })
+          } else if (block.type === 'complete' && taskId) {
+            await this.progressLedger.complete(taskId, block.data.summary)
+            taskId = null
+          }
+        } catch (err) {
+          logger.warn('[AIHandler] Declaration block processing failed', {
+            blockType: block.type,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      }
+
+      if (taskId) {
+        await this.progressLedger.complete(taskId, '（AI 未显式归档）')
+      }
+    } catch (err) {
+      logger.warn('[AIHandler] Declaration block parsing failed', {
+        error: err instanceof Error ? err.message : String(err),
       })
     }
   }

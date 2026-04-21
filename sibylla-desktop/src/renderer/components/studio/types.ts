@@ -71,6 +71,7 @@ export interface ChatMessage {
     score: number
     snippet: string
   }>
+  traceId?: string
 }
 
 /** @deprecated 使用 tabStore.TabInfo 替代 */

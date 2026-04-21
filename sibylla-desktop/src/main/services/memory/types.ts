@@ -212,6 +212,7 @@ export interface EvolutionEvent {
     userId?: string
   }
   rationale?: string
+  traceSpanId?: string
 }
 
 export const CHANGELOG_HEADER = `# 记忆演化日志

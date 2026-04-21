@@ -19,6 +19,7 @@ import { MemoryFileManager } from './memory/memory-file-manager'
 import { LogStore } from './memory/log-store'
 import { EvolutionLog } from './memory/evolution-log'
 import { MemoryEventBus } from './memory/memory-event-bus'
+import type { Tracer } from './trace/tracer'
 
 export type MemoryLogType =
   | 'user-interaction'
@@ -130,6 +131,7 @@ export class MemoryManager {
   private appendQueue: Promise<void> = Promise.resolve()
   private _v2Components?: V2Components
   private eventBus?: MemoryEventBus
+  private tracer?: Tracer
 
   constructor(v2Components?: V2Components) {
     this._v2Components = v2Components
@@ -145,6 +147,10 @@ export class MemoryManager {
 
   setEventBus(bus: MemoryEventBus): void {
     this.eventBus = bus
+  }
+
+  setTracer(tracer: Tracer): void {
+    this.tracer = tracer
   }
 
   setWorkspacePath(workspacePath: string | null): void {
@@ -919,6 +925,58 @@ export class MemoryManager {
       details: event.details,
       tags: ['harness', event.component],
     })
+  }
+
+  async getSnapshotAt(date: Date): Promise<{ data: { entries: V2MemoryEntry[]; totalTokens: number }; exact: boolean }> {
+    const fileManager = this._v2Components?.fileManager
+    const evolutionLog = this._v2Components?.evolutionLog
+
+    if (!fileManager || !evolutionLog) {
+      return { data: { entries: [], totalTokens: 0 }, exact: false }
+    }
+
+    const snapshot = await fileManager.read()
+    const currentEntries = snapshot.entries
+
+    const since = date.toISOString()
+    const events = await evolutionLog.query({ since, limit: 10000 })
+
+    if (events.length === 0) {
+      return { data: { entries: currentEntries, totalTokens: snapshot.metadata.totalTokens }, exact: false }
+    }
+
+    let exact = true
+    if (events.length >= 10000) {
+      exact = false
+    }
+
+    const entryMap = new Map(currentEntries.map(e => [e.id, { ...e }]))
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i]
+      if (ev.type === 'delete' || ev.type === 'archive') {
+        if (ev.before) {
+          entryMap.set(ev.entryId, {
+            id: ev.entryId,
+            section: ev.section,
+            content: ev.before.content ?? '',
+            confidence: ev.before.confidence ?? 0,
+            hits: 0,
+            createdAt: ev.timestamp,
+            updatedAt: ev.timestamp,
+            sourceLogIds: [],
+            locked: false,
+            tags: ev.before.tags ?? [],
+          })
+        }
+      } else if (ev.type === 'add' && ev.before) {
+        entryMap.delete(ev.entryId)
+      }
+    }
+
+    const entries = Array.from(entryMap.values())
+    const totalTokens = entries.reduce((sum, e) => sum + (e.content?.length ?? 0), 0)
+
+    return { data: { entries, totalTokens }, exact }
   }
 
   private mapV1ToV2LogEntry(entry: MemoryLogEntry): V2LogEntry {

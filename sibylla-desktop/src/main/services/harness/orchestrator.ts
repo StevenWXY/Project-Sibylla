@@ -27,6 +27,8 @@ import type { MemoryManager, HarnessTraceEvent } from '../memory-manager'
 import type { logger as loggerType } from '../../utils/logger'
 import type { ToolScopeManager, ToolSelection } from './tool-scope'
 import type { TaskStateMachine } from './task-state-machine'
+import type { Tracer } from '../trace/tracer'
+import type { Span } from '../trace/types'
 
 /** Spec file pattern for Panel mode auto-resolution */
 const SPEC_FILE_PATTERN = /(_spec\.md|CLAUDE\.md|design\.md|requirements\.md|tasks\.md)$/
@@ -36,6 +38,7 @@ export class HarnessOrchestrator {
   private readonly guards: GuardrailEngine
   private toolScopeManager: ToolScopeManager | null = null
   private taskStateMachine: TaskStateMachine | null = null
+  private tracer?: Tracer
 
   constructor(
     private readonly generator: Generator,
@@ -70,7 +73,26 @@ export class HarnessOrchestrator {
     this.taskStateMachine = machine
   }
 
+  /** Inject Tracer for optional trace span wrapping (TASK027) */
+  setTracer(tracer: Tracer): void {
+    this.tracer = tracer
+  }
+
   async execute(request: AIChatRequest): Promise<HarnessResult> {
+    if (this.tracer?.isEnabled()) {
+      return this.tracer.withSpan('ai.handle-message', async (rootSpan) => {
+        rootSpan.setAttributes({
+          'conversation.id': request.sessionId ?? '',
+          'workspace.id': request.workspaceId ?? '',
+        })
+        const result = await this.executeInternal(request, rootSpan)
+        return { ...result, traceId: rootSpan.context.traceId }
+      }, { kind: 'ai-call', conversationId: request.sessionId })
+    }
+    return this.executeInternal(request, undefined)
+  }
+
+  private async executeInternal(request: AIChatRequest, rootSpan?: Span): Promise<HarnessResult> {
     const traceId = `harness-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     // === TASK020: Tool scope selection ===
@@ -90,7 +112,7 @@ export class HarnessOrchestrator {
         action: 'tool_scope_selected',
         result: toolSelection.intent,
         details: [`toolCount=${toolSelection.tools.length}`, `overrides=${toolSelection.explicitOverrides.join(',')}`],
-      })
+      }, rootSpan)
     }
 
     const mode = this.resolveMode(effectiveRequest)
@@ -100,7 +122,7 @@ export class HarnessOrchestrator {
       action: 'mode_resolved',
       result: mode,
       details: [effectiveRequest.targetFile ?? '(none)', effectiveRequest.intent ?? '(none)'],
-    })
+    }, rootSpan)
 
     let guides: import('./guides/types').Guide[] = []
     if (this.guideRegistry) {
@@ -116,7 +138,7 @@ export class HarnessOrchestrator {
         action: 'resolved',
         result: 'success',
         details: guides.map(g => g.id),
-      })
+      }, rootSpan)
     }
 
     const baseContext = await this.contextEngine.assembleForHarness({
@@ -127,6 +149,10 @@ export class HarnessOrchestrator {
       mode,
       guides,
     })
+
+    if (this.shouldRequireTaskDeclaration(effectiveRequest)) {
+      baseContext.systemPrompt += this.buildDeclarationHint()
+    }
 
     // === TASK020: Inject tool subset into context (immutable — create new object) ===
     const assembledContext: AssembledContext = toolSelection
@@ -159,13 +185,13 @@ export class HarnessOrchestrator {
       let result: HarnessResult
       switch (mode) {
         case 'single':
-          result = await this.executeSingle(effectiveRequest, assembledContext, traceId)
+          result = await this.executeSingle(effectiveRequest, assembledContext, traceId, rootSpan)
           break
         case 'dual':
-          result = await this.executeDual(effectiveRequest, assembledContext, traceId)
+          result = await this.executeDual(effectiveRequest, assembledContext, traceId, rootSpan)
           break
         case 'panel':
-          result = await this.executePanel(effectiveRequest, assembledContext, traceId)
+          result = await this.executePanel(effectiveRequest, assembledContext, traceId, rootSpan)
           break
       }
 
@@ -186,7 +212,7 @@ export class HarnessOrchestrator {
       // If single mode also fails, return a minimal error result instead of throwing,
       // so the caller always receives a structured HarnessResult. (S2 fix)
       try {
-        const result = await this.executeSingle(effectiveRequest, assembledContext, traceId)
+        const result = await this.executeSingle(effectiveRequest, assembledContext, traceId, rootSpan)
         return {
           ...result,
           degraded: true,
@@ -229,10 +255,44 @@ export class HarnessOrchestrator {
     return (request.plannedSteps?.length ?? 0) >= 3 || request.longRunning === true
   }
 
+  private shouldRequireTaskDeclaration(request: AIChatRequest): boolean {
+    const msg = request.message
+    if (msg.length > 200) return true
+    if (/计划|步骤|分析|撰写|生成文档/.test(msg)) return true
+    return false
+  }
+
+  private buildDeclarationHint(): string {
+    return [
+      '',
+      '## 任务声明规范',
+      '在开始多步骤工作前，请先输出任务声明：',
+      '<!-- sibylla:task-declare',
+      '{',
+      '  "title": "任务标题",',
+      '  "planned_steps": ["步骤1", "步骤2", ...],',
+      '  "estimated_duration_min": 预估分钟',
+      '}',
+      '-->',
+      '执行过程中可输出进度更新：',
+      '<!-- sibylla:task-update',
+      '{',
+      '  "checklistUpdates": [{"index": 0, "status": "done"}],',
+      '  "newChecklistItems": ["新步骤"]',
+      '}',
+      '-->',
+      '完成时输出归档：',
+      '<!-- sibylla:task-complete',
+      '{"summary": "完成摘要"}',
+      '-->',
+    ].join('\n')
+  }
+
   private async executeSingle(
     request: AIChatRequest,
     context: AssembledContext,
-    traceId: string
+    traceId: string,
+    rootSpan?: Span,
   ): Promise<HarnessResult> {
     const response = await this.generator.generate({ request, context })
 
@@ -240,7 +300,7 @@ export class HarnessOrchestrator {
       component: 'orchestrator',
       action: 'single_completed',
       result: 'success',
-    })
+    }, rootSpan)
 
     return {
       finalResponse: response,
@@ -256,7 +316,8 @@ export class HarnessOrchestrator {
   private async executeDual(
     request: AIChatRequest,
     context: AssembledContext,
-    traceId: string
+    traceId: string,
+    rootSpan?: Span,
   ): Promise<HarnessResult> {
     let suggestion = await this.generator.generate({ request, context })
     const evaluations: EvaluationReport[] = []
@@ -276,7 +337,7 @@ export class HarnessOrchestrator {
         action: 'evaluate',
         result: report.verdict,
         details: [`attempt=${attempt + 1}`, `criticalIssues=${report.criticalIssues.length}`],
-      })
+      }, rootSpan)
 
       if (report.verdict === 'pass') break
 
@@ -293,7 +354,7 @@ export class HarnessOrchestrator {
         action: 'generator_refined',
         result: 'retrying',
         details: [`attempt=${attempt + 1}`],
-      })
+      }, rootSpan)
 
       attempt++
     }
@@ -305,7 +366,7 @@ export class HarnessOrchestrator {
       action: 'dual_completed',
       result: lastVerdict,
       details: [`totalAttempts=${attempt + 1}`],
-    })
+    }, rootSpan)
 
     let sensorResult: SensorFeedbackResult | undefined
     if (this.sensorFeedbackLoop) {
@@ -317,7 +378,7 @@ export class HarnessOrchestrator {
         action: 'feedback_completed',
         result: 'done',
         details: [String(sensorResult.signals.length), String(sensorResult.corrections)],
-      })
+      }, rootSpan)
     }
 
     return {
@@ -334,7 +395,8 @@ export class HarnessOrchestrator {
   private async executePanel(
     request: AIChatRequest,
     context: AssembledContext,
-    traceId: string
+    traceId: string,
+    rootSpan?: Span,
   ): Promise<HarnessResult> {
     let suggestion = await this.generator.generate({ request, context })
     const evaluations: EvaluationReport[] = []
@@ -384,7 +446,7 @@ export class HarnessOrchestrator {
       action: 'panel_evaluated',
       result: consensus,
       details: evaluations.map(e => `${e.evaluatorId}:${e.verdict}`),
-    })
+    }, rootSpan)
 
     // Allow one retry round for panel mode (cost is high)
     if (consensus !== 'passed' && attempt < this.config.maxRetries) {
@@ -436,7 +498,7 @@ export class HarnessOrchestrator {
           action: 'panel_retry_evaluated',
           result: consensus,
           details: latestReports.map(e => `${e.evaluatorId}:${e.verdict}`),
-        })
+        }, rootSpan)
       }
     }
 
@@ -450,7 +512,7 @@ export class HarnessOrchestrator {
         action: 'feedback_completed',
         result: 'done',
         details: [String(sensorResult.signals.length), String(sensorResult.corrections)],
-      })
+      }, rootSpan)
     }
 
     return {
@@ -475,11 +537,17 @@ export class HarnessOrchestrator {
     return 'contested'
   }
 
-  private async trace(traceId: string, event: HarnessTraceEvent): Promise<void> {
+  private async trace(traceId: string, event: HarnessTraceEvent, rootSpan?: Span): Promise<void> {
     try {
       await this.memoryManager.appendHarnessTrace(traceId, event)
     } catch {
       // Trace failure should not block orchestration
+    }
+    if (rootSpan && !rootSpan.isFinalized()) {
+      rootSpan.addEvent(`${event.component}:${event.action}`, {
+        result: event.result,
+        details: event.details?.join(', ') ?? '',
+      })
     }
   }
 }

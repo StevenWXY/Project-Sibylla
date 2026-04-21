@@ -277,6 +277,48 @@ export const IPC_CHANNELS = {
   LOG_MESSAGE: 'log:message',
   FILE_CHANGED: 'file:changed',
   GIT_STATUS_CHANGED: 'git:status-changed',
+
+  // Trace operations (TASK027)
+  TRACE_GET_TREE: 'trace:getTraceTree',
+  TRACE_QUERY: 'trace:query',
+  TRACE_GET_RECENT: 'trace:getRecent',
+  TRACE_GET_STATS: 'trace:getStats',
+  TRACE_LOCK: 'trace:lockTrace',
+  TRACE_UNLOCK: 'trace:unlockTrace',
+  TRACE_CLEANUP: 'trace:cleanupNow',
+  TRACE_PREVIEW_EXPORT: 'trace:previewExport',
+  TRACE_EXPORT: 'trace:export',
+  TRACE_IMPORT: 'trace:import',
+  TRACE_REBUILD_SNAPSHOT: 'trace:rebuildSnapshot',
+  TRACE_RERUN: 'trace:rerun',
+
+  // Performance operations (TASK027)
+  PERFORMANCE_GET_METRICS: 'performance:getMetrics',
+  PERFORMANCE_GET_ALERTS: 'performance:getAlerts',
+  PERFORMANCE_SUPPRESS: 'performance:suppressAlert',
+
+  // Trace push events (Main → Renderer)
+  TRACE_SPAN_ENDED: 'trace:spanEnded',
+  TRACE_UPDATE: 'trace:update',
+  PERFORMANCE_METRICS: 'performance:metrics',
+  PERFORMANCE_ALERT: 'performance:alert',
+  PERFORMANCE_ALERT_CLEARED: 'performance:alertCleared',
+
+  // Progress operations (TASK028)
+  PROGRESS_GET_SNAPSHOT: 'progress:getSnapshot',
+  PROGRESS_GET_TASK: 'progress:getTask',
+  PROGRESS_EDIT_NOTE: 'progress:editUserNote',
+  PROGRESS_GET_ARCHIVE: 'progress:getArchive',
+
+  // Progress push events (Main → Renderer)
+  PROGRESS_TASK_DECLARED: 'progress:taskDeclared',
+  PROGRESS_TASK_UPDATED: 'progress:taskUpdated',
+  PROGRESS_TASK_COMPLETED: 'progress:taskCompleted',
+  PROGRESS_TASK_FAILED: 'progress:taskFailed',
+  PROGRESS_USER_EDIT_CONFLICT: 'progress:userEditConflict',
+
+  // Inspector operations (TASK029)
+  INSPECTOR_OPEN: 'inspector:open',
 } as const
 
 /**
@@ -471,6 +513,31 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.HARNESS_RESUME_TASK]: { params: [taskId: string]; return: TaskResumeResultShared }
   [IPC_CHANNELS.HARNESS_ABANDON_TASK]: { params: [taskId: string]; return: void }
   // HARNESS_RESUMEABLE_DETECTED: Main → Renderer push, not in IPCChannelMap
+
+  // Trace operations (TASK027)
+  [IPC_CHANNELS.TRACE_GET_TREE]: { params: [traceId: string]; return: SerializedSpanShared[] }
+  [IPC_CHANNELS.TRACE_QUERY]: { params: [filter: TraceQueryFilterShared]; return: SerializedSpanShared[] }
+  [IPC_CHANNELS.TRACE_GET_RECENT]: { params: [limit: number]; return: Array<{ traceId: string; startTime: number; spanCount: number }> }
+  [IPC_CHANNELS.TRACE_GET_STATS]: { params: []; return: { totalSpans: number; totalTraces: number; dbSizeBytes: number } }
+  [IPC_CHANNELS.TRACE_LOCK]: { params: [traceId: string, reason?: string]; return: void }
+  [IPC_CHANNELS.TRACE_UNLOCK]: { params: [traceId: string]; return: void }
+  [IPC_CHANNELS.TRACE_CLEANUP]: { params: []; return: { deleted: number } }
+  [IPC_CHANNELS.TRACE_PREVIEW_EXPORT]: { params: [traceIds: string[], customRules?: RedactionRuleShared[]]; return: ExportPreviewShared }
+  [IPC_CHANNELS.TRACE_EXPORT]: { params: [traceIds: string[], outputPath: string, customRules?: RedactionRuleShared[]]; return: void }
+  [IPC_CHANNELS.TRACE_IMPORT]: { params: [filePath: string]; return: { traceIds: string[] } }
+  [IPC_CHANNELS.TRACE_REBUILD_SNAPSHOT]: { params: [traceId: string]; return: TraceSnapshotShared }
+  [IPC_CHANNELS.TRACE_RERUN]: { params: [traceId: string]; return: { newTraceId: string } }
+
+  // Performance operations (TASK029)
+  [IPC_CHANNELS.PERFORMANCE_GET_METRICS]: { params: []; return: PerformanceMetricsShared | null }
+  [IPC_CHANNELS.PERFORMANCE_GET_ALERTS]: { params: []; return: PerformanceAlertShared[] }
+  [IPC_CHANNELS.PERFORMANCE_SUPPRESS]: { params: [alertType: string, durationMs?: number]; return: void }
+
+  // Progress operations (TASK028)
+  [IPC_CHANNELS.PROGRESS_GET_SNAPSHOT]: { params: []; return: ProgressSnapshotShared }
+  [IPC_CHANNELS.PROGRESS_GET_TASK]: { params: [id: string]; return: TaskRecordShared | null }
+  [IPC_CHANNELS.PROGRESS_EDIT_NOTE]: { params: [taskId: string, note: string]; return: void }
+  [IPC_CHANNELS.PROGRESS_GET_ARCHIVE]: { params: [month: string]; return: string }
 }
 
 /**
@@ -802,6 +869,7 @@ export interface AIStreamEnd {
   model: string
   intercepted: boolean
   warnings: string[]
+  traceId?: string
 }
 
 export interface AIStreamError {
@@ -1368,6 +1436,7 @@ export interface EvolutionEvent {
   after?: { content?: string; confidence?: number }
   trigger: { source: string; checkpointId?: string; userId?: string }
   rationale?: string
+  traceSpanId?: string
 }
 
 /**
@@ -1537,6 +1606,7 @@ export interface HarnessResult {
   readonly guardrailVerdicts: GuardrailVerdictSummary[]
   readonly degraded: boolean
   readonly degradeReason?: string
+  readonly traceId?: string
 }
 
 export interface EvaluationReport {
@@ -1650,4 +1720,195 @@ export interface GuardrailNotificationData {
 export interface TaskResumeResultShared {
   readonly state: TaskStateSummary
   readonly resumePrompt: string
+}
+
+// ─── Trace System Shared Types (TASK027) ───
+
+export type SpanStatusShared = 'ok' | 'error' | 'unset'
+export type SpanKindShared = 'internal' | 'ai-call' | 'tool-call' | 'user-action' | 'system'
+
+export interface SpanEventShared {
+  name: string
+  timestamp: number
+  attributes: Record<string, unknown>
+}
+
+export interface SerializedSpanShared {
+  traceId: string
+  spanId: string
+  parentSpanId?: string
+  name: string
+  kind: SpanKindShared
+  startTimeMs: number
+  endTimeMs: number
+  durationMs: number
+  status: SpanStatusShared
+  statusMessage?: string
+  attributes: Record<string, unknown>
+  events: SpanEventShared[]
+  conversationId?: string
+  taskId?: string
+  userId?: string
+  workspaceId?: string
+}
+
+export interface TraceQueryFilterShared {
+  traceId?: string
+  spanName?: string
+  kind?: SpanKindShared
+  status?: SpanStatusShared
+  conversationId?: string
+  taskId?: string
+  startTimeFrom?: number
+  startTimeTo?: number
+  minDurationMs?: number
+  attributeFilters?: Array<{ key: string; value: string }>
+  limit?: number
+  offset?: number
+}
+
+export interface TraceExportBundleShared {
+  version: 1
+  exportedAt: number
+  workspaceId: string
+  spans: SerializedSpanShared[]
+  checksum: string
+}
+
+// ─── Progress System Shared Types (TASK028) ───
+
+export type TaskStateShared = 'queued' | 'running' | 'paused' | 'completed' | 'failed'
+export type ChecklistItemStatusShared = 'pending' | 'in_progress' | 'done' | 'skipped'
+
+export interface ChecklistItemShared {
+  description: string
+  status: ChecklistItemStatusShared
+}
+
+export interface TaskOutputShared {
+  type: 'file' | 'message'
+  ref: string
+}
+
+export interface TaskRecordShared {
+  id: string
+  title: string
+  state: TaskStateShared
+  mode?: 'plan' | 'analyze' | 'review' | 'free'
+  traceId?: string
+  conversationId?: string
+  createdAt: string
+  startedAt?: string
+  completedAt?: string
+  durationMs?: number
+  checklist: ChecklistItemShared[]
+  outputs: TaskOutputShared[]
+  resultSummary?: string
+  failureReason?: string
+  userNotes?: string
+}
+
+export interface ProgressSnapshotShared {
+  active: TaskRecordShared[]
+  completedRecent: TaskRecordShared[]
+  queued: TaskRecordShared[]
+  updatedAt: string
+}
+
+// ─── Performance System Shared Types (TASK029) ───
+
+export type PerformanceAlertTypeShared = 'slow_call' | 'token_spike' | 'error_rate' | 'degradation' | 'leak'
+export type PerformanceAlertSeverityShared = 'info' | 'warn' | 'critical'
+
+export interface PerformanceMetricsShared {
+  windowStart: number
+  windowEnd: number
+  llmCallCount: number
+  llmCallAvgDurationMs: number
+  llmCallP95DurationMs: number
+  errorRate: number
+  totalTokens: number
+  estimatedCostUSD: number
+  degradationCount: number
+  activeSpanCount: number
+}
+
+export interface PerformanceAlertShared {
+  id: string
+  type: PerformanceAlertTypeShared
+  severity: PerformanceAlertSeverityShared
+  message: string
+  metrics: Partial<PerformanceMetricsShared>
+  firstSeenAt: number
+  consecutiveWindows: number
+}
+
+export interface PerformanceConfigShared {
+  slowCallThresholdMs: number
+  tokenSpikeThreshold: number
+  errorRateThreshold: number
+  degradationThreshold: number
+  activeSpanLeakThreshold: number
+  modelPricingConfig: Record<string, number>
+}
+
+// ─── Trace Replay/Export Shared Types (TASK029) ───
+
+export interface TraceSnapshotShared {
+  traceId: string
+  reconstructedAt: number
+  originalTimestamp: number
+  isApproximate: boolean
+  approximationReasons: string[]
+  prompt: {
+    system: string
+    user: string
+    assistant?: string
+  }
+  contextFiles: Array<{
+    path: string
+    contentAtTime: string
+    existsNow: boolean
+  }>
+  memorySnapshot: {
+    entries: Array<{ key: string; value: string }>
+    totalTokens: number
+    exact: boolean
+  }
+  modelConfig: {
+    model: string
+    temperature: number
+    maxTokens: number
+  }
+}
+
+export interface RedactionRuleShared {
+  id: string
+  keyPattern?: string
+  valuePattern?: string
+  reason: string
+}
+
+export interface RedactionReportEntryShared {
+  spanId: string
+  fieldPath: string
+  ruleId: string
+  reason: string
+}
+
+export interface ExportPreviewShared {
+  spans: SerializedSpanShared[]
+  redactionReport: RedactionReportEntryShared[]
+}
+
+export interface RecentTraceInfoShared {
+  traceId: string
+  startTime: number
+  spanCount: number
+}
+
+export interface TraceStatsShared {
+  totalSpans: number
+  totalTraces: number
+  dbSizeBytes: number
 }

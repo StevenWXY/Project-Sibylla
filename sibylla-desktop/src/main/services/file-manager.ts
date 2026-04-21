@@ -28,6 +28,7 @@ import {
   FileOperationOptions,
 } from './types/file-manager.types'
 import { FileWatcher } from './file-watcher'
+import type { Tracer } from './trace/tracer'
 
 /**
  * Core forbidden paths that cannot be overridden for security
@@ -66,6 +67,7 @@ export class FileManager {
   private workspaceRoot: string
   private customForbiddenPaths: string[]
   private watcher: FileWatcher | null = null
+  private tracer?: Tracer
   
   /**
    * Create a new FileManager instance
@@ -78,15 +80,12 @@ export class FileManager {
     workspaceRoot: string,
     additionalForbiddenPaths: string[] = []
   ) {
-    // Normalize and validate workspace root
     this.workspaceRoot = path.resolve(workspaceRoot)
     this.customForbiddenPaths = additionalForbiddenPaths
-    
-    logger.info('[FileManager] Initialized', {
-      workspaceRoot: this.workspaceRoot,
-      coreForbiddenPaths: FileManager.CORE_FORBIDDEN_PATHS,
-      additionalForbiddenPaths,
-    })
+  }
+
+  setTracer(tracer: Tracer): void {
+    this.tracer = tracer
   }
   
   /**
@@ -298,6 +297,16 @@ export class FileManager {
    * @returns File content and metadata
    */
   async readFile(relativePath: string, options?: ReadFileOptions): Promise<FileContent> {
+    if (!this.tracer?.isEnabled()) {
+      return this.readFileInternal(relativePath, options)
+    }
+    return this.tracer.withSpan('tool.file-read', async (span) => {
+      span.setAttribute('file.path', relativePath)
+      return this.readFileInternal(relativePath, options)
+    }, { kind: 'tool-call' })
+  }
+
+  private async readFileInternal(relativePath: string, options?: ReadFileOptions): Promise<FileContent> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
     this.validatePath(fullPath, options?.context)
@@ -412,6 +421,17 @@ export class FileManager {
    * @throws {FileManagerError} If write fails or path is invalid
    */
   async writeFile(relativePath: string, content: string, options?: WriteFileOptions): Promise<void> {
+    if (!this.tracer?.isEnabled()) {
+      return this.writeFileInternal(relativePath, content, options)
+    }
+    return this.tracer.withSpan('tool.file-write', async (span) => {
+      span.setAttribute('file.path', relativePath)
+      span.setAttribute('file.size_bytes', content.length)
+      return this.writeFileInternal(relativePath, content, options)
+    }, { kind: 'tool-call' })
+  }
+
+  private async writeFileInternal(relativePath: string, content: string, options?: WriteFileOptions): Promise<void> {
     const startTime = Date.now()
     const fullPath = this.resolvePath(relativePath)
     this.validatePath(fullPath, options?.context)

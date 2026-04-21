@@ -12,6 +12,7 @@ import { FileManager } from './file-manager'
 import { MemoryManager } from './memory-manager'
 import type { SkillEngine } from './skill-engine'
 import { logger } from '../utils/logger'
+import type { Tracer } from './trace/tracer'
 
 export interface ContextAssemblyRequest {
   userMessage: string
@@ -70,6 +71,7 @@ export class ContextEngine {
   private readonly fileManager: FileManager
   private readonly memoryManager: MemoryManager
   private readonly skillEngine: SkillEngine | null
+  private tracer?: Tracer
 
   constructor(
     fileManager: FileManager,
@@ -83,7 +85,24 @@ export class ContextEngine {
     this.config = { ...DEFAULT_CONFIG, ...config }
   }
 
+  setTracer(tracer: Tracer): void {
+    this.tracer = tracer
+  }
+
   async assembleContext(request: ContextAssemblyRequest): Promise<AssembledContext> {
+    if (!this.tracer?.isEnabled()) {
+      return this.assembleContextInternal(request)
+    }
+    return this.tracer.withSpan('context.assemble', async (span) => {
+      const result = await this.assembleContextInternal(request)
+      span.setAttribute('context.files_count', result.sources.length)
+      span.setAttribute('context.memory_tokens', result.memoryTokens)
+      span.setAttribute('context.budget_total', result.budgetTotal)
+      return result
+    }, { kind: 'tool-call' })
+  }
+
+  private async assembleContextInternal(request: ContextAssemblyRequest): Promise<AssembledContext> {
     const startTime = Date.now()
     const warnings: string[] = []
     const totalBudget = this.config.maxContextTokens - this.config.systemPromptReserve
@@ -132,6 +151,19 @@ export class ContextEngine {
   }
 
   async assembleForHarness(request: HarnessContextRequest): Promise<AssembledContext> {
+    if (!this.tracer?.isEnabled()) {
+      return this.assembleForHarnessInternal(request)
+    }
+    return this.tracer.withSpan('context.assemble', async (span) => {
+      const result = await this.assembleForHarnessInternal(request)
+      span.setAttribute('context.files_count', result.sources.length)
+      span.setAttribute('context.memory_tokens', result.memoryTokens)
+      span.setAttribute('context.budget_total', result.budgetTotal)
+      return result
+    }, { kind: 'tool-call' })
+  }
+
+  private async assembleForHarnessInternal(request: HarnessContextRequest): Promise<AssembledContext> {
     // Reuse assembleContext's three-layer assembly logic
     const base = await this.assembleContext({
       userMessage: request.userMessage,

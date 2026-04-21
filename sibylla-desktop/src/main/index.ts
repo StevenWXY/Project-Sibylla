@@ -43,6 +43,15 @@ import { IntentClassifier, DEFAULT_CLASSIFIER_CONFIG } from './services/harness/
 import { ToolScopeManager } from './services/harness/tool-scope'
 import { registerBuiltInTools } from './services/harness/built-in-tools'
 import { TaskStateMachine } from './services/harness/task-state-machine'
+import { Tracer } from './services/trace/tracer'
+import { TraceStore } from './services/trace/trace-store'
+import { AppEventBus } from './services/event-bus'
+import { ProgressLedger } from './services/progress/progress-ledger'
+import { ProgressHandler } from './ipc/handlers/progress'
+import { PerformanceMonitor } from './services/trace/performance-monitor'
+import { ReplayEngine } from './services/trace/replay-engine'
+import { TraceExporter } from './services/trace/trace-exporter'
+import { TraceHandler } from './ipc/handlers/trace.handler'
 import { logger } from './utils/logger'
 import type { WorkspaceInfo } from '../shared/types'
 import { IPC_CHANNELS } from '../shared/types'
@@ -58,6 +67,16 @@ let autoSaveManager: AutoSaveManager | null = null
 
 // Keep reference to DatabaseManager for cleanup on quit
 let databaseManager: DatabaseManager | null = null
+
+// Keep references to TraceStore / Tracer for cleanup on quit
+let traceStore: TraceStore | null = null
+let tracer: Tracer | null = null
+let progressLedger: ProgressLedger | null = null
+let performanceMonitor: PerformanceMonitor | null = null
+let replayEngine: ReplayEngine | null = null
+let traceExporter: TraceExporter | null = null
+let traceHandler: TraceHandler | null = null
+const appEventBus = new AppEventBus()
 
 // Keep reference to LocalSearchEngine for FileWatcher forwarding
 let localSearchEngineRef: import('./services/local-search-engine').LocalSearchEngine | null = null
@@ -392,6 +411,85 @@ if (!gotTheLock) {
           if (mainWindow && !mainWindow.isDestroyed()) {
             await localSearchEngineRef.initialize(mainWindow)
           }
+
+          // ── TASK027: Initialize TraceStore + Tracer for this workspace ──
+          traceStore = new TraceStore(workspacePath)
+          await traceStore.initialize()
+
+          tracer = new Tracer({}, traceStore, appEventBus)
+          tracer.start()
+
+          fileManager.setTracer(tracer)
+          memoryManager.setTracer(tracer)
+          harnessContextEngine.setTracer(tracer)
+          guardrailEngine.setTracer(tracer)
+          evaluator.setTracer(tracer)
+          sensorFeedbackLoop.setTracer(tracer)
+          harnessOrchestrator.setTracer(tracer)
+
+          // ── TASK028: Initialize ProgressLedger for this workspace ──
+          progressLedger = new ProgressLedger(
+            taskStateMachine,
+            workspacePath,
+            fileManager,
+            tracer,
+            appEventBus,
+            logger,
+          )
+          await progressLedger.initialize()
+          aiHandler.setProgressLedger(progressLedger)
+
+          const progressHandler = new ProgressHandler(progressLedger)
+          ipcManager.registerHandler(progressHandler)
+
+          // ── TASK029: Initialize PerformanceMonitor, ReplayEngine, TraceExporter, TraceHandler ──
+          performanceMonitor = new PerformanceMonitor(
+            traceStore,
+            {},
+            appEventBus,
+            logger,
+          )
+          performanceMonitor.start()
+
+          replayEngine = new ReplayEngine(
+            traceStore,
+            memoryManager,
+            fileManager,
+            aiGatewayClient,
+            tracer,
+            logger,
+          )
+
+          traceExporter = new TraceExporter(traceStore, logger)
+
+          traceHandler = new TraceHandler(
+            traceStore,
+            traceExporter,
+            replayEngine,
+            performanceMonitor,
+          )
+          ipcManager.registerHandler(traceHandler)
+
+          // Register trace/performance event push to renderer
+          const forwardToRenderer = (eventName: string, channel: string) => {
+            appEventBus.on(eventName, (payload: unknown) => {
+              for (const window of BrowserWindow.getAllWindows()) {
+                if (!window.isDestroyed()) {
+                  window.webContents.send(channel, payload)
+                }
+              }
+            })
+          }
+          forwardToRenderer('trace:span-ended', IPC_CHANNELS.TRACE_SPAN_ENDED)
+          forwardToRenderer('trace:update', IPC_CHANNELS.TRACE_UPDATE)
+          forwardToRenderer('performance:metrics', IPC_CHANNELS.PERFORMANCE_METRICS)
+          forwardToRenderer('performance:alert', IPC_CHANNELS.PERFORMANCE_ALERT)
+          forwardToRenderer('performance:alert-cleared', IPC_CHANNELS.PERFORMANCE_ALERT_CLEARED)
+          forwardToRenderer('progress:task-declared', IPC_CHANNELS.PROGRESS_TASK_DECLARED)
+          forwardToRenderer('progress:task-updated', IPC_CHANNELS.PROGRESS_TASK_UPDATED)
+          forwardToRenderer('progress:task-completed', IPC_CHANNELS.PROGRESS_TASK_COMPLETED)
+          forwardToRenderer('progress:task-failed', IPC_CHANNELS.PROGRESS_TASK_FAILED)
+          forwardToRenderer('progress:user-edit-conflict', IPC_CHANNELS.PROGRESS_USER_EDIT_CONFLICT)
         } catch (error) {
           console.error('[Main] Failed to initialize workspace services', error)
           // Non-fatal: workspace can still be used without sync
@@ -399,6 +497,24 @@ if (!gotTheLock) {
       })
       
       workspaceHandler.onWorkspaceClosed(async () => {
+        // Remove event bus listeners for the previous workspace
+        appEventBus.removeAllListeners('trace:span-ended')
+        appEventBus.removeAllListeners('trace:update')
+        appEventBus.removeAllListeners('performance:metrics')
+        appEventBus.removeAllListeners('performance:alert')
+        appEventBus.removeAllListeners('performance:alert-cleared')
+        appEventBus.removeAllListeners('progress:task-declared')
+        appEventBus.removeAllListeners('progress:task-updated')
+        appEventBus.removeAllListeners('progress:task-completed')
+        appEventBus.removeAllListeners('progress:task-failed')
+        appEventBus.removeAllListeners('progress:user-edit-conflict')
+
+        // Cleanup IPC handlers for workspace-scoped services
+        if (traceHandler) {
+          traceHandler.cleanup()
+          traceHandler = null
+        }
+
         memoryManager.setWorkspacePath(null)
         localRagEngine.setWorkspacePath(null)
 
@@ -411,6 +527,28 @@ if (!gotTheLock) {
           databaseManager.close()
           databaseManager = null
         }
+
+        // Cleanup Tracer + TraceStore
+        if (tracer) {
+          await tracer.stop()
+          tracer = null
+        }
+        if (traceStore) {
+          traceStore.close()
+          traceStore = null
+        }
+
+        // Cleanup PerformanceMonitor
+        if (performanceMonitor) {
+          performanceMonitor.stop()
+          performanceMonitor = null
+        }
+
+        replayEngine = null
+        traceExporter = null
+        traceHandler = null
+
+        progressLedger = null
 
         // Stop FileWatcher
         if (fileWatcher) {
@@ -511,6 +649,17 @@ if (!gotTheLock) {
     if (localSearchEngineRef) {
       localSearchEngineRef.dispose()
       localSearchEngineRef = null
+    }
+    // Cleanup Tracer + TraceStore
+    if (tracer) {
+      tracer.stop().catch((err: unknown) => {
+        console.error('[Main] Error stopping Tracer on quit', err)
+      })
+      tracer = null
+    }
+    if (traceStore) {
+      traceStore.close()
+      traceStore = null
     }
     // Cleanup IPC handlers
     ipcManager.cleanup()

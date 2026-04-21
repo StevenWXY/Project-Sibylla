@@ -10,6 +10,7 @@ import { cn } from '../../utils/cn'
 import { DiffReviewPanel } from './DiffReviewPanel'
 import { FileAutocomplete } from './FileAutocomplete'
 import { SkillAutocomplete } from './SkillAutocomplete'
+import { ExecutionTrace } from '../conversation/ExecutionTrace'
 import type { ParsedFileDiff } from './types'
 
 interface StudioAIPanelProps {
@@ -321,6 +322,10 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
                         ))}
                       </div>
                     </details>
+                  )}
+
+                  {!message.streaming && message.traceId && (
+                    <ExecutionTrace messageId={message.id} traceId={message.traceId} />
                   )}
                 </div>
               </div>

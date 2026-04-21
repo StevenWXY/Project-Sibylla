@@ -68,6 +68,20 @@ import type {
   CheckpointRecord,
   CompressionResult,
   MemoryConfig,
+  // Trace types (TASK029)
+  SerializedSpanShared,
+  TraceQueryFilterShared,
+  RecentTraceInfoShared,
+  TraceStatsShared,
+  TraceSnapshotShared,
+  ExportPreviewShared,
+  RedactionRuleShared,
+  // Performance types (TASK029)
+  PerformanceMetricsShared,
+  PerformanceAlertShared,
+  // Progress types (TASK029)
+  TaskRecordShared,
+  ProgressSnapshotShared,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -271,6 +285,48 @@ interface ElectronAPI {
     reindex: () => Promise<IPCResponse<void>>
     onIndexProgress: (callback: (progress: SearchIndexProgress) => void) => () => void
   }
+
+  // Trace operations (TASK029)
+  trace: {
+    getTraceTree: (traceId: string) => Promise<IPCResponse<SerializedSpanShared[]>>
+    query: (filter: TraceQueryFilterShared) => Promise<IPCResponse<SerializedSpanShared[]>>
+    getRecentTraces: (limit: number) => Promise<IPCResponse<RecentTraceInfoShared[]>>
+    getStats: () => Promise<IPCResponse<TraceStatsShared>>
+    lockTrace: (traceId: string, reason?: string) => Promise<IPCResponse<void>>
+    unlockTrace: (traceId: string) => Promise<IPCResponse<void>>
+    cleanup: () => Promise<IPCResponse<{ deleted: number }>>
+    previewExport: (traceIds: string[], customRules?: RedactionRuleShared[]) => Promise<IPCResponse<ExportPreviewShared>>
+    exportTrace: (traceIds: string[], outputPath: string, customRules?: RedactionRuleShared[]) => Promise<IPCResponse<void>>
+    importTrace: (filePath: string) => Promise<IPCResponse<{ traceIds: string[] }>>
+    rebuildSnapshot: (traceId: string) => Promise<IPCResponse<TraceSnapshotShared>>
+    rerun: (traceId: string) => Promise<IPCResponse<{ newTraceId: string }>>
+    onTraceUpdate: (callback: (traceId: string) => void) => () => void
+    onSpanEnded: (callback: (span: SerializedSpanShared) => void) => () => void
+  }
+
+  // Performance operations (TASK029)
+  performance: {
+    getMetrics: () => Promise<IPCResponse<PerformanceMetricsShared | null>>
+    getAlerts: () => Promise<IPCResponse<PerformanceAlertShared[]>>
+    suppressAlert: (type: string, durationMs?: number) => Promise<IPCResponse<void>>
+    onMetrics: (callback: (metrics: PerformanceMetricsShared) => void) => () => void
+    onAlert: (callback: (alert: PerformanceAlertShared) => void) => () => void
+    onAlertCleared: (callback: (payload: { type: string }) => void) => () => void
+  }
+
+  // Progress operations (TASK029)
+  progress: {
+    getSnapshot: () => Promise<IPCResponse<ProgressSnapshotShared>>
+    getTask: (id: string) => Promise<IPCResponse<TaskRecordShared | null>>
+    editUserNote: (taskId: string, note: string) => Promise<IPCResponse<void>>
+    getArchive: (month: string) => Promise<IPCResponse<string>>
+    onTaskEvent: (callback: (event: { type: string; task: TaskRecordShared }) => void) => () => void
+  }
+
+  // Inspector operations (TASK029)
+  inspector: {
+    open: (traceId?: string) => void
+  }
   
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
@@ -411,6 +467,39 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.HARNESS_RESUME_TASK,
   IPC_CHANNELS.HARNESS_ABANDON_TASK,
   IPC_CHANNELS.HARNESS_RESUMEABLE_DETECTED,
+  // Trace operations (TASK029)
+  IPC_CHANNELS.TRACE_GET_TREE,
+  IPC_CHANNELS.TRACE_QUERY,
+  IPC_CHANNELS.TRACE_GET_RECENT,
+  IPC_CHANNELS.TRACE_GET_STATS,
+  IPC_CHANNELS.TRACE_LOCK,
+  IPC_CHANNELS.TRACE_UNLOCK,
+  IPC_CHANNELS.TRACE_CLEANUP,
+  IPC_CHANNELS.TRACE_PREVIEW_EXPORT,
+  IPC_CHANNELS.TRACE_EXPORT,
+  IPC_CHANNELS.TRACE_IMPORT,
+  IPC_CHANNELS.TRACE_REBUILD_SNAPSHOT,
+  IPC_CHANNELS.TRACE_RERUN,
+  IPC_CHANNELS.TRACE_SPAN_ENDED,
+  IPC_CHANNELS.TRACE_UPDATE,
+  // Performance operations (TASK029)
+  IPC_CHANNELS.PERFORMANCE_GET_METRICS,
+  IPC_CHANNELS.PERFORMANCE_GET_ALERTS,
+  IPC_CHANNELS.PERFORMANCE_SUPPRESS,
+  IPC_CHANNELS.PERFORMANCE_METRICS,
+  IPC_CHANNELS.PERFORMANCE_ALERT,
+  IPC_CHANNELS.PERFORMANCE_ALERT_CLEARED,
+  // Progress operations (TASK029)
+  IPC_CHANNELS.PROGRESS_GET_SNAPSHOT,
+  IPC_CHANNELS.PROGRESS_GET_TASK,
+  IPC_CHANNELS.PROGRESS_EDIT_NOTE,
+  IPC_CHANNELS.PROGRESS_GET_ARCHIVE,
+  IPC_CHANNELS.PROGRESS_TASK_DECLARED,
+  IPC_CHANNELS.PROGRESS_TASK_UPDATED,
+  IPC_CHANNELS.PROGRESS_TASK_COMPLETED,
+  IPC_CHANNELS.PROGRESS_TASK_FAILED,
+  // Inspector operations (TASK029)
+  IPC_CHANNELS.INSPECTOR_OPEN,
 ]
 
 /**
@@ -1040,6 +1129,124 @@ const api: ElectronAPI = {
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.SEARCH_INDEX_PROGRESS, handler)
       }
+    },
+  },
+
+  // Trace operations (TASK029)
+  trace: {
+    getTraceTree: async (traceId: string) => {
+      return await safeInvoke<SerializedSpanShared[]>(IPC_CHANNELS.TRACE_GET_TREE, traceId)
+    },
+    query: async (filter: TraceQueryFilterShared) => {
+      return await safeInvoke<SerializedSpanShared[]>(IPC_CHANNELS.TRACE_QUERY, filter)
+    },
+    getRecentTraces: async (limit: number) => {
+      return await safeInvoke<RecentTraceInfoShared[]>(IPC_CHANNELS.TRACE_GET_RECENT, limit)
+    },
+    getStats: async () => {
+      return await safeInvoke<TraceStatsShared>(IPC_CHANNELS.TRACE_GET_STATS)
+    },
+    lockTrace: async (traceId: string, reason?: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.TRACE_LOCK, traceId, reason)
+    },
+    unlockTrace: async (traceId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.TRACE_UNLOCK, traceId)
+    },
+    cleanup: async () => {
+      return await safeInvoke<{ deleted: number }>(IPC_CHANNELS.TRACE_CLEANUP)
+    },
+    previewExport: async (traceIds: string[], customRules?: RedactionRuleShared[]) => {
+      return await safeInvoke<ExportPreviewShared>(IPC_CHANNELS.TRACE_PREVIEW_EXPORT, traceIds, customRules)
+    },
+    exportTrace: async (traceIds: string[], outputPath: string, customRules?: RedactionRuleShared[]) => {
+      return await safeInvoke<void>(IPC_CHANNELS.TRACE_EXPORT, traceIds, outputPath, customRules)
+    },
+    importTrace: async (filePath: string) => {
+      return await safeInvoke<{ traceIds: string[] }>(IPC_CHANNELS.TRACE_IMPORT, filePath)
+    },
+    rebuildSnapshot: async (traceId: string) => {
+      return await safeInvoke<TraceSnapshotShared>(IPC_CHANNELS.TRACE_REBUILD_SNAPSHOT, traceId)
+    },
+    rerun: async (traceId: string) => {
+      return await safeInvoke<{ newTraceId: string }>(IPC_CHANNELS.TRACE_RERUN, traceId)
+    },
+    onTraceUpdate: (callback: (traceId: string) => void) => {
+      const handler = (_event: IpcRendererEvent, traceId: string) => callback(traceId)
+      ipcRenderer.on(IPC_CHANNELS.TRACE_UPDATE, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.TRACE_UPDATE, handler) }
+    },
+    onSpanEnded: (callback: (span: SerializedSpanShared) => void) => {
+      const handler = (_event: IpcRendererEvent, span: SerializedSpanShared) => callback(span)
+      ipcRenderer.on(IPC_CHANNELS.TRACE_SPAN_ENDED, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.TRACE_SPAN_ENDED, handler) }
+    },
+  },
+
+  // Performance operations (TASK029)
+  performance: {
+    getMetrics: async () => {
+      return await safeInvoke<PerformanceMetricsShared | null>(IPC_CHANNELS.PERFORMANCE_GET_METRICS)
+    },
+    getAlerts: async () => {
+      return await safeInvoke<PerformanceAlertShared[]>(IPC_CHANNELS.PERFORMANCE_GET_ALERTS)
+    },
+    suppressAlert: async (type: string, durationMs?: number) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PERFORMANCE_SUPPRESS, type, durationMs)
+    },
+    onMetrics: (callback: (metrics: PerformanceMetricsShared) => void) => {
+      const handler = (_event: IpcRendererEvent, metrics: PerformanceMetricsShared) => callback(metrics)
+      ipcRenderer.on(IPC_CHANNELS.PERFORMANCE_METRICS, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.PERFORMANCE_METRICS, handler) }
+    },
+    onAlert: (callback: (alert: PerformanceAlertShared) => void) => {
+      const handler = (_event: IpcRendererEvent, alert: PerformanceAlertShared) => callback(alert)
+      ipcRenderer.on(IPC_CHANNELS.PERFORMANCE_ALERT, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.PERFORMANCE_ALERT, handler) }
+    },
+    onAlertCleared: (callback: (payload: { type: string }) => void) => {
+      const handler = (_event: IpcRendererEvent, payload: { type: string }) => callback(payload)
+      ipcRenderer.on(IPC_CHANNELS.PERFORMANCE_ALERT_CLEARED, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.PERFORMANCE_ALERT_CLEARED, handler) }
+    },
+  },
+
+  // Progress operations (TASK029)
+  progress: {
+    getSnapshot: async () => {
+      return await safeInvoke<ProgressSnapshotShared>(IPC_CHANNELS.PROGRESS_GET_SNAPSHOT)
+    },
+    getTask: async (id: string) => {
+      return await safeInvoke<TaskRecordShared | null>(IPC_CHANNELS.PROGRESS_GET_TASK, id)
+    },
+    editUserNote: async (taskId: string, note: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PROGRESS_EDIT_NOTE, taskId, note)
+    },
+    getArchive: async (month: string) => {
+      return await safeInvoke<string>(IPC_CHANNELS.PROGRESS_GET_ARCHIVE, month)
+    },
+    onTaskEvent: (callback: (event: { type: string; task: TaskRecordShared }) => void) => {
+      const handlers = [
+        { channel: IPC_CHANNELS.PROGRESS_TASK_DECLARED, type: 'declared' },
+        { channel: IPC_CHANNELS.PROGRESS_TASK_UPDATED, type: 'updated' },
+        { channel: IPC_CHANNELS.PROGRESS_TASK_COMPLETED, type: 'completed' },
+        { channel: IPC_CHANNELS.PROGRESS_TASK_FAILED, type: 'failed' },
+      ].map(({ channel, type }) => {
+        const handler = (_event: IpcRendererEvent, task: TaskRecordShared) => callback({ type, task })
+        ipcRenderer.on(channel, handler)
+        return { channel, handler }
+      })
+      return () => {
+        for (const { channel, handler } of handlers) {
+          ipcRenderer.removeListener(channel, handler)
+        }
+      }
+    },
+  },
+
+  // Inspector operations (TASK029)
+  inspector: {
+    open: (traceId?: string) => {
+      ipcRenderer.send(IPC_CHANNELS.INSPECTOR_OPEN, traceId)
     },
   },
   

@@ -17,6 +17,7 @@ import type {
 } from '../../../shared/types'
 import type { AiGatewayClient } from '../ai-gateway-client'
 import type { logger as loggerType } from '../../utils/logger'
+import type { Tracer } from '../trace/tracer'
 
 export interface EvaluatorEvaluateInput {
   readonly request: AIChatRequest
@@ -53,14 +54,32 @@ Output JSON:
 }`
 
 export class Evaluator {
+  private tracer?: Tracer
+
   constructor(
     private readonly gateway: AiGatewayClient,
     private readonly model: string,
     private readonly logger: typeof loggerType,
-    private readonly accessToken?: string
+    private readonly accessToken?: string,
   ) {}
 
+  setTracer(tracer: Tracer): void {
+    this.tracer = tracer
+  }
+
   async evaluate(input: EvaluatorEvaluateInput): Promise<EvaluationReport> {
+    if (!this.tracer?.isEnabled()) {
+      return this.evaluateInternal(input)
+    }
+    return this.tracer.withSpan('harness.evaluator', async (span) => {
+      const report = await this.evaluateInternal(input)
+      span.setAttribute('evaluator.verdict', report.verdict)
+      span.setAttribute('evaluator.critical_issues', report.criticalIssues.length)
+      return report
+    }, { kind: 'system' })
+  }
+
+  private async evaluateInternal(input: EvaluatorEvaluateInput): Promise<EvaluationReport> {
     const evaluatorId = input.evaluatorId ?? 'evaluator-default'
     const session = this.gateway.createSession({ role: 'evaluator' }, this.accessToken)
 
