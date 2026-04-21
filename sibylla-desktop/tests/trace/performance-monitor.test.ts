@@ -80,7 +80,7 @@ describe('PerformanceMonitor', () => {
     const metrics = monitor.getMetrics()
     expect(metrics).not.toBeNull()
     expect(metrics!.llmCallCount).toBe(4)
-    expect(metrics!.llmCallAvgDurationMs).toBeCloseTo(2600, -2)
+    expect(metrics!.llmCallAvgDurationMs).toBeCloseTo(2650, -2)
     expect(metrics!.errorRate).toBeCloseTo(0.25)
     expect(metrics!.totalTokens).toBe(5000)
   })

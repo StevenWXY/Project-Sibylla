@@ -95,6 +95,11 @@ export class PerformanceMonitor {
     if (this.aggregationInterval) {
       return
     }
+    try {
+      this.aggregateAndAlert()
+    } catch (err) {
+      this.logger.error('[PerformanceMonitor] Error in initial aggregation', err)
+    }
     this.aggregationInterval = setInterval(() => {
       try {
         this.aggregateAndAlert()

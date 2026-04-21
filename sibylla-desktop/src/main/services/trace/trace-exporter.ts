@@ -64,7 +64,8 @@ export class TraceExporter {
     traceIds: string[],
     customRules?: RedactionRule[],
   ): ExportPreviewShared {
-    const rules = this.mergeRules(customRules)
+    const normalizedRules = customRules?.map(r => this.normalizeRule(r))
+    const rules = this.mergeRules(normalizedRules)
     const spans = this.traceStore.getMultipleTraces(traceIds)
     const report: RedactionReport = { entries: [] }
 
@@ -210,6 +211,15 @@ export class TraceExporter {
     }
     const customIds = new Set(customRules.map(r => r.id))
     return [...DEFAULT_RULES.filter(r => !customIds.has(r.id)), ...customRules]
+  }
+
+  private normalizeRule(rule: RedactionRule): RedactionRule {
+    return {
+      id: rule.id,
+      keyPattern: typeof rule.keyPattern === 'string' ? new RegExp(rule.keyPattern) : rule.keyPattern,
+      valuePattern: typeof rule.valuePattern === 'string' ? new RegExp(rule.valuePattern) : rule.valuePattern,
+      reason: rule.reason,
+    }
   }
 
   private anonymizeWorkspaceId(workspaceId: string): string {
