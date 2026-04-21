@@ -37,7 +37,7 @@ export const TraceInspector: React.FC<TraceInspectorProps> = ({ initialTraceId }
     if (initialTraceId && initialTraceId !== selectedTraceId) {
       selectTrace(initialTraceId)
     }
-  }, [initialTraceId])
+  }, [initialTraceId, selectedTraceId, selectTrace])
 
   const handleSpanClick = (spanId: string) => {
     useTraceStore.getState().selectSpan(spanId)

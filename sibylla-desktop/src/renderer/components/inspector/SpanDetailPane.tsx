@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react'
-import { useTraceStore, selectCurrentSpans, selectSelectedSpanId } from '../../store/traceStore'
-import type { SerializedSpanShared } from '../../../shared/types'
+import { useTraceStore, selectCurrentSpans } from '../../store/traceStore'
 
 interface SpanDetailPaneProps {
   spanId: string

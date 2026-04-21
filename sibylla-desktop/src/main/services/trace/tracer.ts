@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import type { Span, SpanContext, SpanKind, TracerConfig, SerializedSpan } from './types'
+import type { Span, SpanContext, TracerConfig, SerializedSpan } from './types'
 import { DEFAULT_SENSITIVE_PATTERNS } from './types'
 import { NO_OP_SPAN } from './no-op-span'
 import { SpanImpl } from './span-impl'

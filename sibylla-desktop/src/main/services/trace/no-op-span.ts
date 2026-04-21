@@ -1,4 +1,4 @@
-import type { Span, SpanContext, SpanKind, SpanStatus } from './types'
+import type { Span, SpanContext, SpanKind } from './types'
 
 class NoOpSpan implements Span {
   readonly context: SpanContext = Object.freeze({ traceId: '', spanId: '' })

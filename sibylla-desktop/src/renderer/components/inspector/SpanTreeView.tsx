@@ -108,7 +108,7 @@ const TreeNodeRow: React.FC<{
   )
 }
 
-export const SpanTreeView: React.FC<SpanTreeViewProps> = ({ traceId, onSpanClick }) => {
+export const SpanTreeView: React.FC<SpanTreeViewProps> = ({ traceId: _traceId, onSpanClick }) => {
   const spans = useTraceStore(selectCurrentSpans)
   const selectedSpanId = useTraceStore(s => s.selectedSpanId)
   const tree = useMemo(() => buildTree(spans), [spans])

@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useTraceStore, selectRecentTraces } from '../../store/traceStore'
-import type { RecentTraceInfoShared } from '../../../shared/types'
 
 interface TraceListProps {
   selected: string | null

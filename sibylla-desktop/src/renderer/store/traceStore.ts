@@ -4,7 +4,6 @@ import type {
   SerializedSpanShared,
   RecentTraceInfoShared,
   TraceStatsShared,
-  TraceQueryFilterShared,
   RedactionRuleShared,
   TraceSnapshotShared,
 } from '../../shared/types'

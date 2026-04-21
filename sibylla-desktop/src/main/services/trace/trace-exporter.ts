@@ -7,7 +7,6 @@ import type { logger as loggerType } from '../../utils/logger'
 import type {
   RedactionRuleShared,
   ExportPreviewShared,
-  RedactionReportEntryShared,
   SerializedSpanShared,
 } from '../../../shared/types'
 import type { SerializedSpan } from './types'
@@ -231,6 +230,7 @@ export class TraceExporter {
 
   private getSibyllaVersion(): string {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { app } = require('electron')
       return app.getVersion()
     } catch {

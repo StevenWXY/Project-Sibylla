@@ -53,7 +53,7 @@ function getColorForDuration(ms: number, avg: number): string {
   return '#10B981'
 }
 
-export const PerformanceStats: React.FC<PerformanceStatsProps> = ({ traceId }) => {
+export const PerformanceStats: React.FC<PerformanceStatsProps> = ({ traceId: _traceId }) => {
   const spans = useTraceStore(selectCurrentSpans)
   const [sortKey, setSortKey] = useState<SortKey>('callCount')
   const [sortAsc, setSortAsc] = useState(false)

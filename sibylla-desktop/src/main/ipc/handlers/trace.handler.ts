@@ -1,14 +1,11 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../shared/types'
-import type { IPCResponse } from '../../../shared/types'
 import { IpcHandler } from '../handler'
 import type { TraceStore, RecentTraceInfo, TraceStats } from '../../services/trace/trace-store'
 import type { TraceExporter } from '../../services/trace/trace-exporter'
-import type { ReplayEngine, TraceSnapshot } from '../../services/trace/replay-engine'
+import type { ReplayEngine } from '../../services/trace/replay-engine'
 import type {
   PerformanceMonitor,
-  PerformanceMetrics,
-  PerformanceAlert,
 } from '../../services/trace/performance-monitor'
 import type {
   SerializedSpanShared,

@@ -81,7 +81,7 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ messageId, traceId }) => {
+export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ messageId: _messageId, traceId }) => {
   const [expanded, setExpanded] = useState(false)
   const [spans, setSpans] = useState<FilteredSpan[]>([])
   const [loading, setLoading] = useState(false)

@@ -41,6 +41,11 @@ export class SensorFeedbackLoop {
   }
 
   private async processInternal(
+    initialResponse: AIChatResponse,
+    context: AssembledContext,
+    generator: Generator,
+    request: AIChatRequest,
+  ): Promise<SensorFeedbackResult> {
     let current = initialResponse
     const allSignals: SensorSignal[] = []
 

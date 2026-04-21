@@ -47,7 +47,7 @@ function getSpanColor(span: SerializedSpanShared): string {
 const ROW_HEIGHT = 24
 const MIN_BLOCK_WIDTH = 2
 
-export const FlameGraph: React.FC<FlameGraphProps> = ({ traceId, onSpanClick }) => {
+export const FlameGraph: React.FC<FlameGraphProps> = ({ traceId: _traceId, onSpanClick }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -161,7 +161,7 @@ export const FlameGraph: React.FC<FlameGraphProps> = ({ traceId, onSpanClick }) 
     if (tooltipRef.current) tooltipRef.current.style.display = 'none'
   }
 
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleClick = (_e: React.MouseEvent<HTMLCanvasElement>) => {
     if (hoveredSpan) {
       onSpanClick(hoveredSpan.spanId)
     }

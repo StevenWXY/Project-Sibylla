@@ -572,7 +572,7 @@ export class ProgressLedger {
     }
 
     const startedAtMatch = entry.match(/开始时间[：:]\s*(.+)/)
-    const traceMatch = entry.match(/sibylla:\/\/trace\/([^\)]+)/)
+    const traceMatch = entry.match(/sibylla:\/\/trace\/([^)]+)/)
     const durationMatch = entry.match(/耗时[：:]\s*(.+)/)
     const resultMatch = entry.match(/结果[：:]\s*(.+)/)
     const failureMatch = entry.match(/失败原因[：:]\s*(.+)/)
@@ -588,7 +588,7 @@ export class ProgressLedger {
     }
 
     const checklist: ChecklistItem[] = []
-    const checklistLines = entry.match(/  [⏸🔄✅⏭]\s+.+/g)
+    const checklistLines = entry.match(/ {2}[⏸🔄✅⏭]\s+.+/gu)
     if (checklistLines) {
       for (const line of checklistLines) {
         const statusChar = line.trim()[0]

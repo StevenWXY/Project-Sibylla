@@ -1,24 +1,6 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect } from 'react'
 import { useProgressStore, selectSnapshot, selectProgressLoading } from '../../store/progressStore'
-import type { TaskRecordShared } from '../../../shared/types'
 import { TaskCard } from './TaskCard'
-
-function formatElapsed(startedAt: string): string {
-  const start = new Date(startedAt).getTime()
-  const diff = Date.now() - start
-  if (diff < 60000) return `${Math.floor(diff / 1000)}s`
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ${Math.floor((diff % 60000) / 1000)}s`
-  return `${Math.floor(diff / 3600000)}h ${Math.floor((diff % 3600000) / 60000)}m`
-}
-
-const ActiveElapsed: React.FC<{ startedAt: string }> = ({ startedAt }) => {
-  const [elapsed, setElapsed] = React.useState(() => formatElapsed(startedAt))
-  useEffect(() => {
-    const timer = setInterval(() => setElapsed(formatElapsed(startedAt)), 1000)
-    return () => clearInterval(timer)
-  }, [startedAt])
-  return <>{elapsed}</>
-}
 
 export const ProgressPanel: React.FC = () => {
   const snapshot = useProgressStore(selectSnapshot)

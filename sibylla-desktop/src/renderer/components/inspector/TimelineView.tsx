@@ -1,6 +1,5 @@
 import React from 'react'
 import { useTraceStore, selectCurrentSpans } from '../../store/traceStore'
-import type { SerializedSpanShared } from '../../../shared/types'
 
 interface TimelineViewProps {
   traceId: string
@@ -25,7 +24,7 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-export const TimelineView: React.FC<TimelineViewProps> = ({ traceId, onSpanClick }) => {
+export const TimelineView: React.FC<TimelineViewProps> = ({ traceId: _traceId, onSpanClick }) => {
   const spans = useTraceStore(selectCurrentSpans)
   const selectedSpanId = useTraceStore(s => s.selectedSpanId)
 

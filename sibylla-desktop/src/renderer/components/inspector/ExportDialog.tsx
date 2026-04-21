@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react'
-import { useTraceStore } from '../../store/traceStore'
+import React, { useState, useEffect, useCallback } from 'react'
 import type { RedactionRuleShared, ExportPreviewShared } from '../../../shared/types'
 
 interface ExportDialogProps {
@@ -18,13 +17,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ traceIds, onClose })
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  useEffect(() => {
-    if (step === 1) {
-      runPreview()
-    }
-  }, [step])
-
-  const runPreview = async () => {
+  const runPreview = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -39,7 +32,13 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ traceIds, onClose })
     } finally {
       setLoading(false)
     }
-  }
+  }, [traceIds, customRules])
+
+  useEffect(() => {
+    if (step === 1) {
+      runPreview()
+    }
+  }, [step, runPreview])
 
   const handleAddRule = () => {
     setCustomRules(prev => [...prev, {
