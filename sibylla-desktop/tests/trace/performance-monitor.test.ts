@@ -27,6 +27,7 @@ function createMockTraceStore(spans: SerializedSpan[] = []): TraceStore {
     getTraceTree: vi.fn(() => spans),
     getRecentTraces: vi.fn(() => []),
     getStats: vi.fn(() => ({ totalSpans: spans.length, totalTraces: 1, dbSizeBytes: 0 })),
+    storePath: vi.fn(() => '/tmp/test-trace.db'),
     close: vi.fn(),
   } as unknown as TraceStore
 }
@@ -187,6 +188,7 @@ describe('PerformanceMonitor', () => {
     let currentSpans = highDurationSpans
     const traceStore = {
       query: vi.fn(() => currentSpans),
+      storePath: vi.fn(() => '/tmp/test-trace.db'),
     } as unknown as TraceStore
 
     const clearedSpy = vi.fn()

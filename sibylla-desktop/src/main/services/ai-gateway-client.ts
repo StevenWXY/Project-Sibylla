@@ -31,9 +31,32 @@ export interface AiGatewayChatResponse {
 
 export class AiGatewayClient {
   private readonly baseUrl: string
+  private readonly maxRetries: number
+  private readonly baseDelayMs: number
 
-  constructor(baseUrl: string = 'http://localhost:3000') {
+  constructor(baseUrl: string = 'http://localhost:3000', maxRetries: number = 3, baseDelayMs: number = 1000) {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
+    this.maxRetries = maxRetries
+    this.baseDelayMs = baseDelayMs
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  private isRetryableError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false
+    const msg = error.message.toLowerCase()
+    return (
+      msg.includes('rate limit') ||
+      msg.includes('429') ||
+      msg.includes('timeout') ||
+      msg.includes('etimedout') ||
+      msg.includes('network') ||
+      msg.includes('econnrefused') ||
+      msg.includes('enetunreach') ||
+      msg.includes('fetch failed')
+    )
   }
 
   createSession(options: { role: AiGatewaySessionRole }, accessToken?: string): AiGatewaySession {
@@ -45,26 +68,66 @@ export class AiGatewayClient {
     accessToken?: string,
     signal?: AbortSignal
   ): AsyncGenerator<string, void, undefined> {
-    const response = await fetch(`${this.baseUrl}/api/v1/ai/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-      body: JSON.stringify({ ...request, stream: true }),
-      signal,
-    })
+    let lastError: Error | null = null
 
-    if (!response.ok) {
-      const fallbackText = await response.text()
-      throw new Error(`AI gateway stream request failed: ${response.status} ${fallbackText}`)
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = this.baseDelayMs * Math.pow(2, attempt - 1)
+        const jitter = Math.random() * delay * 0.2
+        logger.info('[AiGatewayClient] Retrying stream request', {
+          attempt,
+          delayMs: delay + jitter,
+        })
+        await this.sleep(delay + jitter)
+        if (signal?.aborted) return
+      }
+
+      try {
+        const response = await fetch(`${this.baseUrl}/api/v1/ai/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ ...request, stream: true }),
+          signal,
+        })
+
+        if (!response.ok) {
+          const fallbackText = await response.text()
+          throw new Error(`AI gateway stream request failed: ${response.status} ${fallbackText}`)
+        }
+
+        if (!response.body) {
+          throw new Error('AI gateway stream response body is null')
+        }
+
+        yield* this.parseSSEStream(response.body)
+        return
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+
+        if (signal?.aborted) {
+          return
+        }
+
+        if (!this.isRetryableError(lastError) || attempt === this.maxRetries) {
+          throw lastError
+        }
+
+        logger.warn('[AiGatewayClient] Stream request failed, will retry', {
+          attempt: attempt + 1,
+          maxRetries: this.maxRetries,
+          error: lastError.message,
+        })
+      }
     }
 
-    if (!response.body) {
-      throw new Error('AI gateway stream response body is null')
-    }
+    throw lastError
+  }
 
-    const reader = response.body.getReader()
+  private async *parseSSEStream(body: ReadableStream<Uint8Array>): AsyncGenerator<string, void, undefined> {
+    const reader = body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
 

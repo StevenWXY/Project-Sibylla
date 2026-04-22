@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, globalShortcut } from 'electron'
 import { createMainWindow } from './window'
 import { ipcManager } from './ipc'
 import { TestHandler } from './ipc/handlers/test.handler'
@@ -52,6 +52,8 @@ import { PerformanceMonitor } from './services/trace/performance-monitor'
 import { ReplayEngine } from './services/trace/replay-engine'
 import { TraceExporter } from './services/trace/trace-exporter'
 import { TraceHandler } from './ipc/handlers/trace.handler'
+import { ConversationStore } from './services/conversation-store'
+import { ConversationHandler } from './ipc/handlers/conversation.handler'
 import { logger } from './utils/logger'
 import type { WorkspaceInfo } from '../shared/types'
 import { IPC_CHANNELS } from '../shared/types'
@@ -76,6 +78,7 @@ let performanceMonitor: PerformanceMonitor | null = null
 let replayEngine: ReplayEngine | null = null
 let traceExporter: TraceExporter | null = null
 let traceHandler: TraceHandler | null = null
+let conversationStore: ConversationStore | null = null
 const appEventBus = new AppEventBus()
 
 // Keep reference to LocalSearchEngine for FileWatcher forwarding
@@ -367,10 +370,11 @@ if (!gotTheLock) {
           console.log('[Main] All services started for workspace', { path: workspacePath })
 
           // Initialize memory + local RAG services for current workspace
-          memoryManager.setWorkspacePath(workspacePath)
-          localRagEngine.setWorkspacePath(workspacePath)
-          await localRagEngine.rebuildIndex()
-          await aiHandler.initSkills()
+           memoryManager.setWorkspacePath(workspacePath)
+           localRagEngine.setWorkspacePath(workspacePath)
+           await localRagEngine.rebuildIndex()
+           await aiHandler.initSkills()
+           memoryManager.startMemoryWatcher()
 
           // TASK019: Load workspace-specific custom guides
           await guideRegistry.loadWorkspaceCustom(workspacePath)
@@ -412,9 +416,14 @@ if (!gotTheLock) {
             await localSearchEngineRef.initialize(mainWindow)
           }
 
+          // Initialize ConversationStore for this workspace
+          conversationStore = new ConversationStore(workspacePath)
+          conversationHandler.setStore(conversationStore)
+
           // ── TASK027: Initialize TraceStore + Tracer for this workspace ──
-          traceStore = new TraceStore(workspacePath)
-          await traceStore.initialize()
+           traceStore = new TraceStore(workspacePath)
+           await traceStore.initialize()
+           traceStore.startAutoCleanup(30)
 
           tracer = new Tracer({}, traceStore, appEventBus)
           tracer.start()
@@ -515,8 +524,9 @@ if (!gotTheLock) {
           traceHandler = null
         }
 
-        memoryManager.setWorkspacePath(null)
-        localRagEngine.setWorkspacePath(null)
+         memoryManager.setWorkspacePath(null)
+         memoryManager.stopMemoryWatcher()
+         localRagEngine.setWorkspacePath(null)
 
         // Cleanup search engine
         if (localSearchEngineRef) {
@@ -544,11 +554,19 @@ if (!gotTheLock) {
           performanceMonitor = null
         }
 
-        replayEngine = null
-        traceExporter = null
-        traceHandler = null
+          replayEngine = null
+          traceExporter = null
+          traceHandler = null
 
-        progressLedger = null
+          if (conversationStore) {
+            conversationStore.close()
+            conversationStore = null
+          }
+
+         if (progressLedger) {
+           progressLedger.dispose()
+         }
+         progressLedger = null
 
         // Stop FileWatcher
         if (fileWatcher) {
@@ -571,6 +589,7 @@ if (!gotTheLock) {
       })
       
       // Register all handlers
+      const conversationHandler = new ConversationHandler()
       const handlers = [
         new SystemHandler(),
         new TestHandler(),
@@ -583,6 +602,7 @@ if (!gotTheLock) {
         memoryHandler,
         windowHandler,
         harnessHandler,
+        conversationHandler,
       ]
       
       for (const handler of handlers) {
@@ -598,6 +618,17 @@ if (!gotTheLock) {
       // Handle window closed event
       mainWindow.on('closed', () => {
         mainWindow = null
+      })
+
+      // Register global shortcut: Ctrl+Shift+T to open Trace Inspector
+      globalShortcut.register('CommandOrControl+Shift+T', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(IPC_CHANNELS.INSPECTOR_OPEN)
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore()
+          }
+          mainWindow.focus()
+        }
       })
 
       // macOS: Re-create window when dock icon is clicked
@@ -624,6 +655,8 @@ if (!gotTheLock) {
   // Handle app quit
   app.on('will-quit', () => {
     console.log('[Main] Application is quitting')
+    // Unregister all global shortcuts
+    globalShortcut.unregisterAll()
     // Stop FileWatcher if running
     if (fileWatcher) {
       fileWatcher.stop().catch((err: unknown) => {

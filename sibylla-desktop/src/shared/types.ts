@@ -151,6 +151,13 @@ export const IPC_CHANNELS = {
   AI_SKILL_LIST: 'ai:skill:list',
   AI_SKILL_SEARCH: 'ai:skill:search',
 
+  // Conversation operations
+  CONVERSATION_CREATE: 'conversation:create',
+  CONVERSATION_APPEND_MESSAGE: 'conversation:appendMessage',
+  CONVERSATION_GET_MESSAGES: 'conversation:getMessages',
+  CONVERSATION_LIST: 'conversation:list',
+  CONVERSATION_LOAD_LATEST: 'conversation:loadLatest',
+
   // Memory operations
   MEMORY_SNAPSHOT: 'memory:snapshot',
   MEMORY_UPDATE: 'memory:update',
@@ -435,6 +442,13 @@ export interface IPCChannelMap {
   // Skill operations
   [IPC_CHANNELS.AI_SKILL_LIST]: { params: []; return: SkillSummary[] }
   [IPC_CHANNELS.AI_SKILL_SEARCH]: { params: [params: SkillSearchParams]; return: SkillSummary[] }
+
+  // Conversation operations
+  [IPC_CHANNELS.CONVERSATION_CREATE]: { params: [id: string, title?: string]; return: ConversationSummary }
+  [IPC_CHANNELS.CONVERSATION_APPEND_MESSAGE]: { params: [message: ConversationMessageShared]; return: void }
+  [IPC_CHANNELS.CONVERSATION_GET_MESSAGES]: { params: [conversationId: string, limit: number, beforeTimestamp?: number]; return: PaginatedMessagesShared }
+  [IPC_CHANNELS.CONVERSATION_LIST]: { params: [limit: number, offset: number]; return: ConversationSummary[] }
+  [IPC_CHANNELS.CONVERSATION_LOAD_LATEST]: { params: []; return: { conversationId: string; messages: ConversationMessageShared[]; hasMore: boolean } | null }
 
   // Memory operations
   [IPC_CHANNELS.MEMORY_SNAPSHOT]: { params: []; return: MemorySnapshotResponse }
@@ -1911,4 +1925,32 @@ export interface TraceStatsShared {
   totalSpans: number
   totalTraces: number
   dbSizeBytes: number
+}
+
+// ─── Conversation Shared Types ───
+
+export interface ConversationSummary {
+  readonly id: string
+  readonly title: string
+  readonly createdAt: number
+  readonly updatedAt: number
+  readonly messageCount: number
+}
+
+export interface ConversationMessageShared {
+  readonly id: string
+  readonly conversationId: string
+  readonly role: 'user' | 'assistant'
+  readonly content: string
+  readonly createdAt: number
+  readonly contextSources: string[]
+  readonly traceId: string | null
+  readonly memoryState: { tokenCount: number; tokenDebt: number; flushTriggered: boolean } | null
+  readonly ragHits: Array<{ path: string; score: number; snippet: string }> | null
+}
+
+export interface PaginatedMessagesShared {
+  readonly messages: ConversationMessageShared[]
+  readonly hasMore: boolean
+  readonly total: number
 }

@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs'
 import * as path from 'path'
+import type { Stats } from 'fs'
 import { FileLock } from './file-lock'
 import { logger } from '../utils/logger'
 import type { DailyLogEntry } from '../../shared/types'
@@ -132,6 +133,8 @@ export class MemoryManager {
   private _v2Components?: V2Components
   private eventBus?: MemoryEventBus
   private tracer?: Tracer
+  private memoryWatcher: ReturnType<typeof setInterval> | null = null
+  private lastMemoryMtime: number | null = null
 
   constructor(v2Components?: V2Components) {
     this._v2Components = v2Components
@@ -650,6 +653,8 @@ export class MemoryManager {
       rationale: 'User manually edited entry via memory panel',
     })
 
+    await this.v2Components.indexer?.upsert(snapshot.entries[entryIndex])
+
     this.eventBus?.emitEntryUpdated(snapshot.entries[entryIndex])
   }
 
@@ -712,6 +717,8 @@ export class MemoryManager {
       trigger: { source: 'manual' },
       rationale: locked ? 'User locked entry' : 'User unlocked entry',
     })
+
+    await this.v2Components.indexer?.upsert(snapshot.entries[entryIndex])
 
     this.eventBus?.emitEntryUpdated(snapshot.entries[entryIndex])
   }
@@ -935,7 +942,7 @@ export class MemoryManager {
       return { data: { entries: [], totalTokens: 0 }, exact: false }
     }
 
-    const snapshot = await fileManager.read()
+    const snapshot = await fileManager.load()
     const currentEntries = snapshot.entries
 
     const since = date.toISOString()
@@ -993,6 +1000,47 @@ export class MemoryManager {
       relatedFiles: entry.relatedFiles,
       operator: entry.operator,
       traceType: entry.type === 'harness-trace' ? 'guardrail_triggered' : undefined,
+    }
+  }
+
+  startMemoryWatcher(): void {
+    if (this.memoryWatcher) return
+    if (!this.workspacePath) return
+
+    const memoryPath = path.join(this.workspacePath, 'MEMORY.md')
+    this.lastMemoryMtime = null
+
+    this.memoryWatcher = setInterval(async () => {
+      try {
+        const stat = await fs.stat(memoryPath) as Stats
+        const mtime = stat.mtimeMs
+        if (this.lastMemoryMtime !== null && mtime > this.lastMemoryMtime) {
+          logger.info('[MemoryManager] External MEMORY.md edit detected', {
+            previousMtime: this.lastMemoryMtime,
+            currentMtime: mtime,
+          })
+
+          await this.v2Components?.evolutionLog?.append({
+            id: `ev-${Date.now()}-external-edit`,
+            timestamp: new Date().toISOString(),
+            type: 'manual-edit',
+            entryId: 'external',
+            section: 'project_convention' as const,
+            trigger: { source: 'manual' },
+            rationale: 'External edit detected via file modification timestamp',
+          })
+        }
+        this.lastMemoryMtime = mtime
+      } catch {
+        // File may not exist yet
+      }
+    }, 5000)
+  }
+
+  stopMemoryWatcher(): void {
+    if (this.memoryWatcher) {
+      clearInterval(this.memoryWatcher)
+      this.memoryWatcher = null
     }
   }
 }

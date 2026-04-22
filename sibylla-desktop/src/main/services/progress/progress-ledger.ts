@@ -22,6 +22,8 @@ const USER_NOTE_BLOCK_REGEX = /<!--\s*user-note:([^\s]*?)\s*-->\n([\s\S]*?)\n<!-
 const TASK_ENTRY_SPLIT = '### ['
 const ARCHIVE_BASE_DIR = '.sibylla/trace/progress-archive'
 const CONFLICT_BACKUP_FILE = '.progress.conflict.md'
+const DEFAULT_TASK_TIMEOUT_MS = 30 * 60 * 1000
+const TIMEOUT_CHECK_INTERVAL_MS = 60 * 1000
 
 export class ProgressLedger {
   private tasks: Map<string, TaskRecord> = new Map()
@@ -29,6 +31,8 @@ export class ProgressLedger {
   private userNoteBlocks: Map<string, string> = new Map()
   private lastRenderHash: string | null = null
   private taskSequence = 0
+  private timeoutCheckRef: ReturnType<typeof setInterval> | null = null
+  private readonly taskTimeoutMs: number
 
   constructor(
     private readonly taskStateMachine: TaskStateMachine,
@@ -37,7 +41,10 @@ export class ProgressLedger {
     private readonly tracer: Tracer,
     private readonly eventBus: AppEventBus,
     private readonly logger: typeof loggerType,
-  ) {}
+    taskTimeoutMs?: number,
+  ) {
+    this.taskTimeoutMs = taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS
+  }
 
   async initialize(): Promise<void> {
     const progressPath = this.progressPath()
@@ -46,6 +53,44 @@ export class ProgressLedger {
       await this.load()
     } else {
       await this.persist()
+    }
+    this.startTimeoutMonitor()
+  }
+
+  dispose(): void {
+    if (this.timeoutCheckRef) {
+      clearInterval(this.timeoutCheckRef)
+      this.timeoutCheckRef = null
+    }
+  }
+
+  private startTimeoutMonitor(): void {
+    if (this.timeoutCheckRef) return
+    this.timeoutCheckRef = setInterval(() => {
+      this.checkTimeouts().catch((err) => {
+        this.logger.error('progress.timeout-check.failed', {
+          err: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }, TIMEOUT_CHECK_INTERVAL_MS)
+  }
+
+  private async checkTimeouts(): Promise<void> {
+    const now = Date.now()
+    for (const [id, task] of this.tasks) {
+      if (task.state !== 'running') continue
+      if (!task.startedAt) continue
+
+      const elapsed = now - new Date(task.startedAt).getTime()
+      if (elapsed >= this.taskTimeoutMs) {
+        this.logger.warn('progress.task.timeout', {
+          taskId: id,
+          title: task.title,
+          elapsedMs: elapsed,
+          timeoutMs: this.taskTimeoutMs,
+        })
+        await this.fail(id, `任务超时（${this.formatDuration(elapsed)}），已自动标记为失败`)
+      }
     }
   }
 

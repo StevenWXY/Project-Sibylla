@@ -82,6 +82,10 @@ import type {
   // Progress types (TASK029)
   TaskRecordShared,
   ProgressSnapshotShared,
+  // Conversation types
+  ConversationSummary,
+  ConversationMessageShared,
+  PaginatedMessagesShared,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -327,6 +331,15 @@ interface ElectronAPI {
   inspector: {
     open: (traceId?: string) => void
   }
+
+  // Conversation operations
+  conversation: {
+    create: (id: string, title?: string) => Promise<IPCResponse<ConversationSummary>>
+    appendMessage: (message: ConversationMessageShared) => Promise<IPCResponse<void>>
+    getMessages: (conversationId: string, limit: number, beforeTimestamp?: number) => Promise<IPCResponse<PaginatedMessagesShared>>
+    list: (limit: number, offset: number) => Promise<IPCResponse<ConversationSummary[]>>
+    loadLatest: () => Promise<IPCResponse<{ conversationId: string; messages: ConversationMessageShared[]; hasMore: boolean } | null>>
+  }
   
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
@@ -500,6 +513,12 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.PROGRESS_TASK_FAILED,
   // Inspector operations (TASK029)
   IPC_CHANNELS.INSPECTOR_OPEN,
+  // Conversation operations
+  IPC_CHANNELS.CONVERSATION_CREATE,
+  IPC_CHANNELS.CONVERSATION_APPEND_MESSAGE,
+  IPC_CHANNELS.CONVERSATION_GET_MESSAGES,
+  IPC_CHANNELS.CONVERSATION_LIST,
+  IPC_CHANNELS.CONVERSATION_LOAD_LATEST,
 ]
 
 /**
@@ -1247,6 +1266,29 @@ const api: ElectronAPI = {
   inspector: {
     open: (traceId?: string) => {
       ipcRenderer.send(IPC_CHANNELS.INSPECTOR_OPEN, traceId)
+    },
+  },
+
+  // Conversation operations
+  conversation: {
+    create: async (id: string, title?: string) => {
+      return await safeInvoke<ConversationSummary>(IPC_CHANNELS.CONVERSATION_CREATE, id, title)
+    },
+
+    appendMessage: async (message: ConversationMessageShared) => {
+      return await safeInvoke<void>(IPC_CHANNELS.CONVERSATION_APPEND_MESSAGE, message)
+    },
+
+    getMessages: async (conversationId: string, limit: number, beforeTimestamp?: number) => {
+      return await safeInvoke<PaginatedMessagesShared>(IPC_CHANNELS.CONVERSATION_GET_MESSAGES, conversationId, limit, beforeTimestamp)
+    },
+
+    list: async (limit: number, offset: number) => {
+      return await safeInvoke<ConversationSummary[]>(IPC_CHANNELS.CONVERSATION_LIST, limit, offset)
+    },
+
+    loadLatest: async () => {
+      return await safeInvoke<{ conversationId: string; messages: ConversationMessageShared[]; hasMore: boolean } | null>(IPC_CHANNELS.CONVERSATION_LOAD_LATEST)
     },
   },
   

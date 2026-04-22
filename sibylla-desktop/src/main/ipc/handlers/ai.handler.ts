@@ -659,6 +659,11 @@ export class AIHandler extends IpcHandler {
     }
   }
 
+  private shouldRequireTaskDeclaration(request: AIChatRequest): boolean {
+    const msgLen = (request.message ?? '').length
+    return msgLen > 200
+  }
+
   private async processDeclarationBlocks(
     finalContent: string,
     request: AIChatRequest,
@@ -704,6 +709,15 @@ export class AIHandler extends IpcHandler {
 
       if (taskId) {
         await this.progressLedger.complete(taskId, '（AI 未显式归档）')
+      }
+
+      if (!taskId && blocks.length === 0 && this.shouldRequireTaskDeclaration(request)) {
+        const wrapped = await this.progressLedger.declare({
+          title: '(未命名任务)',
+          traceId: request.traceId,
+          conversationId: request.sessionId,
+        })
+        await this.progressLedger.complete(wrapped.id, finalContent.slice(0, 200))
       }
     } catch (err) {
       logger.warn('[AIHandler] Declaration block parsing failed', {

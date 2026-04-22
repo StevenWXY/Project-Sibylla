@@ -11,6 +11,7 @@ import { DiffReviewPanel } from './DiffReviewPanel'
 import { FileAutocomplete } from './FileAutocomplete'
 import { SkillAutocomplete } from './SkillAutocomplete'
 import { ExecutionTrace } from '../conversation/ExecutionTrace'
+import { MarkdownRenderer } from './MarkdownRenderer'
 import type { ParsedFileDiff } from './types'
 
 interface StudioAIPanelProps {
@@ -21,6 +22,9 @@ interface StudioAIPanelProps {
   onSendMessage: (manualRefs?: string[], skillRefs?: string[]) => void
   onStopStreaming: () => void
   onNewSession: () => void
+  onLoadMoreHistory: () => void
+  hasMoreHistory: boolean
+  isLoadingHistory: boolean
   focusComposerSignal?: number
   diffReviewProps?: DiffReviewPanelProps | null
 }
@@ -62,6 +66,7 @@ interface DiffReviewPanelProps {
 }
 
 export function StudioAIPanel(props: StudioAIPanelProps) {
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const [autocompleteVisible, setAutocompleteVisible] = useState(false)
   const [autocompleteQuery, setAutocompleteQuery] = useState('')
@@ -201,7 +206,27 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
         </button>
       </div>
 
-      <div className="flex-1 space-y-6 overflow-y-auto p-4">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 space-y-6 overflow-y-auto p-4"
+        onScroll={() => {
+          const el = messagesContainerRef.current
+          if (!el) return
+          if (el.scrollTop < 60 && props.hasMoreHistory && !props.isLoadingHistory) {
+            const prevScrollHeight = el.scrollHeight
+            props.onLoadMoreHistory()
+            requestAnimationFrame(() => {
+              const newScrollHeight = el.scrollHeight
+              el.scrollTop = newScrollHeight - prevScrollHeight
+            })
+          }
+        }}
+      >
+        {props.isLoadingHistory && (
+          <div className="flex items-center justify-center py-2">
+            <span className="text-[11px] text-sys-darkMuted animate-pulse">加载历史消息...</span>
+          </div>
+        )}
         {props.messages.length === 0 ? (
           <>
             <div className="flex flex-col items-end">
@@ -254,12 +279,14 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
                 </div>
                 <div className="flex max-w-[85%] flex-col gap-2">
                   <div className="space-y-2 text-[13px] leading-relaxed text-gray-300">
-                    <p className="whitespace-pre-wrap">
-                      {message.content || (message.streaming ? '' : '')}
-                      {message.streaming && (
+                    {message.streaming ? (
+                      <p className="whitespace-pre-wrap">
+                        {message.content || ''}
                         <span className="inline-block w-1.5 h-4 ml-0.5 bg-white/80 animate-pulse rounded-sm" />
-                      )}
-                    </p>
+                      </p>
+                    ) : (
+                      <MarkdownRenderer content={message.content} />
+                    )}
                     {!message.streaming && hasDiffProposals && props.diffReviewProps && (
                       <DiffReviewPanel {...props.diffReviewProps} />
                     )}

@@ -207,7 +207,7 @@ export function MemoryPanel() {
               return (
                 <div key={result.id} className="mb-1">
                   <div className="text-xs text-gray-500 mb-0.5">
-                    匹配度: {(result.score * 100).toFixed(0)}%
+                    匹配度: {(result.finalScore * 100).toFixed(0)}%
                   </div>
                   <div
                     className={cn(

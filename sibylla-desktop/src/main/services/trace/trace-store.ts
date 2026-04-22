@@ -47,6 +47,7 @@ export class TraceStore {
   private db!: Database.Database
   private readonly dbPath: string
   private readonly workspaceRoot: string
+  private cleanupIntervalRef: ReturnType<typeof setInterval> | null = null
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot
@@ -78,6 +79,60 @@ export class TraceStore {
     this.db.pragma('cache_size = -16000')
 
     this.initSchema()
+  }
+
+  startAutoCleanup(retentionDays: number = 30): void {
+    if (this.cleanupIntervalRef) return
+
+    const msUntilNext2AM = (() => {
+      const now = new Date()
+      const next = new Date(now)
+      next.setHours(2, 0, 0, 0)
+      if (next.getTime() <= now.getTime()) {
+        next.setDate(next.getDate() + 1)
+      }
+      return next.getTime() - now.getTime()
+    })()
+
+    const scheduleNext = () => {
+      this.cleanupIntervalRef = setTimeout(() => {
+        try {
+          const result = this.cleanup(retentionDays)
+          logger.info('trace-store.auto-cleanup', { deleted: result.deleted })
+        } catch (err) {
+          logger.error('trace-store.auto-cleanup.failed', {
+            err: err instanceof Error ? err.message : String(err),
+          })
+        }
+        this.cleanupIntervalRef = null
+        scheduleNext()
+      }, 24 * 60 * 60 * 1000)
+    }
+
+    setTimeout(() => {
+      try {
+        const result = this.cleanup(retentionDays)
+        logger.info('trace-store.auto-cleanup', { deleted: result.deleted })
+      } catch (err) {
+        logger.error('trace-store.auto-cleanup.failed', {
+          err: err instanceof Error ? err.message : String(err),
+        })
+      }
+      this.cleanupIntervalRef = null
+      scheduleNext()
+    }, msUntilNext2AM)
+
+    logger.info('trace-store.auto-cleanup.scheduled', {
+      firstRunInMs: msUntilNext2AM,
+      retentionDays,
+    })
+  }
+
+  stopAutoCleanup(): void {
+    if (this.cleanupIntervalRef) {
+      clearTimeout(this.cleanupIntervalRef)
+      this.cleanupIntervalRef = null
+    }
   }
 
   private initSchema(): void {
@@ -378,6 +433,7 @@ export class TraceStore {
   }
 
   close(): void {
+    this.stopAutoCleanup()
     if (this.db?.open) {
       this.db.pragma('optimize')
       this.db.close()

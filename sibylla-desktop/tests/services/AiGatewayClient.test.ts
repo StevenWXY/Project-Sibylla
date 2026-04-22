@@ -193,3 +193,110 @@ describe('AiGatewayClient.chatStream', () => {
     expect(chunks).toEqual(['ok'])
   })
 })
+
+describe('AiGatewayClient retry logic', () => {
+  let client: AiGatewayClient
+
+  beforeEach(() => {
+    client = new AiGatewayClient('http://localhost:3000', 3, 10)
+  })
+
+  function createMockStream(chunks: string[]): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder()
+    const sseChunks = chunks.map((c) => `data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}\n\n`)
+    sseChunks.push('data: [DONE]\n\n')
+    const encoded = encoder.encode(sseChunks.join(''))
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoded)
+        controller.close()
+      },
+    })
+  }
+
+  it('should retry on network errors and succeed', async () => {
+    const successStream = createMockStream(['recovered'])
+    const mockFetch = vi.fn()
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      .mockResolvedValue({ ok: true, body: successStream })
+
+    vi.stubGlobal('fetch', mockFetch)
+
+    const chunks: string[] = []
+    for await (const chunk of client.chatStream({ model: 'test', messages: [] })) {
+      chunks.push(chunk)
+    }
+
+    expect(chunks).toEqual(['recovered'])
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('should retry on rate limit (429) errors', async () => {
+    const successStream = createMockStream(['ok'])
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 429, text: async () => 'rate limit exceeded' })
+      .mockResolvedValue({ ok: true, body: successStream })
+
+    vi.stubGlobal('fetch', mockFetch)
+
+    const chunks: string[] = []
+    for await (const chunk of client.chatStream({ model: 'test', messages: [] })) {
+      chunks.push(chunk)
+    }
+
+    expect(chunks).toEqual(['ok'])
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('should retry on timeout errors', async () => {
+    const successStream = createMockStream(['ok'])
+    const mockFetch = vi.fn()
+      .mockRejectedValueOnce(new Error('ETIMEDOUT'))
+      .mockResolvedValue({ ok: true, body: successStream })
+
+    vi.stubGlobal('fetch', mockFetch)
+
+    const chunks: string[] = []
+    for await (const chunk of client.chatStream({ model: 'test', messages: [] })) {
+      chunks.push(chunk)
+    }
+
+    expect(chunks).toEqual(['ok'])
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('should NOT retry on auth errors', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'Unauthorized',
+    }))
+
+    const generator = client.chatStream({ model: 'test', messages: [] })
+    await expect(generator.next()).rejects.toThrow('AI gateway stream request failed: 401')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('should exhaust all retries and throw', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch failed')))
+
+    const generator = client.chatStream({ model: 'test', messages: [] })
+    await expect(generator.next()).rejects.toThrow('fetch failed')
+    expect(fetch).toHaveBeenCalledTimes(4) // initial + 3 retries
+  })
+
+  it('should respect AbortSignal and stop retrying', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch failed')))
+
+    const chunks: string[] = []
+    for await (const chunk of client.chatStream({ model: 'test', messages: [] }, undefined, controller.signal)) {
+      chunks.push(chunk)
+    }
+
+    expect(chunks).toEqual([])
+  })
+})

@@ -1,4 +1,6 @@
 import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from 'electron'
+import { promises as fs } from 'fs'
+import * as path from 'path'
 import { IpcHandler } from '../handler'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
@@ -504,14 +506,43 @@ export class MemoryHandler extends IpcHandler {
   private async handleGetConfig(
     _event: IpcMainInvokeEvent,
   ): Promise<MemoryConfig> {
-    return DEFAULT_MEMORY_CONFIG
+    try {
+      const workspacePath = this.workspaceManager.getWorkspacePath()
+      if (!workspacePath) return DEFAULT_MEMORY_CONFIG
+      const configPath = path.join(workspacePath, '.sibylla', 'memory', 'config.json')
+      const raw = await fs.readFile(configPath, 'utf-8')
+      return { ...DEFAULT_MEMORY_CONFIG, ...JSON.parse(raw) } as MemoryConfig
+    } catch {
+      return DEFAULT_MEMORY_CONFIG
+    }
   }
 
   private async handleUpdateConfig(
     _event: IpcMainInvokeEvent,
-    _patch: Partial<MemoryConfig>,
+    patch: Partial<MemoryConfig>,
   ): Promise<void> {
-    // Configuration update is a future feature — currently returns void
-    logger.info('[MemoryHandler] Config update requested (not yet implemented)')
+    try {
+      const workspacePath = this.workspaceManager.getWorkspacePath()
+      if (!workspacePath) return
+      const dir = path.join(workspacePath, '.sibylla', 'memory')
+      const configPath = path.join(dir, 'config.json')
+      await fs.mkdir(dir, { recursive: true })
+
+      let current: MemoryConfig = DEFAULT_MEMORY_CONFIG
+      try {
+        const raw = await fs.readFile(configPath, 'utf-8')
+        current = { ...DEFAULT_MEMORY_CONFIG, ...JSON.parse(raw) } as MemoryConfig
+      } catch {
+        // File doesn't exist yet
+      }
+
+      const updated = { ...current, ...patch }
+      await fs.writeFile(configPath, JSON.stringify(updated, null, 2), 'utf-8')
+      logger.info('[MemoryHandler] Config updated', { patch: Object.keys(patch) })
+    } catch (err) {
+      logger.error('[MemoryHandler] Config update failed', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
 }

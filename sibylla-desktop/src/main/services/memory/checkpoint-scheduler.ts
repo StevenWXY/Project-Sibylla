@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger'
 import { estimateTokensFromEntries } from './utils'
 import type { MemoryManager } from '../memory-manager'
 import type { MemoryExtractor } from './memory-extractor'
-import type { SimilarityIndexProvider, MemoryConfig } from './types'
+import type { SimilarityIndexProvider, MemoryConfig, ExtractionReport } from './types'
 import type { CheckpointTrigger, CheckpointRecord } from './types'
 import type { EvolutionLog } from './evolution-log'
 import type { MemoryEventBus } from './memory-event-bus'
@@ -30,7 +30,7 @@ export class CheckpointScheduler {
   constructor(
     private readonly memoryManager: MemoryManager,
     private readonly extractor: MemoryExtractor,
-    private readonly indexer: SimilarityIndexProvider | null,
+    private readonly indexer: (SimilarityIndexProvider & { indexReport?: (report: ExtractionReport) => Promise<void> }) | null,
     private readonly evolutionLog: EvolutionLog,
     private readonly compressor: { compress: () => Promise<unknown> } | null,
     private readonly eventBus: MemoryEventBus,
@@ -171,8 +171,14 @@ export class CheckpointScheduler {
 
       await this.memoryManager.applyExtractionReport(report)
 
-      if (this.indexer?.isAvailable()) {
-        // TASK025: this.indexer.indexReport(report)
+      if (this.indexer?.isAvailable() && this.indexer.indexReport) {
+        try {
+          await this.indexer.indexReport(report)
+        } catch (idxErr) {
+          this.loggerInstance.warn('memory.checkpoint.index_failed', {
+            err: idxErr instanceof Error ? idxErr.message : String(idxErr),
+          })
+        }
       }
 
       await this.evolutionLog.append({

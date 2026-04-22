@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import type { TraceStore } from './trace-store'
 import type { AppEventBus } from '../event-bus'
 import type { logger as loggerType } from '../../utils/logger'
@@ -61,7 +63,21 @@ const DEFAULT_CONFIG: PerformanceConfig = {
   errorRateThreshold: 0.05,
   degradationThreshold: 3,
   activeSpanLeakThreshold: 100,
-  modelPricingConfig: {},
+  modelPricingConfig: {
+    'gpt-4o': 0.005,
+    'gpt-4o-mini': 0.00015,
+    'gpt-4-turbo': 0.01,
+    'gpt-3.5-turbo': 0.0005,
+    'claude-3-opus': 0.015,
+    'claude-3-sonnet': 0.003,
+    'claude-3-haiku': 0.00025,
+    'claude-3.5-sonnet': 0.003,
+    'claude-3.5-haiku': 0.0008,
+    'deepseek-chat': 0.00014,
+    'deepseek-reasoner': 0.00055,
+    'gemini-1.5-pro': 0.0035,
+    'gemini-1.5-flash': 0.000075,
+  },
 }
 
 const CONSECUTIVE_WINDOWS_TO_ALERT = 3
@@ -78,6 +94,7 @@ export class PerformanceMonitor {
   private aggregationInterval: ReturnType<typeof setInterval> | null = null
   private lastMetrics: PerformanceMetrics | null = null
   private readonly activeAlerts: Map<string, PerformanceAlert> = new Map()
+  private readonly suppressionsPath: string
 
   constructor(
     traceStore: TraceStore,
@@ -89,12 +106,14 @@ export class PerformanceMonitor {
     this.config = { ...DEFAULT_CONFIG, ...config }
     this.eventBus = eventBus
     this.logger = loggerImpl
+    this.suppressionsPath = path.join(path.dirname(traceStore.storePath()), 'perf-suppressions.json')
   }
 
   start(): void {
     if (this.aggregationInterval) {
       return
     }
+    this.loadSuppressions()
     try {
       this.aggregateAndAlert()
     } catch (err) {
@@ -305,6 +324,7 @@ export class PerformanceMonitor {
 
   suppress(alertType: string, durationMs: number = 86_400_000): void {
     this.suppressions.set(alertType, Date.now() + durationMs)
+    this.saveSuppressions()
     this.logger.info(`[PerformanceMonitor] Suppressed alert type '${alertType}' for ${durationMs}ms`)
   }
 
@@ -313,9 +333,42 @@ export class PerformanceMonitor {
     if (expiry === undefined) return false
     if (Date.now() > expiry) {
       this.suppressions.delete(alertType)
+      this.saveSuppressions()
       return false
     }
     return true
+  }
+
+  private loadSuppressions(): void {
+    try {
+      if (!fs.existsSync(this.suppressionsPath)) return
+      const raw = fs.readFileSync(this.suppressionsPath, 'utf-8')
+      const data = JSON.parse(raw) as Record<string, number>
+      const now = Date.now()
+      for (const [key, expiry] of Object.entries(data)) {
+        if (typeof expiry === 'number' && expiry > now) {
+          this.suppressions.set(key, expiry)
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  private saveSuppressions(): void {
+    try {
+      const dir = path.dirname(this.suppressionsPath)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+      const data: Record<string, number> = {}
+      for (const [key, expiry] of this.suppressions) {
+        data[key] = expiry
+      }
+      fs.writeFileSync(this.suppressionsPath, JSON.stringify(data), 'utf-8')
+    } catch {
+      // Ignore write errors
+    }
   }
 
   getMetrics(): PerformanceMetrics | null {

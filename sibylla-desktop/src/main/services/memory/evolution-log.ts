@@ -123,6 +123,7 @@ export class EvolutionLog {
   private formatEvent(event: EvolutionEvent): string {
     const lines: string[] = []
     lines.push(`## ${event.timestamp} — ${event.type} — ${event.entryId}`)
+    lines.push(`<!-- eventId: ${event.id} -->`)
     lines.push('')
     lines.push(`- **Section:** ${event.section}`)
 

@@ -27,6 +27,7 @@
 | Sprint 3.1 | Harness 基础设施 | TASK017-021 | [`sprint3.1-harness-infrastructure.md`](../../requirements/phase1/sprint3.1-harness-infrastructure.md) | 🏃 进行中 |
 | Sprint 3.2 | 记忆系统 v2 | TASK022-026 | [`sprint3.2-memory.md`](../../requirements/phase1/sprint3.2-memory.md) | ⬜ 待开始 |
 | Sprint 3.3 | Trace 系统与可观测性 | TASK027-029 | [`sprint3.3-trace.md`](../../requirements/phase1/sprint3.3-trace.md) | ⬜ 待开始 |
+| Sprint 3.4 | AI 模式、Plan、Wiki 与能力整合 | TASK030-034 | [`sprint3.4-mode.md`](../../requirements/phase1/sprint3.4-mode.md) | ⬜ 待开始 |
 
 ---
 
@@ -476,9 +477,99 @@ Sprint 3.2 记忆系统 v2（TASK022-026）
 
 ---
 
+## 六.4、Sprint 3.4 — AI 模式系统、Plan 产物、Wiki 与能力整合
+
+> **目标：** 让 AI 从"通用对话"升级为"按意图定制行为"——五种意图模式、Plan 产物管理、一键优化提示词、命令面板、系统 Wiki、外部数据源抽象层、对话导出、模型快速切换。
+>
+> **预计周期：** 3-4 周（Week 25 - Week 28）
+>
+> **前置条件：** Sprint 3.1（Harness）+ Sprint 3.2（记忆 v2）+ Sprint 3.3（Trace）全部可用
+
+### Sprint 3.4 任务
+
+| 状态 | 任务 ID | 任务名称 | 优先级 | 复杂度 | 预估工时 | 对应需求 | 任务文档 | 备注 |
+|------|---------|---------|--------|--------|---------|---------|---------|------|
+| ⬜ | PHASE1-TASK030 | AI 模式系统与 Mode Evaluators | P0 | 非常复杂 | 4-5 天 | 需求 3.4.1 + 3.4.3 | [`task030`](./phase1-task030_ai-mode-system.md) | AiModeRegistry + 5 内置模式 + ModeEvaluator + Orchestrator 集成 |
+| ⬜ | PHASE1-TASK031 | Plan 模式与 Plan 产物管理 | P0 | 非常复杂 | 4-5 天 | 需求 3.4.2 | [`task031`](./phase1-task031_plan-product-management.md) | PlanManager + PlanParser + PlanRenderer + FileWatcher + @plan 引用 |
+| ⬜ | PHASE1-TASK032 | 一键优化提示词与命令面板 | P0 | 非常复杂 | 4-5 天 | 需求 3.4.4 + 3.4.7 | [`task032`](./phase1-task032_prompt-optimizer-command-palette.md) | PromptOptimizer + CommandRegistry + 内置 ≥20 命令 |
+| ⬜ | PHASE1-TASK033 | 系统 Wiki 与外部数据源抽象层 | P1 | 非常复杂 | 4-5 天 | 需求 3.4.5 + 3.4.6 | [`task033`](./phase1-task033_handbook-datasource-abstraction.md) | HandbookService + FTS5 索引 + DataSourceRegistry + RateLimiter |
+| ⬜ | PHASE1-TASK034 | 对话导出与模型快速切换 | P1 | 复杂 | 3-4 天 | 需求 3.4.8 + 3.4.9 | [`task034`](./phase1-task034_export-model-switcher.md) | ConversationExporter + 3 格式渲染 + ModelSwitcher + QuickSettings |
+
+### Sprint 3.4 依赖关系
+
+```
+Sprint 3.1 Harness 基础设施（TASK017-021）
+Sprint 3.2 记忆系统 v2（TASK022-026）
+Sprint 3.3 Trace 系统（TASK027-029）
+        │
+        ▼
+  TASK030 (AI Mode System + ModeEvaluator) ─── 地基
+        │
+        ├──────────────┬──────────────┬──────────────┐
+        ▼              ▼              ▼              ▼
+  TASK031        TASK032        TASK033        TASK034
+  (Plan 管理)   (优化+命令)   (Wiki+数据源)  (导出+模型)
+```
+
+**推荐执行顺序：** TASK030 → TASK031 ∥ TASK032 ∥ TASK033 ∥ TASK034（TASK031-034 可并行）
+
+### Sprint 3.4 新增 IPC 通道
+
+| IPC 通道 | 对应任务 | 方向 | 说明 |
+|---------|---------|------|------|
+| `aiMode:getAll` | TASK030 | Renderer → Main | 获取所有模式 |
+| `aiMode:getActive` | TASK030 | Renderer → Main | 获取当前模式 |
+| `aiMode:switch` | TASK030 | Renderer → Main | 切换模式 |
+| `aiMode:changed` | TASK030 | Main → Renderer | 模式变更推送 |
+| `plan:getActive` | TASK031 | Renderer → Main | 获取活动计划 |
+| `plan:get` | TASK031 | Renderer → Main | 获取计划详情 |
+| `plan:startExecution` | TASK031 | Renderer → Main | 开始执行 |
+| `plan:archive` | TASK031 | Renderer → Main | 归档计划 |
+| `plan:abandon` | TASK031 | Renderer → Main | 放弃计划 |
+| `plan:followUp` | TASK031 | Renderer → Main | 跟进进度 |
+| `plan:created` | TASK031 | Main → Renderer | 计划创建事件 |
+| `plan:execution-started` | TASK031 | Main → Renderer | 执行开始事件 |
+| `plan:steps-completed` | TASK031 | Main → Renderer | 步骤完成事件 |
+| `plan:archived` | TASK031 | Main → Renderer | 归档事件 |
+| `promptOptimizer:optimize` | TASK032 | Renderer → Main | 优化提示词 |
+| `promptOptimizer:recordAction` | TASK032 | Renderer → Main | 记录用户操作 |
+| `command:search` | TASK032 | Renderer → Main | 搜索命令 |
+| `command:execute` | TASK032 | Renderer → Main | 执行命令 |
+| `handbook:search` | TASK033 | Renderer → Main | 搜索手册 |
+| `handbook:getEntry` | TASK033 | Renderer → Main | 获取条目 |
+| `handbook:cloneToWorkspace` | TASK033 | Renderer → Main | 克隆到工作区 |
+| `handbook:checkUpdates` | TASK033 | Renderer → Main | 检查更新 |
+| `datasource:listProviders` | TASK033 | Renderer → Main | 列出 Provider |
+| `datasource:query` | TASK033 | Renderer → Main | 查询数据源 |
+| `datasource:getProviderStatus` | TASK033 | Renderer → Main | 获取状态 |
+| `export:preview` | TASK034 | Renderer → Main | 导出预检 |
+| `export:execute` | TASK034 | Renderer → Main | 执行导出 |
+| `export:copyClipboard` | TASK034 | Renderer → Main | 复制到剪贴板 |
+| `model:getCurrent` | TASK034 | Renderer → Main | 获取当前模型 |
+| `model:getAvailable` | TASK034 | Renderer → Main | 获取可用模型 |
+| `model:switch` | TASK034 | Renderer → Main | 切换模型 |
+| `model:getStatus` | TASK034 | Renderer → Main | 获取模型状态 |
+| `quickSettings:get` | TASK034 | Renderer → Main | 获取快速设置 |
+| `quickSettings:update` | TASK034 | Renderer → Main | 更新快速设置 |
+
+### Sprint 3.4 新建模块目录
+
+| 目录 | 对应任务 | 说明 |
+|------|---------|------|
+| `services/mode/` | TASK030 | AI 模式系统（Registry + Evaluators + 5 内置模式） |
+| `services/plan/` | TASK031 | Plan 产物管理（Parser + Renderer + Manager） |
+| `services/prompt-optimizer/` | TASK032 | 提示词优化（Optimizer + Prompts） |
+| `services/command/` | TASK032 | 命令注册表（Registry + 内置命令） |
+| `services/handbook/` | TASK033 | 系统 Wiki（Service + Indexer） |
+| `services/datasource/` | TASK033 | 外部数据源抽象层（Registry + RateLimiter + Providers） |
+| `services/export/` | TASK034 | 对话导出（Exporter + 3 格式渲染器） |
+| `resources/handbook/` | TASK033 | Handbook 内容资源（中英文 Markdown） |
+
+---
+
 ## 七、Phase 1 全局进度
 
-**Phase 1 总进度：** 4/29 任务完成
+**Phase 1 总进度：** 4/34 任务完成
 
 | Sprint | 任务数 | 已完成 | 进度 | 状态 |
 |--------|--------|--------|------|------|
@@ -488,6 +579,7 @@ Sprint 3.2 记忆系统 v2（TASK022-026）
 | Sprint 3.1 | 5 | 1 | 20% | 🏃 进行中 |
 | Sprint 3.2 | 5 | 0 | 0% | ⬜ 待开始 |
 | Sprint 3.3 | 3 | 0 | 0% | ⬜ 待开始 |
+| Sprint 3.4 | 5 | 0 | 0% | ⬜ 待开始 |
 
 ---
 
@@ -525,11 +617,12 @@ Sprint 3.2 记忆系统 v2（TASK022-026）
 | 2026-04-18 | — | — | Sprint 3.1 Harness 任务拆解完成，生成 5 个任务文档（TASK017-021） |
 | 2026-04-20 | — | — | Sprint 3.2 记忆系统 v2 任务拆解完成，生成 5 个任务文档（TASK022-026） |
 | 2026-04-21 | — | — | Sprint 3.3 Trace 系统、任务台账与可观测性任务拆解完成，生成 3 个任务文档（TASK027-029） |
+| 2026-04-22 | — | — | Sprint 3.4 AI 模式系统、Plan 产物、Wiki 与能力整合任务拆解完成，生成 5 个任务文档（TASK030-034） |
 
 ---
 
 **创建时间：** 2026-03-31
-**最后更新：** 2026-04-21
+**最后更新：** 2026-04-22
 **更新记录：**
 - 2026-03-31 — 创建 Sprint 1 任务列表
 - 2026-04-01 — 追加 TASK016/017/018 完成记录
@@ -541,3 +634,4 @@ Sprint 3.2 记忆系统 v2（TASK022-026）
 - 2026-04-19 — TASK017 Guardrails 硬性保障层完成：6 个 guardrail 模块文件 + FileHandler 集成 + shared/types 扩展 + 主进程装配 + 66 个新增测试全部通过（全量 421 测试通过）
 - 2026-04-20 — Sprint 3.2 记忆系统 v2 任务拆解完成：5 个任务文档（TASK022-026）+ 依赖关系图 + 已有代码基础评估 + 新增 IPC 通道清单
 - 2026-04-21 — Sprint 3.3 Trace 系统、任务台账与可观测性任务拆解完成：3 个任务文档（TASK027-029）+ 依赖关系图 + 已有代码基础评估 + 新增 IPC 通道清单
+- 2026-04-22 — Sprint 3.4 AI 模式系统、Plan 产物、Wiki 与能力整合任务拆解完成：5 个任务文档（TASK030-034）+ 依赖关系图 + 新增 IPC 通道清单 + 新建模块目录

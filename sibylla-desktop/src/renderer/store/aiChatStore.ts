@@ -8,6 +8,9 @@ interface AIChatState {
   isStreaming: boolean
   activeStreamId: string | null
   sessionTokenUsage: number
+  conversationId: string | null
+  hasMoreHistory: boolean
+  isLoadingHistory: boolean
 }
 
 interface FinalizeData {
@@ -38,6 +41,10 @@ interface AIChatActions {
   setStreaming: (streamId: string | null) => void
   addSessionTokens: (tokens: number) => void
   reset: () => void
+  setConversationId: (id: string | null) => void
+  prependHistoryMessages: (messages: ChatMessage[]) => void
+  setHasMoreHistory: (hasMore: boolean) => void
+  setIsLoadingHistory: (loading: boolean) => void
 }
 
 type AIChatStore = AIChatState & AIChatActions
@@ -47,6 +54,9 @@ const initialState: AIChatState = {
   isStreaming: false,
   activeStreamId: null,
   sessionTokenUsage: 0,
+  conversationId: null,
+  hasMoreHistory: false,
+  isLoadingHistory: false,
 }
 
 function createId(prefix: string): string {
@@ -218,6 +228,26 @@ export const useAIChatStore = create<AIChatStore>()(
       reset: () => {
         set(initialState, false, 'aiChat/reset')
       },
+
+      setConversationId: (id: string | null) => {
+        set({ conversationId: id }, false, 'aiChat/setConversationId')
+      },
+
+      prependHistoryMessages: (messages: ChatMessage[]) => {
+        set(
+          (state) => ({ messages: [...messages, ...state.messages] }),
+          false,
+          'aiChat/prependHistoryMessages'
+        )
+      },
+
+      setHasMoreHistory: (hasMore: boolean) => {
+        set({ hasMoreHistory: hasMore }, false, 'aiChat/setHasMoreHistory')
+      },
+
+      setIsLoadingHistory: (loading: boolean) => {
+        set({ isLoadingHistory: loading }, false, 'aiChat/setIsLoadingHistory')
+      },
     }),
     { name: 'AIChatStore' }
   )
@@ -227,5 +257,8 @@ export const selectMessages = (state: AIChatStore) => state.messages
 export const selectIsStreaming = (state: AIChatStore) => state.isStreaming
 export const selectActiveStreamId = (state: AIChatStore) => state.activeStreamId
 export const selectSessionTokenUsage = (state: AIChatStore) => state.sessionTokenUsage
+export const selectConversationId = (state: AIChatStore) => state.conversationId
+export const selectHasMoreHistory = (state: AIChatStore) => state.hasMoreHistory
+export const selectIsLoadingHistory = (state: AIChatStore) => state.isLoadingHistory
 
 export type { AIChatStore, AIChatState, AIChatActions, FinalizeData }

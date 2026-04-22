@@ -15,7 +15,15 @@ import {
 import { useFileTreeStore } from '../store/fileTreeStore'
 import { useTabStore } from '../store/tabStore'
 import { useSyncStatusStore, selectStatus } from '../store/syncStatusStore'
-import { useAIChatStore, selectMessages, selectIsStreaming, selectSessionTokenUsage } from '../store/aiChatStore'
+import {
+  useAIChatStore,
+  selectMessages,
+  selectIsStreaming,
+  selectSessionTokenUsage,
+  selectConversationId,
+  selectHasMoreHistory,
+  selectIsLoadingHistory,
+} from '../store/aiChatStore'
 import { useSearchStore, selectResults, selectIsSearching, selectQuery } from '../store/searchStore'
 import {
   useDiffReviewStore,
@@ -43,6 +51,7 @@ import type {
   NotificationLevel,
   SearchResultItem,
   TaskItem,
+  ChatMessage,
 } from '../components/studio/types'
 
 const AUTOSAVE_DELAY_MS = 900
@@ -211,6 +220,9 @@ export function WorkspaceStudioPage() {
   const messages = useAIChatStore(selectMessages)
   const isStreaming = useAIChatStore(selectIsStreaming)
   const sessionTokenUsage = useAIChatStore(selectSessionTokenUsage)
+  const conversationId = useAIChatStore(selectConversationId)
+  const hasMoreHistory = useAIChatStore(selectHasMoreHistory)
+  const isLoadingHistory = useAIChatStore(selectIsLoadingHistory)
   const aiChatStore = useAIChatStore()
   const [chatInput, setChatInput] = useState('')
   const [focusComposerSignal, setFocusComposerSignal] = useState(0)
@@ -220,6 +232,7 @@ export function WorkspaceStudioPage() {
   const selectedFileRef = useRef<string | null>(null)
   const isDirtyRef = useRef(false)
   const editorContentRef = useRef('')
+  const conversationIdRef = useRef<string | null>(null)
 
   const workspaceId = currentWorkspace?.config.workspaceId ?? null
 
@@ -267,6 +280,73 @@ export function WorkspaceStudioPage() {
   useEffect(() => {
     editorContentRef.current = editorContent
   }, [editorContent])
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId
+  }, [conversationId])
+
+  useEffect(() => {
+    if (!window.electronAPI?.conversation) return
+    const store = useAIChatStore.getState()
+    if (store.conversationId || store.messages.length > 0) return
+
+    window.electronAPI.conversation.loadLatest().then((response) => {
+      if (!response.success || !response.data) return
+      const { conversationId: convId, messages: loaded, hasMore } = response.data
+      if (loaded.length === 0) return
+
+      useAIChatStore.getState().setConversationId(convId)
+      useAIChatStore.getState().setHasMoreHistory(hasMore)
+      const chatMessages: ChatMessage[] = loaded.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+        contextSources: m.contextSources,
+        traceId: m.traceId ?? undefined,
+        memoryState: m.memoryState,
+        ragHits: m.ragHits ?? undefined,
+      }))
+      useAIChatStore.getState().prependHistoryMessages(chatMessages)
+    }).catch(() => { /* ignore */ })
+  }, [])
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!window.electronAPI?.conversation) return
+    const store = useAIChatStore.getState()
+    if (!store.conversationId || store.isLoadingHistory || !store.hasMoreHistory) return
+
+    store.setIsLoadingHistory(true)
+    try {
+      const oldestTimestamp = store.messages.length > 0
+        ? store.messages[0].createdAt
+        : undefined
+      const response = await window.electronAPI.conversation.getMessages(
+        store.conversationId,
+        30,
+        oldestTimestamp
+      )
+      if (!response.success || !response.data) return
+
+      const { messages: loaded, hasMore } = response.data
+      useAIChatStore.getState().setHasMoreHistory(hasMore)
+      if (loaded.length === 0) return
+
+      const chatMessages: ChatMessage[] = loaded.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+        contextSources: m.contextSources,
+        traceId: m.traceId ?? undefined,
+        memoryState: m.memoryState,
+        ragHits: m.ragHits ?? undefined,
+      }))
+      useAIChatStore.getState().prependHistoryMessages(chatMessages)
+    } finally {
+      useAIChatStore.getState().setIsLoadingHistory(false)
+    }
+  }, [])
 
   const pushNotification = useCallback(
     (level: NotificationLevel, title: string, description: string) => {
@@ -674,6 +754,27 @@ export function WorkspaceStudioPage() {
             ),
           })
         }
+
+        const convId = conversationIdRef.current
+        if (convId && window.electronAPI?.conversation) {
+          try {
+            await window.electronAPI.conversation.appendMessage({
+              id: end.id,
+              conversationId: convId,
+              role: 'assistant',
+              content: end.content,
+              createdAt: Date.now(),
+              contextSources: end.ragHits?.map((h) => h.path) ?? [],
+              traceId: null,
+              memoryState: {
+                tokenCount: end.memory.tokenCount,
+                tokenDebt: end.memory.tokenDebt,
+                flushTriggered: end.memory.flushTriggered,
+              },
+              ragHits: end.ragHits ?? null,
+            })
+          } catch { /* non-blocking */ }
+        }
       })()
 
       if (end.intercepted) {
@@ -729,11 +830,38 @@ export function WorkspaceStudioPage() {
       ])
     )
 
-    useAIChatStore.getState().addUserMessage(trimmed)
+    const userMsgId = useAIChatStore.getState().addUserMessage(trimmed)
 
     const assistantId = createId('assistant')
     useAIChatStore.getState().addAssistantPlaceholder(assistantId, initialSources)
     setChatInput('')
+
+    void (async () => {
+      try {
+        const store = useAIChatStore.getState()
+        let convId = store.conversationId
+
+        if (!convId && window.electronAPI?.conversation) {
+          convId = `conv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          await window.electronAPI.conversation.create(convId)
+          useAIChatStore.getState().setConversationId(convId)
+        }
+
+        if (convId && window.electronAPI?.conversation) {
+          await window.electronAPI.conversation.appendMessage({
+            id: userMsgId,
+            conversationId: convId,
+            role: 'user',
+            content: trimmed,
+            createdAt: Date.now(),
+            contextSources: [],
+            traceId: null,
+            memoryState: null,
+            ragHits: null,
+          })
+        }
+      } catch { /* non-blocking */ }
+    })()
 
     const request = {
       message: trimmed,
@@ -1167,6 +1295,9 @@ export function WorkspaceStudioPage() {
           diffReviewStore.dismiss()
           pushNotification('info', '会话已重置', '新的 AI 上下文会从零开始。')
         }}
+        onLoadMoreHistory={loadMoreHistory}
+        hasMoreHistory={hasMoreHistory}
+        isLoadingHistory={isLoadingHistory}
         diffReviewProps={diffReviewPanelProps}
         focusComposerSignal={focusComposerSignal}
       />
