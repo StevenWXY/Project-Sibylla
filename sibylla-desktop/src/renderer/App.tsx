@@ -15,6 +15,7 @@ import { useAppStore } from './store/appStore'
 import { useHarnessEvents } from './hooks/useHarnessEvents'
 import { GuardrailNotification } from './components/studio/harness/GuardrailNotification'
 import { ResumeTaskDialog } from './components/studio/harness/ResumeTaskDialog'
+import { CommandPalette } from './components/command-palette/CommandPalette'
 
 type Page =
   | 'home'
@@ -539,6 +540,9 @@ export default function App() {
         {/* TASK021: Global Harness overlays */}
         <GuardrailNotification />
         <ResumeTaskDialog />
+
+        {/* TASK032: Global Command Palette overlay */}
+        <CommandPalette />
       </AppLayout>
     </ThemeProvider>
   )

@@ -72,6 +72,12 @@ export interface ChatMessage {
     snippet: string
   }>
   traceId?: string
+  aiModeId?: string
+  modeWarnings?: Array<{
+    severity: 'info' | 'warning'
+    code: string
+    message: string
+  }>
 }
 
 /** @deprecated 使用 tabStore.TabInfo 替代 */

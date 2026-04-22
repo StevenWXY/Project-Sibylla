@@ -324,8 +324,72 @@ export const IPC_CHANNELS = {
   PROGRESS_TASK_FAILED: 'progress:taskFailed',
   PROGRESS_USER_EDIT_CONFLICT: 'progress:userEditConflict',
 
+  // AI Mode operations (TASK030)
+  AI_MODE_GET_ALL: 'aiMode:getAll',
+  AI_MODE_GET_ACTIVE: 'aiMode:getActive',
+  AI_MODE_SWITCH: 'aiMode:switch',
+
+  // AI Mode push events (Main → Renderer)
+  AI_MODE_CHANGED: 'aiMode:changed',
+
+  // Plan operations (TASK031)
+  PLAN_GET_ACTIVE: 'plan:getActive',
+  PLAN_GET: 'plan:get',
+  PLAN_START_EXECUTION: 'plan:startExecution',
+  PLAN_ARCHIVE: 'plan:archive',
+  PLAN_ABANDON: 'plan:abandon',
+  PLAN_FOLLOW_UP: 'plan:followUp',
+
+  // Plan push events (Main → Renderer)
+  PLAN_CREATED: 'plan:created',
+  PLAN_EXECUTION_STARTED: 'plan:execution-started',
+  PLAN_STEPS_COMPLETED: 'plan:steps-completed',
+  PLAN_ARCHIVED: 'plan:archived',
+  PLAN_ABANDONED: 'plan:abandoned',
+
   // Inspector operations (TASK029)
   INSPECTOR_OPEN: 'inspector:open',
+
+  // Prompt Optimizer operations (TASK032)
+  PROMPT_OPTIMIZER_OPTIMIZE: 'promptOptimizer:optimize',
+  PROMPT_OPTIMIZER_RECORD_ACTION: 'promptOptimizer:recordAction',
+
+  // Command Palette operations (TASK032)
+  COMMAND_SEARCH: 'command:search',
+  COMMAND_EXECUTE: 'command:execute',
+
+  // Handbook operations (TASK033)
+  HANDBOOK_SEARCH: 'handbook:search',
+  HANDBOOK_GET_ENTRY: 'handbook:getEntry',
+  HANDBOOK_CLONE: 'handbook:cloneToWorkspace',
+  HANDBOOK_CHECK_UPDATES: 'handbook:checkUpdates',
+
+  // DataSource operations (TASK033)
+  DATASOURCE_LIST_PROVIDERS: 'datasource:listProviders',
+  DATASOURCE_QUERY: 'datasource:query',
+  DATASOURCE_GET_PROVIDER_STATUS: 'datasource:getProviderStatus',
+
+  // DataSource push events (TASK033)
+  DATASOURCE_RATE_LIMIT_EXHAUSTED: 'datasource:rate-limit-exhausted',
+  DATASOURCE_PROVIDER_REGISTERED: 'datasource:provider-registered',
+
+  // Export operations (TASK034)
+  EXPORT_PREVIEW: 'export:preview',
+  EXPORT_EXECUTE: 'export:execute',
+  EXPORT_COPY_CLIPBOARD: 'export:copyClipboard',
+
+  // Model operations (TASK034)
+  MODEL_GET_CURRENT: 'model:getCurrent',
+  MODEL_GET_AVAILABLE: 'model:getAvailable',
+  MODEL_SWITCH: 'model:switch',
+  MODEL_GET_STATUS: 'model:getStatus',
+
+  // Model push events (TASK034)
+  MODEL_SWITCHED: 'model:switched',
+
+  // QuickSettings operations (TASK034)
+  QUICK_SETTINGS_GET: 'quickSettings:get',
+  QUICK_SETTINGS_UPDATE: 'quickSettings:update',
 } as const
 
 /**
@@ -552,6 +616,53 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.PROGRESS_GET_TASK]: { params: [id: string]; return: TaskRecordShared | null }
   [IPC_CHANNELS.PROGRESS_EDIT_NOTE]: { params: [taskId: string, note: string]; return: void }
   [IPC_CHANNELS.PROGRESS_GET_ARCHIVE]: { params: [month: string]; return: string }
+
+  // AI Mode operations (TASK030)
+  [IPC_CHANNELS.AI_MODE_GET_ALL]: { params: []; return: AiModeDefinitionShared[] }
+  [IPC_CHANNELS.AI_MODE_GET_ACTIVE]: { params: [conversationId: string]; return: AiModeDefinitionShared }
+  [IPC_CHANNELS.AI_MODE_SWITCH]: { params: [conversationId: string, aiModeId: string]; return: void }
+
+  // Plan operations (TASK031)
+  [IPC_CHANNELS.PLAN_GET_ACTIVE]: { params: []; return: PlanMetadataShared[] }
+  [IPC_CHANNELS.PLAN_GET]: { params: [id: string]; return: ParsedPlanShared | null }
+  [IPC_CHANNELS.PLAN_START_EXECUTION]: { params: [id: string]; return: void }
+  [IPC_CHANNELS.PLAN_ARCHIVE]: { params: [id: string, targetPath: string]; return: PlanMetadataShared }
+  [IPC_CHANNELS.PLAN_ABANDON]: { params: [id: string]; return: void }
+  [IPC_CHANNELS.PLAN_FOLLOW_UP]: { params: [id: string]; return: PlanFollowUpResultShared }
+
+  // Prompt Optimizer operations (TASK032)
+  [IPC_CHANNELS.PROMPT_OPTIMIZER_OPTIMIZE]: { params: [req: OptimizeRequestShared]; return: OptimizeResponseShared }
+  [IPC_CHANNELS.PROMPT_OPTIMIZER_RECORD_ACTION]: { params: [requestId: string, action: string, suggestionId?: string]; return: void }
+
+  // Command Palette operations (TASK032)
+  [IPC_CHANNELS.COMMAND_SEARCH]: { params: [query: string, language?: string]; return: CommandShared[] }
+  [IPC_CHANNELS.COMMAND_EXECUTE]: { params: [id: string]; return: void }
+
+  // Handbook operations (TASK033)
+  [IPC_CHANNELS.HANDBOOK_SEARCH]: { params: [query: string, options?: HandbookSearchOptionsShared]; return: HandbookEntryShared[] }
+  [IPC_CHANNELS.HANDBOOK_GET_ENTRY]: { params: [id: string, language?: string]; return: HandbookEntryShared | null }
+  [IPC_CHANNELS.HANDBOOK_CLONE]: { params: []; return: HandbookCloneResultShared }
+  [IPC_CHANNELS.HANDBOOK_CHECK_UPDATES]: { params: []; return: HandbookUpdateCheckResultShared }
+
+  // DataSource operations (TASK033)
+  [IPC_CHANNELS.DATASOURCE_LIST_PROVIDERS]: { params: []; return: DataSourceProviderInfoShared[] }
+  [IPC_CHANNELS.DATASOURCE_QUERY]: { params: [providerId: string, query: DataSourceQueryShared]; return: DataSourceResultShared }
+  [IPC_CHANNELS.DATASOURCE_GET_PROVIDER_STATUS]: { params: [id: string]; return: DataSourceProviderStatusShared }
+
+  // Export operations (TASK034)
+  [IPC_CHANNELS.EXPORT_PREVIEW]: { params: [conversationId: string, options: ExportOptionsShared]; return: ExportPreviewSharedV2 }
+  [IPC_CHANNELS.EXPORT_EXECUTE]: { params: [conversationId: string, options: ExportOptionsShared]; return: void }
+  [IPC_CHANNELS.EXPORT_COPY_CLIPBOARD]: { params: [messageIds: string[], format: string]; return: string }
+
+  // Model operations (TASK034)
+  [IPC_CHANNELS.MODEL_GET_CURRENT]: { params: [conversationId: string]; return: string }
+  [IPC_CHANNELS.MODEL_GET_AVAILABLE]: { params: []; return: ConfiguredModelShared[] }
+  [IPC_CHANNELS.MODEL_SWITCH]: { params: [conversationId: string, modelId: string]; return: void }
+  [IPC_CHANNELS.MODEL_GET_STATUS]: { params: [modelId: string]; return: ConfiguredModelShared }
+
+  // QuickSettings operations (TASK034)
+  [IPC_CHANNELS.QUICK_SETTINGS_GET]: { params: []; return: QuickSettingsStateShared }
+  [IPC_CHANNELS.QUICK_SETTINGS_UPDATE]: { params: [patch: Partial<QuickSettingsStateShared>]; return: void }
 }
 
 /**
@@ -832,6 +943,8 @@ export interface AIChatRequest {
   plannedSteps?: string[]
   /** Whether this is a long-running task (TASK021) */
   longRunning?: boolean
+  /** User-selected AI intent mode, orthogonal to HarnessMode (TASK030) */
+  aiModeId?: string
 }
 
 export interface AIRagHit {
@@ -1621,6 +1734,8 @@ export interface HarnessResult {
   readonly degraded: boolean
   readonly degradeReason?: string
   readonly traceId?: string
+  readonly modeWarnings?: ModeWarningShared[]
+  readonly planMetadata?: PlanMetadataShared
 }
 
 export interface EvaluationReport {
@@ -1665,6 +1780,86 @@ export interface HarnessMeta {
   readonly degraded: boolean
   readonly degradeReason?: string
   readonly generatorAttempts: number
+}
+
+// ─── AI Mode Shared Types (TASK030) ───
+
+export interface AiModeDefinitionShared {
+  readonly id: string
+  readonly label: string
+  readonly labelI18n?: Record<string, string>
+  readonly icon: string
+  readonly color: string
+  readonly description: string
+  readonly systemPromptPrefix: string
+  readonly outputConstraints?: {
+    readonly requireStructuredOutput?: boolean
+    readonly maxResponseLength?: number
+    readonly toneFilter?: 'direct' | 'formal' | 'casual'
+    readonly allowNegativeFeedback?: boolean
+  }
+  readonly produces?: readonly string[]
+  readonly inputPlaceholder: string
+  readonly requiresContext?: readonly string[]
+  readonly minModelCapability?: 'basic' | 'advanced'
+  readonly builtin: boolean
+}
+
+export interface ModeWarningShared {
+  readonly severity: 'info' | 'warning'
+  readonly code: string
+  readonly message: string
+}
+
+// ─── Plan Shared Types (TASK031) ───
+
+export type PlanStatusShared =
+  | 'draft'
+  | 'draft-unparsed'
+  | 'in_progress'
+  | 'completed'
+  | 'archived'
+  | 'abandoned'
+
+export interface PlanMetadataShared {
+  readonly id: string
+  readonly title: string
+  readonly mode: 'plan'
+  readonly status: PlanStatusShared
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly conversationId?: string
+  readonly traceId?: string
+  readonly estimatedDuration?: string
+  readonly tags: readonly string[]
+  readonly filePath: string
+  readonly archivedTo?: string
+}
+
+export interface PlanStepShared {
+  readonly sectionTitle?: string
+  readonly text: string
+  readonly done: boolean
+  readonly estimatedMinutes?: number
+  readonly owner?: string
+  readonly subSteps?: readonly PlanStepShared[]
+}
+
+export interface ParsedPlanShared {
+  readonly metadata: PlanMetadataShared
+  readonly goal?: string
+  readonly steps: readonly PlanStepShared[]
+  readonly risks?: readonly string[]
+  readonly successCriteria?: readonly string[]
+  readonly rawMarkdown: string
+}
+
+export interface PlanFollowUpResultShared {
+  readonly planId: string
+  readonly progress: number
+  readonly completedSteps: number
+  readonly totalSteps: number
+  readonly notes: readonly string[]
 }
 
 // ─── Guide Shared Types (TASK019) ───
@@ -1808,7 +2003,7 @@ export interface TaskRecordShared {
   id: string
   title: string
   state: TaskStateShared
-  mode?: 'plan' | 'analyze' | 'review' | 'free'
+  mode?: 'plan' | 'analyze' | 'review' | 'write' | 'free'
   traceId?: string
   conversationId?: string
   createdAt: string
@@ -1953,4 +2148,179 @@ export interface PaginatedMessagesShared {
   readonly messages: ConversationMessageShared[]
   readonly hasMore: boolean
   readonly total: number
+}
+
+// ─── Prompt Optimizer Shared Types (TASK032) ───
+
+export type KeyChangeTypeShared = 'added' | 'clarified' | 'removed' | 'restructured'
+
+export interface KeyChangeShared {
+  readonly type: KeyChangeTypeShared
+  readonly description: string
+}
+
+export interface OptimizationSuggestionShared {
+  readonly id: string
+  readonly text: string
+  readonly rationale: string
+  readonly keyChanges: readonly KeyChangeShared[]
+  readonly estimatedImprovementScore: number
+}
+
+export interface OptimizeRequestShared {
+  readonly originalText: string
+  readonly currentMode: string
+  readonly conversationContext?: {
+    readonly summary: string
+    readonly recentMessages: readonly Array<{ readonly role: string; readonly content: string }>
+  }
+  readonly userPreferences?: {
+    readonly preferredLength?: 'short' | 'medium' | 'detailed'
+    readonly language?: string
+  }
+}
+
+export interface OptimizeResponseShared {
+  readonly requestId: string
+  readonly suggestions: readonly OptimizationSuggestionShared[]
+  readonly optimizationMode: 'quick' | 'thorough'
+  readonly durationMs: number
+}
+
+// ─── Command Palette Shared Types (TASK032) ───
+
+export interface CommandShared {
+  readonly id: string
+  readonly title: string
+  readonly titleI18n?: Record<string, string>
+  readonly category: string
+  readonly keywords?: readonly string[]
+  readonly shortcut?: string
+  readonly icon?: string
+  readonly requiresConfirmation?: {
+    readonly message: string
+    readonly destructive: boolean
+  }
+}
+
+// ─── Handbook Shared Types (TASK033) ───
+
+export interface HandbookEntryShared {
+  readonly id: string
+  readonly path: string
+  readonly title: string
+  readonly tags: readonly string[]
+  readonly language: string
+  readonly version: string
+  readonly source: 'builtin' | 'local'
+  readonly content: string
+  readonly keywords: readonly string[]
+  readonly updatedAt: string
+}
+
+export interface HandbookSearchOptionsShared {
+  readonly limit?: number
+  readonly language?: string
+}
+
+export interface HandbookCloneResultShared {
+  readonly clonedCount: number
+  readonly localPath: string
+}
+
+export interface HandbookDiffShared {
+  readonly added: readonly string[]
+  readonly modified: readonly string[]
+  readonly removed: readonly string[]
+}
+
+export interface HandbookUpdateCheckResultShared {
+  readonly hasUpdates: boolean
+  readonly diff?: HandbookDiffShared
+}
+
+// ─── DataSource Shared Types (TASK033) ───
+
+export type DataSourceOperationShared = 'fetch' | 'search' | 'list' | 'write'
+
+export interface DataSourceQueryShared {
+  readonly operation: DataSourceOperationShared
+  readonly params: Readonly<Record<string, unknown>>
+  readonly timeoutMs?: number
+}
+
+export interface DataSourceResultShared {
+  readonly data: unknown
+  readonly fromCache: boolean
+  readonly fetchedAt: string
+  readonly providerId: string
+  readonly truncated?: boolean
+  readonly truncationReason?: string
+}
+
+export interface DataSourceProviderInfoShared {
+  readonly id: string
+  readonly name: string
+  readonly capabilities: readonly string[]
+}
+
+export interface DataSourceProviderStatusShared {
+  readonly id: string
+  readonly healthy: boolean
+  readonly dailyQuotaUsed: number
+  readonly dailyQuotaTotal: number
+  readonly cacheSize: number
+}
+
+// ─── Export Shared Types (TASK034) ───
+
+export type ExportFormatShared = 'markdown' | 'json' | 'html'
+
+export interface ExportOptionsShared {
+  readonly format: ExportFormatShared
+  readonly conversationId: string
+  readonly includeMetadata: boolean
+  readonly includeReferencedFiles: boolean
+  readonly applyRedaction: boolean
+  readonly customRedactionRules?: RedactionRuleShared[]
+  readonly targetPath: string
+  readonly messageRange?: { readonly startIndex: number; readonly endIndex: number }
+}
+
+export interface ExportPreviewSharedV2 {
+  readonly estimatedSizeBytes: number
+  readonly messageCount: number
+  readonly detectedSensitiveFields: ReadonlyArray<{ readonly path: string; readonly rule: string; readonly sample: string }>
+  readonly referencedFiles: ReadonlyArray<string>
+  readonly hasPlans: boolean
+  readonly hasTraces: boolean
+}
+
+// ─── Model Shared Types (TASK034) ───
+
+export interface ConfiguredModelShared {
+  readonly id: string
+  readonly displayName: string
+  readonly provider: string
+  readonly available: boolean
+  readonly unavailableReason?: string
+  readonly costTier: 'low' | 'medium' | 'high'
+  readonly isRateLimited: boolean
+  readonly rateLimitResetAt?: number
+}
+
+// ─── QuickSettings Shared Types (TASK034) ───
+
+export interface QuickSettingsStateShared {
+  readonly theme: 'light' | 'dark' | 'system'
+  readonly language: 'zh' | 'en'
+  readonly workspacePath: string
+  readonly traceEnabled: boolean
+  readonly memoryEnabled: boolean
+}
+
+export interface ModelSwitchedEventShared {
+  readonly conversationId: string
+  readonly oldModel: string
+  readonly newModel: string
 }

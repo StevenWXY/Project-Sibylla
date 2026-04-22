@@ -12,6 +12,9 @@ import { FileAutocomplete } from './FileAutocomplete'
 import { SkillAutocomplete } from './SkillAutocomplete'
 import { ExecutionTrace } from '../conversation/ExecutionTrace'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { AiModeSwitcher } from '../mode/AiModeSwitcher'
+import { OptimizeButton } from '../input/OptimizeButton'
+import { useModeStore } from '../../store/modeStore'
 import type { ParsedFileDiff } from './types'
 
 interface StudioAIPanelProps {
@@ -72,6 +75,9 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
   const [autocompleteQuery, setAutocompleteQuery] = useState('')
   const [skillAutocompleteVisible, setSkillAutocompleteVisible] = useState(false)
   const [skillAutocompleteQuery, setSkillAutocompleteQuery] = useState('')
+  const getActiveMode = useModeStore(s => s.getActiveMode)
+  const activeMode = getActiveMode()
+  const conversationId = useModeStore(s => s.currentConversationId)
 
   const extractFileReferences = useCallback((text: string): string[] => {
     const regex = /@\[\[([^\]]+)\]\]/g
@@ -278,6 +284,14 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
                   <PixelOctoIcon className={cn('h-3.5 w-3.5', message.streaming ? 'animate-pulse text-sys-darkMuted' : 'text-white')} />
                 </div>
                 <div className="flex max-w-[85%] flex-col gap-2">
+                  {message.aiModeId && message.aiModeId !== 'free' && (
+                    <span
+                      className="inline-flex items-center gap-1 self-start px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
+                    >
+                      {message.aiModeId}
+                    </span>
+                  )}
                   <div className="space-y-2 text-[13px] leading-relaxed text-gray-300">
                     {message.streaming ? (
                       <p className="whitespace-pre-wrap">
@@ -354,6 +368,24 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
                   {!message.streaming && message.traceId && (
                     <ExecutionTrace messageId={message.id} traceId={message.traceId} />
                   )}
+
+                  {!message.streaming && message.modeWarnings && message.modeWarnings.length > 0 && (
+                    <div className="flex flex-col gap-0.5">
+                      {message.modeWarnings.map((w, i) => (
+                        <span
+                          key={`mw-${message.id}-${i}`}
+                          className={cn(
+                            'text-[10px] px-1.5 py-0.5 rounded',
+                            w.severity === 'warning'
+                              ? 'text-amber-400 bg-amber-500/10'
+                              : 'text-blue-400 bg-blue-500/10',
+                          )}
+                        >
+                          ⚠️ {w.message}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -388,7 +420,7 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
                 }
               }}
               rows={1}
-              placeholder="Ask Sibylla... (type @ to reference files)"
+              placeholder={activeMode?.inputPlaceholder ?? "Ask Sibylla... (type @ to reference files)"}
               className="min-h-[36px] max-h-32 w-full resize-none border-none bg-transparent py-2 pl-3 text-[13px] text-white placeholder:text-gray-500 focus:outline-none"
             />
           </div>
@@ -405,10 +437,20 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
         </div>
 
         <div className="mt-2 flex items-center justify-between px-1">
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button className="text-sys-darkMuted transition-colors hover:text-white">
               <Link2 className="h-4 w-4" />
             </button>
+            {conversationId && (
+              <AiModeSwitcher conversationId={conversationId} />
+            )}
+            <OptimizeButton
+              inputValue={props.chatInput}
+              currentMode={activeMode ?? 'free'}
+              conversationId={conversationId ?? ''}
+              onApply={(text) => props.onChatInputChange(text)}
+              onMerge={(text) => props.onChatInputChange(text)}
+            />
           </div>
           <span className="font-mono text-[10px] text-gray-500">⌘ ↵ Send</span>
         </div>

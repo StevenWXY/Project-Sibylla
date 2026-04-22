@@ -29,6 +29,9 @@ import type { ToolScopeManager, ToolSelection } from './tool-scope'
 import type { TaskStateMachine } from './task-state-machine'
 import type { Tracer } from '../trace/tracer'
 import type { Span } from '../trace/types'
+import type { AiModeRegistry } from '../mode/ai-mode-registry'
+import type { AiModeDefinition } from '../mode/types'
+import type { PlanManager } from '../plan/plan-manager'
 
 /** Spec file pattern for Panel mode auto-resolution */
 const SPEC_FILE_PATTERN = /(_spec\.md|CLAUDE\.md|design\.md|requirements\.md|tasks\.md)$/
@@ -39,6 +42,8 @@ export class HarnessOrchestrator {
   private toolScopeManager: ToolScopeManager | null = null
   private taskStateMachine: TaskStateMachine | null = null
   private tracer?: Tracer
+  private aiModeRegistry: AiModeRegistry | null = null
+  private planManager: PlanManager | null = null
 
   constructor(
     private readonly generator: Generator,
@@ -78,6 +83,16 @@ export class HarnessOrchestrator {
     this.tracer = tracer
   }
 
+  /** Inject AiModeRegistry for AI mode integration (TASK030) */
+  setAiModeRegistry(registry: AiModeRegistry): void {
+    this.aiModeRegistry = registry
+  }
+
+  /** Inject PlanManager for Plan mode integration (TASK031) */
+  setPlanManager(pm: PlanManager): void {
+    this.planManager = pm
+  }
+
   async execute(request: AIChatRequest): Promise<HarnessResult> {
     if (this.tracer?.isEnabled()) {
       return this.tracer.withSpan('ai.handle-message', async (rootSpan) => {
@@ -94,6 +109,11 @@ export class HarnessOrchestrator {
 
   private async executeInternal(request: AIChatRequest, rootSpan?: Span): Promise<HarnessResult> {
     const traceId = `harness-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    // === TASK030: Read user-selected AiMode ===
+    const aiMode: AiModeDefinition | undefined = request.aiModeId && this.aiModeRegistry
+      ? this.aiModeRegistry.get(request.aiModeId)
+      : undefined
 
     // === TASK020: Tool scope selection ===
     // Create a shallow copy to avoid mutating the caller's request object (S1 fix)
@@ -148,6 +168,7 @@ export class HarnessOrchestrator {
       skillRefs: effectiveRequest.skillRefs,
       mode,
       guides,
+      aiMode,
     })
 
     if (this.shouldRequireTaskDeclaration(effectiveRequest)) {
@@ -198,6 +219,66 @@ export class HarnessOrchestrator {
       // === TASK021: Advance task step on success ===
       if (taskId && this.taskStateMachine) {
         await this.taskStateMachine.advance(taskId, 'Step completed', [])
+      }
+
+      // === TASK030: Post-mode evaluator (soft hints) ===
+      if (aiMode && this.aiModeRegistry) {
+        const modeResult = await this.aiModeRegistry.evaluateModeOutput(
+          aiMode.id, result.finalResponse.content
+        )
+        result = { ...result, modeWarnings: modeResult.warnings }
+      }
+
+      // === TASK031: Plan mode output → PlanManager ===
+      if (aiMode?.id === 'plan' && this.planManager && result.finalResponse.content) {
+        try {
+          const content = result.finalResponse.content
+          if (this.looksLikePlanContent(content)) {
+            const planMetadata = await this.planManager.createFromAIOutput({
+              aiContent: content,
+              conversationId: effectiveRequest.sessionId ?? '',
+              traceId: rootSpan?.context()?.traceId ?? '',
+            })
+            result = {
+              ...result,
+              planMetadata: {
+                id: planMetadata.id,
+                title: planMetadata.title,
+                mode: planMetadata.mode,
+                status: planMetadata.status,
+                createdAt: planMetadata.createdAt,
+                updatedAt: planMetadata.updatedAt,
+                conversationId: planMetadata.conversationId,
+                traceId: planMetadata.traceId,
+                estimatedDuration: planMetadata.estimatedDuration,
+                tags: planMetadata.tags,
+                filePath: planMetadata.filePath,
+                archivedTo: planMetadata.archivedTo,
+              },
+            }
+            if (planMetadata.status === 'draft-unparsed') {
+              const existingWarnings = result.modeWarnings ?? []
+              result = {
+                ...result,
+                modeWarnings: [
+                  ...existingWarnings,
+                  { severity: 'warning' as const, code: 'plan-unparsed', message: 'Plan 模式已开启，但本次回复非计划输出' },
+                ],
+              }
+            }
+          } else {
+            const existingWarnings = result.modeWarnings ?? []
+            result = {
+              ...result,
+              modeWarnings: [
+                ...existingWarnings,
+                { severity: 'info' as const, code: 'plan-non-plan-content', message: 'Plan 模式已开启，但本次回复未包含计划结构。如需生成执行计划，请在消息中明确描述目标。' },
+              ],
+            }
+          }
+        } catch (err) {
+          this.logger.warn('plan.create.failed', { error: String(err) })
+        }
       }
 
       return result
@@ -253,6 +334,15 @@ export class HarnessOrchestrator {
   /** Detect whether a request represents a multi-step task (TASK021) */
   private isMultiStepTask(request: AIChatRequest): boolean {
     return (request.plannedSteps?.length ?? 0) >= 3 || request.longRunning === true
+  }
+
+  private looksLikePlanContent(content: string): boolean {
+    const hasSteps = /^[-*]\s+\[.\]\s+/m.test(content) || /^##?\s+步骤/m.test(content)
+    const hasFrontmatter = /^---\s*\n/.test(content.trim())
+    const hasGoalSection = /##?\s*(目标|Goal)/i.test(content)
+    const hasRisksSection = /##?\s*(风险|备案|Risk)/i.test(content)
+    const planIndicators = [hasSteps, hasFrontmatter, hasGoalSection, hasRisksSection]
+    return planIndicators.filter(Boolean).length >= 1
   }
 
   private shouldRequireTaskDeclaration(request: AIChatRequest): boolean {

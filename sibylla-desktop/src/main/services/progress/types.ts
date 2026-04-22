@@ -16,7 +16,7 @@ export interface TaskRecord {
   id: string
   title: string
   state: TaskState
-  mode?: 'plan' | 'analyze' | 'review' | 'free'
+  mode?: 'plan' | 'analyze' | 'review' | 'write' | 'free'
   traceId?: string
   conversationId?: string
   createdAt: string

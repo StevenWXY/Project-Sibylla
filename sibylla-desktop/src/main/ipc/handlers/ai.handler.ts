@@ -27,6 +27,7 @@ import { ContextEngine, type ContextAssemblyRequest } from '../../services/conte
 import { SkillEngine } from '../../services/skill-engine'
 import type { HarnessOrchestrator } from '../../services/harness/orchestrator'
 import type { ProgressLedger } from '../../services/progress/progress-ledger'
+import type { AiModeRegistry } from '../../services/mode/ai-mode-registry'
 import { TaskDeclarationParser, stripDeclarationBlocks } from '../../services/ai/task-declaration-parser'
 import type { ChecklistItemStatus } from '../../services/progress/types'
 
@@ -41,6 +42,7 @@ export class AIHandler extends IpcHandler {
   private abortListener: ((...args: unknown[]) => void) | null = null
   private harnessOrchestrator: HarnessOrchestrator | null = null
   private progressLedger: ProgressLedger | null = null
+  private aiModeRegistry: AiModeRegistry | null = null
 
   constructor(
     private readonly gatewayClient: AiGatewayClient,
@@ -61,6 +63,10 @@ export class AIHandler extends IpcHandler {
 
   setProgressLedger(ledger: ProgressLedger): void {
     this.progressLedger = ledger
+  }
+
+  setAiModeRegistry(registry: AiModeRegistry): void {
+    this.aiModeRegistry = registry
   }
 
   register(): void {
@@ -142,9 +148,17 @@ export class AIHandler extends IpcHandler {
     event: Electron.IpcMainEvent,
     input: AIStreamRequest | AIChatRequest | string
   ): Promise<void> {
-    const normalized = this.normalizeRequest(input)
+    let normalized = this.normalizeRequest(input)
     const streamId = this.extractStreamId(input)
     const sender = event.sender
+
+    // === TASK030: Inject aiModeId from registry ===
+    if (this.aiModeRegistry && normalized.sessionId) {
+      const activeModeId = this.aiModeRegistry.getActiveModeId(normalized.sessionId)
+      if (activeModeId !== 'free') {
+        normalized = { ...normalized, aiModeId: activeModeId }
+      }
+    }
 
     // ── Harness branch: if orchestrator is present, check mode ──
     if (this.harnessOrchestrator) {

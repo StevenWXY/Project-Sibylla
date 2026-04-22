@@ -1,4 +1,5 @@
-import { app, BrowserWindow, globalShortcut } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron'
+import path from 'path'
 import { createMainWindow } from './window'
 import { ipcManager } from './ipc'
 import { TestHandler } from './ipc/handlers/test.handler'
@@ -48,6 +49,10 @@ import { TraceStore } from './services/trace/trace-store'
 import { AppEventBus } from './services/event-bus'
 import { ProgressLedger } from './services/progress/progress-ledger'
 import { ProgressHandler } from './ipc/handlers/progress'
+import { AiModeRegistry } from './services/mode/ai-mode-registry'
+import { registerAiModeHandlers } from './ipc/handlers/ai-mode'
+import { registerPlanHandlers } from './ipc/handlers/plan'
+import { PlanManager } from './services/plan/plan-manager'
 import { PerformanceMonitor } from './services/trace/performance-monitor'
 import { ReplayEngine } from './services/trace/replay-engine'
 import { TraceExporter } from './services/trace/trace-exporter'
@@ -79,6 +84,13 @@ let replayEngine: ReplayEngine | null = null
 let traceExporter: TraceExporter | null = null
 let traceHandler: TraceHandler | null = null
 let conversationStore: ConversationStore | null = null
+let aiModeRegistry: AiModeRegistry | null = null
+let aiModeCleanup: (() => void) | null = null
+let planManager: PlanManager | null = null
+let planCleanup: (() => void) | null = null
+let exportCleanup: (() => void) | null = null
+let modelCleanup: (() => void) | null = null
+let quickSettingsCleanup: (() => void) | null = null
 const appEventBus = new AppEventBus()
 
 // Keep reference to LocalSearchEngine for FileWatcher forwarding
@@ -479,6 +491,139 @@ if (!gotTheLock) {
           )
           ipcManager.registerHandler(traceHandler)
 
+          // ── TASK030: Initialize AiModeRegistry ──
+          aiModeRegistry = new AiModeRegistry(
+            { get: <T,>(_key: string, defaultValue: T): T => defaultValue },
+            tracer,
+            appEventBus,
+            logger,
+          )
+          await aiModeRegistry.initialize()
+
+          harnessOrchestrator.setAiModeRegistry(aiModeRegistry)
+          aiHandler.setAiModeRegistry(aiModeRegistry)
+
+          aiModeCleanup = registerAiModeHandlers(
+            ipcMain,
+            aiModeRegistry,
+            appEventBus,
+            () => mainWindow,
+          )
+
+          // ── TASK031: Initialize PlanManager ──
+          planManager = new PlanManager(
+            workspacePath,
+            fileManager,
+            tracer,
+            appEventBus,
+            progressLedger,
+            taskStateMachine!,
+            logger,
+          )
+          await planManager.initialize()
+
+          harnessOrchestrator.setPlanManager(planManager)
+          harnessContextEngine.setPlanManager(planManager)
+
+          planCleanup = registerPlanHandlers(
+            ipcMain,
+            planManager,
+            appEventBus,
+            () => mainWindow,
+          )
+
+          // ── TASK032: Initialize PromptOptimizer + CommandRegistry ──
+          const { PromptOptimizer } = await import('./services/prompt-optimizer')
+          const { CommandRegistry } = await import('./services/command')
+          const { registerModeCommands } = await import('./services/command/builtin-commands/mode-commands')
+          const { registerConversationCommands } = await import('./services/command/builtin-commands/conversation-commands')
+          const { registerPlanCommands } = await import('./services/command/builtin-commands/plan-commands')
+          const { registerSystemCommands } = await import('./services/command/builtin-commands/system-commands')
+          const { registerPromptOptimizerHandlers } = await import('./ipc/handlers/prompt-optimizer')
+          const { registerCommandHandlers } = await import('./ipc/handlers/command')
+
+          const promptOptimizer = new PromptOptimizer(
+            aiGatewayClient,
+            aiModeRegistry,
+            tracer,
+            {
+              optimizerModel: 'gpt-4o-mini',
+              maxCacheSize: 50,
+              cacheTtlMs: 60_000,
+              timeoutMs: 8_000,
+              maxSuggestions: 3,
+            },
+          )
+
+          const commandRegistry = new CommandRegistry(tracer)
+          registerModeCommands(commandRegistry, aiModeRegistry, appEventBus)
+          registerConversationCommands(commandRegistry, appEventBus)
+          registerPlanCommands(commandRegistry, appEventBus)
+          registerSystemCommands(commandRegistry, appEventBus)
+
+          registerPromptOptimizerHandlers(ipcMain, promptOptimizer)
+          registerCommandHandlers(ipcMain, commandRegistry)
+
+          // ── TASK033: Initialize HandbookService + DataSourceRegistry ──
+          const { HandbookService } = await import('./services/handbook/handbook-service')
+          const { DataSourceRegistry, FileSystemProvider, WorkspaceSearchProvider, FILESYSTEM_MANIFEST, WORKSPACE_SEARCH_MANIFEST } = await import('./services/datasource')
+          const { registerHandbookHandlers } = await import('./ipc/handlers/handbook')
+          const { registerDatasourceHandlers } = await import('./ipc/handlers/datasource')
+          const { registerHandbookCommands } = await import('./services/command/builtin-commands/handbook-commands')
+
+          const appResourcesPath = app.isPackaged
+            ? path.join(process.resourcesPath, 'resources')
+            : path.join(app.getAppPath(), 'resources')
+
+          const handbookService = new HandbookService(
+            appResourcesPath,
+            workspacePath,
+            fileManager,
+            databaseManager,
+          )
+          await handbookService.initialize()
+
+          const dataSourceRegistry = new DataSourceRegistry(tracer, appEventBus)
+          const fsProvider = new FileSystemProvider(fileManager, workspacePath)
+          const wsProvider = new WorkspaceSearchProvider(localSearchEngineRef)
+          await dataSourceRegistry.registerProvider(fsProvider, FILESYSTEM_MANIFEST)
+          await dataSourceRegistry.registerProvider(wsProvider, WORKSPACE_SEARCH_MANIFEST)
+
+          harnessContextEngine.setHandbookService(handbookService)
+
+          registerHandbookHandlers(ipcMain, handbookService)
+          registerDatasourceHandlers(ipcMain, dataSourceRegistry)
+
+          // Re-register handbook commands with handbookService
+          registerHandbookCommands(commandRegistry, appEventBus, handbookService)
+
+          // ── TASK034: Initialize ConversationExporter + Export/Model/QuickSettings handlers ──
+          const { ConversationExporter } = await import('./services/export')
+          const { registerExportHandlers } = await import('./ipc/handlers/export')
+          const { registerModelHandlers } = await import('./ipc/handlers/model')
+          const { registerQuickSettingsHandlers, initQuickSettingsState } = await import('./ipc/handlers/quick-settings')
+          const { registerModelCommands } = await import('./services/command/builtin-commands/model-commands')
+
+          const conversationExporter = new ConversationExporter(
+            conversationStore,
+            fileManager,
+            tracer,
+            logger,
+          )
+
+          await initQuickSettingsState()
+
+          exportCleanup = registerExportHandlers(ipcMain, conversationExporter, () => workspacePath)
+          modelCleanup = registerModelHandlers(ipcMain, tracer, appEventBus, () => mainWindow, workspaceInfo.config.defaultModel ?? 'claude-sonnet-4-20250514')
+          quickSettingsCleanup = registerQuickSettingsHandlers(ipcMain, () => workspacePath)
+
+          registerModelCommands(commandRegistry, appEventBus, [
+            { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
+            { id: 'gpt-4o', displayName: 'GPT-4o' },
+            { id: 'gpt-4o-mini', displayName: 'GPT-4o Mini' },
+            { id: 'claude-haiku-3-20240307', displayName: 'Claude 3 Haiku' },
+          ])
+
           // Register trace/performance event push to renderer
           const forwardToRenderer = (eventName: string, channel: string) => {
             appEventBus.on(eventName, (payload: unknown) => {
@@ -499,6 +644,9 @@ if (!gotTheLock) {
           forwardToRenderer('progress:task-completed', IPC_CHANNELS.PROGRESS_TASK_COMPLETED)
           forwardToRenderer('progress:task-failed', IPC_CHANNELS.PROGRESS_TASK_FAILED)
           forwardToRenderer('progress:user-edit-conflict', IPC_CHANNELS.PROGRESS_USER_EDIT_CONFLICT)
+          forwardToRenderer('datasource:rate-limit-exhausted', IPC_CHANNELS.DATASOURCE_RATE_LIMIT_EXHAUSTED)
+          forwardToRenderer('datasource:provider-registered', IPC_CHANNELS.DATASOURCE_PROVIDER_REGISTERED)
+          forwardToRenderer('model:switched', IPC_CHANNELS.MODEL_SWITCHED)
         } catch (error) {
           console.error('[Main] Failed to initialize workspace services', error)
           // Non-fatal: workspace can still be used without sync
@@ -517,6 +665,25 @@ if (!gotTheLock) {
         appEventBus.removeAllListeners('progress:task-completed')
         appEventBus.removeAllListeners('progress:task-failed')
         appEventBus.removeAllListeners('progress:user-edit-conflict')
+        appEventBus.removeAllListeners('aiMode:changed')
+        appEventBus.removeAllListeners('plan:created')
+        appEventBus.removeAllListeners('plan:execution-started')
+        appEventBus.removeAllListeners('plan:steps-completed')
+        appEventBus.removeAllListeners('plan:archived')
+        appEventBus.removeAllListeners('plan:abandoned')
+        appEventBus.removeAllListeners('datasource:rate-limit-exhausted')
+        appEventBus.removeAllListeners('datasource:provider-registered')
+        appEventBus.removeAllListeners('model:switched')
+
+        // Cleanup PlanManager
+        if (planManager) {
+          planManager.dispose()
+          planManager = null
+        }
+        if (planCleanup) {
+          planCleanup()
+          planCleanup = null
+        }
 
         // Cleanup IPC handlers for workspace-scoped services
         if (traceHandler) {
@@ -524,9 +691,9 @@ if (!gotTheLock) {
           traceHandler = null
         }
 
-         memoryManager.setWorkspacePath(null)
-         memoryManager.stopMemoryWatcher()
-         localRagEngine.setWorkspacePath(null)
+        memoryManager.setWorkspacePath(null)
+        memoryManager.stopMemoryWatcher()
+        localRagEngine.setWorkspacePath(null)
 
         // Cleanup search engine
         if (localSearchEngineRef) {
@@ -554,19 +721,41 @@ if (!gotTheLock) {
           performanceMonitor = null
         }
 
-          replayEngine = null
-          traceExporter = null
-          traceHandler = null
+        replayEngine = null
+        traceExporter = null
+        traceHandler = null
 
-          if (conversationStore) {
-            conversationStore.close()
-            conversationStore = null
-          }
+        if (conversationStore) {
+          conversationStore.close()
+          conversationStore = null
+        }
 
-         if (progressLedger) {
-           progressLedger.dispose()
-         }
-         progressLedger = null
+        if (progressLedger) {
+          progressLedger.dispose()
+        }
+        progressLedger = null
+
+        if (aiModeRegistry) {
+          aiModeRegistry.dispose()
+          aiModeRegistry = null
+        }
+        if (aiModeCleanup) {
+          aiModeCleanup()
+          aiModeCleanup = null
+        }
+
+        if (exportCleanup) {
+          exportCleanup()
+          exportCleanup = null
+        }
+        if (modelCleanup) {
+          modelCleanup()
+          modelCleanup = null
+        }
+        if (quickSettingsCleanup) {
+          quickSettingsCleanup()
+          quickSettingsCleanup = null
+        }
 
         // Stop FileWatcher
         if (fileWatcher) {

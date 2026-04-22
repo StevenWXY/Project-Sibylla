@@ -86,6 +86,36 @@ import type {
   ConversationSummary,
   ConversationMessageShared,
   PaginatedMessagesShared,
+  // AI Mode types (TASK030)
+  AiModeDefinitionShared,
+  // Plan types (TASK031)
+  PlanMetadataShared,
+  PlanStepShared,
+  ParsedPlanShared,
+  PlanFollowUpResultShared,
+  // Prompt Optimizer types (TASK032)
+  OptimizeRequestShared,
+  OptimizeResponseShared,
+  // Command Palette types (TASK032)
+  CommandShared,
+  // Handbook types (TASK033)
+  HandbookEntryShared,
+  HandbookSearchOptionsShared,
+  HandbookCloneResultShared,
+  HandbookUpdateCheckResultShared,
+  // DataSource types (TASK033)
+  DataSourceQueryShared,
+  DataSourceResultShared,
+  DataSourceProviderInfoShared,
+  DataSourceProviderStatusShared,
+  // Export types (TASK034)
+  ExportOptionsShared,
+  ExportPreviewSharedV2,
+  // Model types (TASK034)
+  ConfiguredModelShared,
+  ModelSwitchedEventShared,
+  // QuickSettings types (TASK034)
+  QuickSettingsStateShared,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -340,10 +370,82 @@ interface ElectronAPI {
     list: (limit: number, offset: number) => Promise<IPCResponse<ConversationSummary[]>>
     loadLatest: () => Promise<IPCResponse<{ conversationId: string; messages: ConversationMessageShared[]; hasMore: boolean } | null>>
   }
+
+  // AI Mode operations (TASK030)
+  aiMode: {
+    getAll: () => Promise<IPCResponse<AiModeDefinitionShared[]>>
+    getActive: (conversationId: string) => Promise<IPCResponse<AiModeDefinitionShared>>
+    switchMode: (conversationId: string, aiModeId: string) => Promise<IPCResponse<void>>
+    onModeChanged: (callback: (event: { conversationId: string; from?: string; to: string }) => void) => () => void
+  },
+
+  // Plan operations (TASK031)
+  plan: {
+    getActivePlans: () => Promise<IPCResponse<PlanMetadataShared[]>>
+    getPlan: (id: string) => Promise<IPCResponse<ParsedPlanShared | null>>
+    startExecution: (id: string) => Promise<IPCResponse<void>>
+    archive: (id: string, targetPath: string) => Promise<IPCResponse<PlanMetadataShared>>
+    abandon: (id: string) => Promise<IPCResponse<void>>
+    followUp: (id: string) => Promise<IPCResponse<PlanFollowUpResultShared>>
+    onPlanCreated: (callback: (plan: PlanMetadataShared) => void) => () => void
+    onPlanExecutionStarted: (callback: (plan: PlanMetadataShared) => void) => () => void
+    onStepsCompleted: (callback: (event: { planId: string; completed: PlanStepShared[] }) => void) => () => void
+    onPlanArchived: (callback: (plan: PlanMetadataShared) => void) => () => void
+    onPlanAbandoned: (callback: (plan: PlanMetadataShared) => void) => () => void
+  }
+
+  // Prompt Optimizer operations (TASK032)
+  promptOptimizer: {
+    optimize: (req: OptimizeRequestShared) => Promise<IPCResponse<OptimizeResponseShared>>
+    recordAction: (requestId: string, action: string, suggestionId?: string) => Promise<IPCResponse<void>>
+  }
+
+  // Command Palette operations (TASK032)
+  command: {
+    search: (query: string, language?: string) => Promise<IPCResponse<CommandShared[]>>
+    execute: (id: string) => Promise<IPCResponse<void>>
+  }
+
+  // Handbook operations (TASK033)
+  handbook: {
+    search: (query: string, options?: HandbookSearchOptionsShared) => Promise<IPCResponse<HandbookEntryShared[]>>
+    getEntry: (id: string, language?: string) => Promise<IPCResponse<HandbookEntryShared | null>>
+    cloneToWorkspace: () => Promise<IPCResponse<HandbookCloneResultShared>>
+    checkUpdates: () => Promise<IPCResponse<HandbookUpdateCheckResultShared>>
+  }
+
+  // DataSource operations (TASK033)
+  datasource: {
+    listProviders: () => Promise<IPCResponse<DataSourceProviderInfoShared[]>>
+    query: (providerId: string, query: DataSourceQueryShared) => Promise<IPCResponse<DataSourceResultShared>>
+    getProviderStatus: (id: string) => Promise<IPCResponse<DataSourceProviderStatusShared>>
+  }
+
+  // Export operations (TASK034)
+  export: {
+    preview: (conversationId: string, options: ExportOptionsShared) => Promise<IPCResponse<ExportPreviewSharedV2>>
+    execute: (conversationId: string, options: ExportOptionsShared) => Promise<IPCResponse<void>>
+    copyToClipboard: (messageIds: string[], format: string) => Promise<IPCResponse<string>>
+  }
+
+  // Model operations (TASK034)
+  model: {
+    getCurrent: (conversationId: string) => Promise<IPCResponse<string>>
+    getAvailable: () => Promise<IPCResponse<ConfiguredModelShared[]>>
+    switchModel: (conversationId: string, modelId: string) => Promise<IPCResponse<void>>
+    getStatus: (modelId: string) => Promise<IPCResponse<ConfiguredModelShared>>
+    onSwitched: (callback: (event: ModelSwitchedEventShared) => void) => () => void
+  }
+
+  // QuickSettings operations (TASK034)
+  quickSettings: {
+    get: () => Promise<IPCResponse<QuickSettingsStateShared>>
+    update: (patch: Partial<QuickSettingsStateShared>) => Promise<IPCResponse<void>>
+  }
   
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
-  off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => void
+  off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
 }
 
 // Whitelist of allowed channels for security
@@ -519,6 +621,53 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.CONVERSATION_GET_MESSAGES,
   IPC_CHANNELS.CONVERSATION_LIST,
   IPC_CHANNELS.CONVERSATION_LOAD_LATEST,
+  // AI Mode operations (TASK030)
+  IPC_CHANNELS.AI_MODE_GET_ALL,
+  IPC_CHANNELS.AI_MODE_GET_ACTIVE,
+  IPC_CHANNELS.AI_MODE_SWITCH,
+  IPC_CHANNELS.AI_MODE_CHANGED,
+  // Plan operations (TASK031)
+  IPC_CHANNELS.PLAN_GET_ACTIVE,
+  IPC_CHANNELS.PLAN_GET,
+  IPC_CHANNELS.PLAN_START_EXECUTION,
+  IPC_CHANNELS.PLAN_ARCHIVE,
+  IPC_CHANNELS.PLAN_ABANDON,
+  IPC_CHANNELS.PLAN_FOLLOW_UP,
+  IPC_CHANNELS.PLAN_CREATED,
+  IPC_CHANNELS.PLAN_EXECUTION_STARTED,
+  IPC_CHANNELS.PLAN_STEPS_COMPLETED,
+  IPC_CHANNELS.PLAN_ARCHIVED,
+  IPC_CHANNELS.PLAN_ABANDONED,
+  // Prompt Optimizer operations (TASK032)
+  IPC_CHANNELS.PROMPT_OPTIMIZER_OPTIMIZE,
+  IPC_CHANNELS.PROMPT_OPTIMIZER_RECORD_ACTION,
+  // Command Palette operations (TASK032)
+  IPC_CHANNELS.COMMAND_SEARCH,
+  IPC_CHANNELS.COMMAND_EXECUTE,
+  // Handbook operations (TASK033)
+  IPC_CHANNELS.HANDBOOK_SEARCH,
+  IPC_CHANNELS.HANDBOOK_GET_ENTRY,
+  IPC_CHANNELS.HANDBOOK_CLONE,
+  IPC_CHANNELS.HANDBOOK_CHECK_UPDATES,
+  // DataSource operations (TASK033)
+  IPC_CHANNELS.DATASOURCE_LIST_PROVIDERS,
+  IPC_CHANNELS.DATASOURCE_QUERY,
+  IPC_CHANNELS.DATASOURCE_GET_PROVIDER_STATUS,
+  IPC_CHANNELS.DATASOURCE_RATE_LIMIT_EXHAUSTED,
+  IPC_CHANNELS.DATASOURCE_PROVIDER_REGISTERED,
+  // Export operations (TASK034)
+  IPC_CHANNELS.EXPORT_PREVIEW,
+  IPC_CHANNELS.EXPORT_EXECUTE,
+  IPC_CHANNELS.EXPORT_COPY_CLIPBOARD,
+  // Model operations (TASK034)
+  IPC_CHANNELS.MODEL_GET_CURRENT,
+  IPC_CHANNELS.MODEL_GET_AVAILABLE,
+  IPC_CHANNELS.MODEL_SWITCH,
+  IPC_CHANNELS.MODEL_GET_STATUS,
+  IPC_CHANNELS.MODEL_SWITCHED,
+  // QuickSettings operations (TASK034)
+  IPC_CHANNELS.QUICK_SETTINGS_GET,
+  IPC_CHANNELS.QUICK_SETTINGS_UPDATE,
 ]
 
 /**
@@ -1289,6 +1438,167 @@ const api: ElectronAPI = {
 
     loadLatest: async () => {
       return await safeInvoke<{ conversationId: string; messages: ConversationMessageShared[]; hasMore: boolean } | null>(IPC_CHANNELS.CONVERSATION_LOAD_LATEST)
+    },
+  },
+
+  // AI Mode operations (TASK030)
+  aiMode: {
+    getAll: async () => {
+      return await safeInvoke<AiModeDefinitionShared[]>(IPC_CHANNELS.AI_MODE_GET_ALL)
+    },
+    getActive: async (conversationId: string) => {
+      return await safeInvoke<AiModeDefinitionShared>(IPC_CHANNELS.AI_MODE_GET_ACTIVE, conversationId)
+    },
+    switchMode: async (conversationId: string, aiModeId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.AI_MODE_SWITCH, conversationId, aiModeId)
+    },
+    onModeChanged: (callback: (event: { conversationId: string; from?: string; to: string }) => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => {
+        callback(data as { conversationId: string; from?: string; to: string })
+      }
+      ipcRenderer.on(IPC_CHANNELS.AI_MODE_CHANGED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.AI_MODE_CHANGED, handler)
+      }
+    },
+  },
+
+  plan: {
+    getActivePlans: async () => {
+      return await safeInvoke<PlanMetadataShared[]>(IPC_CHANNELS.PLAN_GET_ACTIVE)
+    },
+    getPlan: async (id: string) => {
+      return await safeInvoke<ParsedPlanShared | null>(IPC_CHANNELS.PLAN_GET, id)
+    },
+    startExecution: async (id: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PLAN_START_EXECUTION, id)
+    },
+    archive: async (id: string, targetPath: string) => {
+      return await safeInvoke<PlanMetadataShared>(IPC_CHANNELS.PLAN_ARCHIVE, id, targetPath)
+    },
+    abandon: async (id: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PLAN_ABANDON, id)
+    },
+    followUp: async (id: string) => {
+      return await safeInvoke<PlanFollowUpResultShared>(IPC_CHANNELS.PLAN_FOLLOW_UP, id)
+    },
+    onPlanCreated: (callback: (plan: PlanMetadataShared) => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data as PlanMetadataShared)
+      ipcRenderer.on(IPC_CHANNELS.PLAN_CREATED, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.PLAN_CREATED, handler) }
+    },
+    onPlanExecutionStarted: (callback: (plan: PlanMetadataShared) => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data as PlanMetadataShared)
+      ipcRenderer.on(IPC_CHANNELS.PLAN_EXECUTION_STARTED, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.PLAN_EXECUTION_STARTED, handler) }
+    },
+    onStepsCompleted: (callback: (event: { planId: string; completed: PlanStepShared[] }) => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data as { planId: string; completed: PlanStepShared[] })
+      ipcRenderer.on(IPC_CHANNELS.PLAN_STEPS_COMPLETED, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.PLAN_STEPS_COMPLETED, handler) }
+    },
+    onPlanArchived: (callback: (plan: PlanMetadataShared) => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data as PlanMetadataShared)
+      ipcRenderer.on(IPC_CHANNELS.PLAN_ARCHIVED, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.PLAN_ARCHIVED, handler) }
+    },
+    onPlanAbandoned: (callback: (plan: PlanMetadataShared) => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data as PlanMetadataShared)
+      ipcRenderer.on(IPC_CHANNELS.PLAN_ABANDONED, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.PLAN_ABANDONED, handler) }
+    },
+  },
+
+  // Prompt Optimizer operations (TASK032)
+  promptOptimizer: {
+    optimize: async (req: OptimizeRequestShared) => {
+      return await safeInvoke<OptimizeResponseShared>(IPC_CHANNELS.PROMPT_OPTIMIZER_OPTIMIZE, req)
+    },
+    recordAction: async (requestId: string, action: string, suggestionId?: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PROMPT_OPTIMIZER_RECORD_ACTION, requestId, action, suggestionId)
+    },
+  },
+
+  // Command Palette operations (TASK032)
+  command: {
+    search: async (query: string, language?: string) => {
+      return await safeInvoke<CommandShared[]>(IPC_CHANNELS.COMMAND_SEARCH, query, language)
+    },
+    execute: async (id: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.COMMAND_EXECUTE, id)
+    },
+  },
+
+  // Handbook operations (TASK033)
+  handbook: {
+    search: async (query: string, options?: HandbookSearchOptionsShared) => {
+      return await safeInvoke<HandbookEntryShared[]>(IPC_CHANNELS.HANDBOOK_SEARCH, query, options)
+    },
+    getEntry: async (id: string, language?: string) => {
+      return await safeInvoke<HandbookEntryShared | null>(IPC_CHANNELS.HANDBOOK_GET_ENTRY, id, language)
+    },
+    cloneToWorkspace: async () => {
+      return await safeInvoke<HandbookCloneResultShared>(IPC_CHANNELS.HANDBOOK_CLONE)
+    },
+    checkUpdates: async () => {
+      return await safeInvoke<HandbookUpdateCheckResultShared>(IPC_CHANNELS.HANDBOOK_CHECK_UPDATES)
+    },
+  },
+
+  // DataSource operations (TASK033)
+  datasource: {
+    listProviders: async () => {
+      return await safeInvoke<DataSourceProviderInfoShared[]>(IPC_CHANNELS.DATASOURCE_LIST_PROVIDERS)
+    },
+    query: async (providerId: string, query: DataSourceQueryShared) => {
+      return await safeInvoke<DataSourceResultShared>(IPC_CHANNELS.DATASOURCE_QUERY, providerId, query)
+    },
+    getProviderStatus: async (id: string) => {
+      return await safeInvoke<DataSourceProviderStatusShared>(IPC_CHANNELS.DATASOURCE_GET_PROVIDER_STATUS, id)
+    },
+  },
+
+  // Export operations (TASK034)
+  export: {
+    preview: async (conversationId: string, options: ExportOptionsShared) => {
+      return await safeInvoke<ExportPreviewSharedV2>(IPC_CHANNELS.EXPORT_PREVIEW, conversationId, options)
+    },
+    execute: async (conversationId: string, options: ExportOptionsShared) => {
+      return await safeInvoke<void>(IPC_CHANNELS.EXPORT_EXECUTE, conversationId, options)
+    },
+    copyToClipboard: async (messageIds: string[], format: string) => {
+      return await safeInvoke<string>(IPC_CHANNELS.EXPORT_COPY_CLIPBOARD, messageIds, format)
+    },
+  },
+
+  // Model operations (TASK034)
+  model: {
+    getCurrent: async (conversationId: string) => {
+      return await safeInvoke<string>(IPC_CHANNELS.MODEL_GET_CURRENT, conversationId)
+    },
+    getAvailable: async () => {
+      return await safeInvoke<ConfiguredModelShared[]>(IPC_CHANNELS.MODEL_GET_AVAILABLE)
+    },
+    switchModel: async (conversationId: string, modelId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MODEL_SWITCH, conversationId, modelId)
+    },
+    getStatus: async (modelId: string) => {
+      return await safeInvoke<ConfiguredModelShared>(IPC_CHANNELS.MODEL_GET_STATUS, modelId)
+    },
+    onSwitched: (callback: (event: ModelSwitchedEventShared) => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data as ModelSwitchedEventShared)
+      ipcRenderer.on(IPC_CHANNELS.MODEL_SWITCHED, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.MODEL_SWITCHED, handler) }
+    },
+  },
+
+  // QuickSettings operations (TASK034)
+  quickSettings: {
+    get: async () => {
+      return await safeInvoke<QuickSettingsStateShared>(IPC_CHANNELS.QUICK_SETTINGS_GET)
+    },
+    update: async (patch: Partial<QuickSettingsStateShared>) => {
+      return await safeInvoke<void>(IPC_CHANNELS.QUICK_SETTINGS_UPDATE, patch)
     },
   },
   

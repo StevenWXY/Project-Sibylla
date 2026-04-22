@@ -8,11 +8,16 @@ import type {
   Skill,
 } from '../../shared/types'
 import type { HarnessMode } from '../../shared/types'
+import type { AiModeDefinition, OutputConstraints } from './mode/types'
 import { FileManager } from './file-manager'
 import { MemoryManager } from './memory-manager'
 import type { SkillEngine } from './skill-engine'
 import { logger } from '../utils/logger'
 import type { Tracer } from './trace/tracer'
+import type { PlanManager } from './plan/plan-manager'
+import type { ParsedPlan } from './plan/types'
+import type { HandbookService } from './handbook/handbook-service'
+import type { AiModeRegistry } from './mode/ai-mode-registry'
 
 export interface ContextAssemblyRequest {
   userMessage: string
@@ -29,6 +34,7 @@ export type GuidePlaceholder = import('./harness/guides/types').Guide
 export interface HarnessContextRequest extends ContextAssemblyRequest {
   mode: HarnessMode
   guides: GuidePlaceholder[]
+  aiMode?: AiModeDefinition
 }
 
 interface BudgetAllocation {
@@ -66,12 +72,17 @@ const EXCLUDED_DIRECTORIES = new Set([
 
 const TRUNCATION_MARKER = '\n\n[... truncated due to token budget]'
 
+const CJK_REGEX = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/g
+
 export class ContextEngine {
   private readonly config: Required<ContextEngineConfig>
   private readonly fileManager: FileManager
   private readonly memoryManager: MemoryManager
   private readonly skillEngine: SkillEngine | null
   private tracer?: Tracer
+  private planManager: PlanManager | null = null
+  private handbookService: HandbookService | null = null
+  private aiModeRegistry: AiModeRegistry | null = null
 
   constructor(
     fileManager: FileManager,
@@ -87,6 +98,18 @@ export class ContextEngine {
 
   setTracer(tracer: Tracer): void {
     this.tracer = tracer
+  }
+
+  setPlanManager(pm: PlanManager): void {
+    this.planManager = pm
+  }
+
+  setHandbookService(hs: HandbookService): void {
+    this.handbookService = hs
+  }
+
+  setAiModeRegistry(registry: AiModeRegistry): void {
+    this.aiModeRegistry = registry
   }
 
   async assembleContext(request: ContextAssemblyRequest): Promise<AssembledContext> {
@@ -164,15 +187,57 @@ export class ContextEngine {
   }
 
   private async assembleForHarnessInternal(request: HarnessContextRequest): Promise<AssembledContext> {
-    // Reuse assembleContext's three-layer assembly logic
-    const base = await this.assembleContext({
+    const planRefs = this.extractPlanReferences(request.userMessage)
+    const effectiveManualRefs = [...(request.manualRefs ?? []), ...planRefs]
+
+    let base = await this.assembleContext({
       userMessage: request.userMessage,
       currentFile: request.currentFile,
-      manualRefs: request.manualRefs,
+      manualRefs: effectiveManualRefs,
       skillRefs: request.skillRefs,
     })
 
-    // Overlay Guides into system prompt (create new object, do not mutate original)
+    if (request.aiMode) {
+      let prefix: string
+      if (this.aiModeRegistry) {
+        prefix = this.aiModeRegistry.buildSystemPromptPrefix(request.aiMode.id, {
+          mode: request.aiMode.label,
+          language: '中文',
+        })
+      } else {
+        prefix = request.aiMode.systemPromptPrefix
+      }
+      base = {
+        ...base,
+        systemPrompt: prefix + '\n\n' + base.systemPrompt,
+        totalTokens: base.totalTokens + this.estimateTokens(prefix),
+      }
+
+      if (request.aiMode.outputConstraints) {
+        const constraintsSection = this.formatOutputConstraints(request.aiMode.outputConstraints)
+        base = {
+          ...base,
+          systemPrompt: base.systemPrompt + '\n\n' + constraintsSection,
+          totalTokens: base.totalTokens + this.estimateTokens(constraintsSection),
+        }
+      }
+    }
+
+    if (this.handbookService) {
+      const handbookEntries = this.handbookService.suggestForQuery(request.userMessage)
+      if (handbookEntries.length > 0) {
+        const handbookSection = handbookEntries.map(e =>
+          `### ${e.title}\n\n${this.truncate(e.content, 800)}\n\n_引用时请标注：[Handbook: ${e.id}]_`
+        ).join('\n\n---\n\n')
+
+        base = {
+          ...base,
+          systemPrompt: base.systemPrompt + '\n\n## 📖 相关用户手册\n\n' + handbookSection,
+          totalTokens: base.totalTokens + this.estimateTokens(handbookSection),
+        }
+      }
+    }
+
     if (request.guides.length > 0) {
       const guideContent = request.guides
         .sort((a, b) => b.priority - a.priority)
@@ -187,6 +252,38 @@ export class ContextEngine {
     }
 
     return base
+  }
+
+  extractPlanReferences(message: string): string[] {
+    const regex = /@plan-([\w-]+)/g
+    const matches: string[] = []
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(message)) !== null) {
+      matches.push(`@plan-${match[1]}`)
+    }
+    return [...new Set(matches)]
+  }
+
+  private formatOutputConstraints(constraints: OutputConstraints): string {
+    const lines: string[] = ['## 输出约束']
+    if (constraints.requireStructuredOutput) {
+      lines.push('- 必须产出结构化输出')
+    }
+    if (constraints.maxResponseLength) {
+      lines.push(`- 回复长度限制：${constraints.maxResponseLength} 字（±15%）`)
+    }
+    if (constraints.toneFilter) {
+      const toneMap: Record<string, string> = {
+        direct: '直接',
+        formal: '正式',
+        casual: '轻松',
+      }
+      lines.push(`- 语气风格：${toneMap[constraints.toneFilter] ?? constraints.toneFilter}`)
+    }
+    if (!constraints.allowNegativeFeedback) {
+      lines.push('- 不包含负面反馈')
+    }
+    return lines.join('\n')
   }
 
   extractFileReferences(message: string): string[] {
@@ -262,6 +359,22 @@ export class ContextEngine {
   private async collectManualRefs(manualRefs: string[]): Promise<ContextSource[]> {
     const sources: ContextSource[] = []
     for (const ref of manualRefs) {
+      if (ref.startsWith('@plan-')) {
+        const planId = ref.replace('@plan-', 'plan-')
+        const parsed = await this.planManager?.getPlan(planId)
+        if (parsed) {
+          const formatted = this.formatPlanReference(parsed)
+          sources.push({
+            filePath: `plan:${parsed.metadata.id}`,
+            content: formatted,
+            tokenCount: this.estimateTokens(formatted),
+            layer: 'manual' as ContextLayerType,
+          })
+        } else {
+          logger.warn('[ContextEngine] Plan ref not found', { planId })
+        }
+        continue
+      }
       const source = await this.safeLoadFile(ref, 'manual')
       if (source) {
         sources.push(source)
@@ -270,6 +383,29 @@ export class ContextEngine {
       }
     }
     return sources
+  }
+
+  private formatPlanReference(parsed: ParsedPlan): string {
+    const completedSteps = parsed.steps.filter(s => s.done).length
+    const totalSteps = parsed.steps.length
+    const lines: string[] = [
+      `状态: ${parsed.metadata.status}`,
+      `创建: ${parsed.metadata.createdAt}`,
+      `进度: ${completedSteps}/${totalSteps} 步骤完成`,
+      '',
+      '## 步骤',
+    ]
+    for (const step of parsed.steps) {
+      const checkbox = step.done ? '[x]' : '[ ]'
+      lines.push(`- ${checkbox} ${step.text}`)
+    }
+    if (parsed.goal) {
+      lines.push('', '## 目标', parsed.goal)
+    }
+    if (parsed.risks && parsed.risks.length > 0) {
+      lines.push('', '## 风险与备案', ...parsed.risks)
+    }
+    return lines.join('\n')
   }
 
   /**
@@ -529,9 +665,15 @@ export class ContextEngine {
   }
 
   private estimateTokens(text: string): number {
-    const cjkCount = (text.match(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/g) ?? []).length
+    CJK_REGEX.lastIndex = 0
+    const cjkCount = (text.match(CJK_REGEX) ?? []).length
     const nonCjkLength = text.length - cjkCount
     return Math.ceil(nonCjkLength / 4) + Math.ceil(cjkCount / 2)
+  }
+
+  private truncate(text: string, maxChars: number): string {
+    if (text.length <= maxChars) return text
+    return text.slice(0, maxChars) + '...'
   }
 
   private isInExcludedDirectory(filePath: string): boolean {

@@ -268,6 +268,35 @@ export class TraceExporter {
     })
   }
 
+  static redactText(text: string, rules: RedactionRule[]): string {
+    let result = text
+    for (const rule of rules) {
+      if (rule.valuePattern) {
+        result = result.replace(
+          new RegExp(rule.valuePattern.source, rule.valuePattern.flags ?? 'g'),
+          `[REDACTED:${rule.id}]`
+        )
+      }
+    }
+    return result
+  }
+
+  static scanSensitiveFields(text: string, rules: RedactionRule[]): Array<{ rule: string; sample: string }> {
+    const fields: Array<{ rule: string; sample: string }> = []
+    for (const rule of rules) {
+      if (rule.valuePattern) {
+        const match = text.match(new RegExp(rule.valuePattern.source, rule.valuePattern.flags ?? 'g'))
+        if (match && match.length > 0) {
+          fields.push({
+            rule: rule.reason,
+            sample: match[0].slice(0, 40),
+          })
+        }
+      }
+    }
+    return fields
+  }
+
   toSharedSpan(span: SerializedSpan): SerializedSpanShared {
     return {
       traceId: span.traceId,

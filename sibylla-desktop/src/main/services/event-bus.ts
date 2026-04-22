@@ -14,6 +14,16 @@ type EventMap = {
   'performance:metrics': [metrics: PerformanceMetrics]
   'performance:alert': [alert: PerformanceAlert]
   'performance:alert-cleared': [payload: { type: string }]
+  'datasource:rate-limit-exhausted': [payload: { providerId: string; resetAt: number }]
+  'datasource:provider-registered': [payload: { id: string; name: string }]
+  'conversation:export': [payload: { format: string; conversationId: string }]
+  'model:switched': [payload: { conversationId: string; oldModel: string; newModel: string }]
+  'aiMode:changed': [payload: { conversationId: string; from?: string; to: string }]
+  'plan:created': [payload: Record<string, unknown>]
+  'plan:execution-started': [payload: Record<string, unknown>]
+  'plan:steps-completed': [payload: Record<string, unknown>]
+  'plan:archived': [payload: Record<string, unknown>]
+  'plan:abandoned': [payload: Record<string, unknown>]
 }
 
 export class AppEventBus extends EventEmitter {

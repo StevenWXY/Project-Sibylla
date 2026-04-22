@@ -1,0 +1,62 @@
+version: "1.0.0"
+languages: [zh, en]
+entries:
+  - id: getting-started
+    path: getting-started.md
+    title: { zh: "快速开始", en: "Getting Started" }
+    tags: [intro, basics]
+    keywords: [开始, 入门, 安装, setup, install]
+
+  - id: modes.plan
+    path: modes/plan.md
+    title: { zh: "Plan 模式", en: "Plan Mode" }
+    tags: [mode, plan]
+    keywords: [计划, 规划, 步骤, plan, steps]
+
+  - id: modes.analyze
+    path: modes/analyze.md
+    title: { zh: "Analyze 模式", en: "Analyze Mode" }
+    tags: [mode, analyze]
+    keywords: [分析, 对比, analyze, compare]
+
+  - id: modes.review
+    path: modes/review.md
+    title: { zh: "Review 模式", en: "Review Mode" }
+    tags: [mode, review]
+    keywords: [审查, review, code review]
+
+  - id: modes.write
+    path: modes/write.md
+    title: { zh: "Write 模式", en: "Write Mode" }
+    tags: [mode, write]
+    keywords: [撰写, 写作, write, document]
+
+  - id: features.memory-system
+    path: features/memory-system.md
+    title: { zh: "记忆系统", en: "Memory System" }
+    tags: [feature, memory]
+    keywords: [记忆, 上下文, memory, context]
+
+  - id: features.prompt-optimization
+    path: features/prompt-optimization.md
+    title: { zh: "提示词优化", en: "Prompt Optimization" }
+    tags: [feature, optimization]
+    keywords: [优化, 提示词, prompt, optimize]
+
+  - id: features.progress-ledger
+    path: features/progress-ledger.md
+    title: { zh: "任务台账", en: "Progress Ledger" }
+    tags: [feature, progress]
+    keywords: [任务, 进度, task, progress]
+
+  - id: shortcuts
+    path: shortcuts.md
+    title: { zh: "快捷键", en: "Keyboard Shortcuts" }
+    tags: [shortcuts, reference]
+    keywords: [快捷键, 键盘, shortcut, keyboard]
+
+  - id: faq
+    path: faq.md
+    title: { zh: "常见问题", en: "FAQ" }
+    tags: [faq, help]
+    keywords: [FAQ, 常见问题, 问题, question]

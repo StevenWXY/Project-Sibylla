@@ -5,9 +5,17 @@ import rehypeHighlight from 'rehype-highlight'
 
 interface MarkdownRendererProps {
   content: string
+  onHandbookReference?: (entryId: string) => void
 }
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, onHandbookReference }: MarkdownRendererProps) {
+  const processedContent = useMemo(() => {
+    return content.replace(
+      /\[Handbook:\s*([^\]]+)\]/g,
+      (_match, id: string) => `📖 来自用户手册：[📖 ${id}](handbook-ref:${id})`
+    )
+  }, [content])
+
   const components = useMemo(
     () => ({
       code({ className, children, ...rest }: React.HTMLAttributes<HTMLElement> & { node?: unknown }) {
@@ -122,6 +130,18 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         )
       },
       a({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { node?: unknown }) {
+        if (href?.startsWith('handbook-ref:')) {
+          const entryId = href.replace('handbook-ref:', '')
+          return (
+            <button
+              onClick={() => onHandbookReference?.(entryId)}
+              className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-3 py-1 text-sm text-blue-400 transition-colors hover:bg-blue-500/25 hover:underline"
+            >
+              <span>📖</span>
+              <span>来自用户手册：{entryId}</span>
+            </button>
+          )
+        }
         return (
           <a
             href={href}
@@ -145,7 +165,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         )
       },
     }),
-    []
+    [onHandbookReference]
   )
 
   return (
@@ -154,7 +174,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
       rehypePlugins={[rehypeHighlight]}
       components={components}
     >
-      {content}
+      {processedContent}
     </ReactMarkdown>
   )
 }
