@@ -28,7 +28,7 @@ const initialState: PlanState = {
   error: null,
 }
 
-let unsubscribers: Array<() => void> = []
+const unsubscribers: Array<() => void> = []
 
 export const usePlanStore = create<PlanStore>()(
   devtools(

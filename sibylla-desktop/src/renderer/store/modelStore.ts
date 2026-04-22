@@ -27,7 +27,7 @@ const initialState: ModelState = {
 
 export const useModelStore = create<ModelStore>()(
   devtools(
-    (set, get) => ({
+    (set, _get) => ({
       ...initialState,
 
       fetchModels: async () => {
