@@ -7,7 +7,7 @@
 
 import chokidar from 'chokidar'
 import path from 'path'
-import { Stats } from 'fs'
+import { Stats, promises as fsp } from 'fs'
 import { FileInfo, FileWatchEvent, FileManagerError, FILE_ERROR_CODES } from './types/file-manager.types'
 import { logger } from '../utils/logger'
 
@@ -56,31 +56,27 @@ export class FileWatcher {
     this.watcher = chokidar.watch(this.workspaceRoot, {
       ignored: this.ignoredPaths,
       persistent: true,
-      ignoreInitial: true, // Don't emit events for existing files on startup
-      awaitWriteFinish: {
-        stabilityThreshold: 300, // Wait 300ms for file write to stabilize
-        pollInterval: 100 // Poll every 100ms
-      }
+      ignoreInitial: true
     })
 
     // Register event listeners
     this.watcher
-      .on('add', (filePath, stats) => {
+      .on('add', async (filePath, stats) => {
         const relativePath = path.relative(this.workspaceRoot, filePath)
         logger.debug('[FileWatcher] File added', { path: relativePath })
         callback({
           type: 'add',
           path: relativePath,
-          stats: this.statsToFileInfo(filePath, stats)
+          stats: await this.statsToFileInfo(filePath, stats)
         })
       })
-      .on('change', (filePath, stats) => {
+      .on('change', async (filePath, stats) => {
         const relativePath = path.relative(this.workspaceRoot, filePath)
         logger.debug('[FileWatcher] File changed', { path: relativePath })
         callback({
           type: 'change',
           path: relativePath,
-          stats: this.statsToFileInfo(filePath, stats)
+          stats: await this.statsToFileInfo(filePath, stats)
         })
       })
       .on('unlink', (filePath) => {
@@ -111,7 +107,16 @@ export class FileWatcher {
         logger.error('[FileWatcher] Watcher error', { error: error.message })
       })
 
-    logger.info('[FileWatcher] Started watching', { workspaceRoot: this.workspaceRoot })
+    await new Promise<void>((resolve, reject) => {
+      this.watcher!.on('ready', () => {
+        logger.info('[FileWatcher] Ready and watching', { workspaceRoot: this.workspaceRoot })
+        resolve()
+      })
+      this.watcher!.on('error', (error) => {
+        logger.error('[FileWatcher] Watcher error during initialization', { error: error.message })
+        reject(error)
+      })
+    })
   }
 
   /**
@@ -131,20 +136,21 @@ export class FileWatcher {
    * @param stats - File stats object from chokidar
    * @returns FileInfo object or undefined if stats is missing
    */
-  private statsToFileInfo(filePath: string, stats: Stats | undefined): FileInfo | undefined {
-    if (!stats) {
-      logger.warn('[FileWatcher] Stats object missing for file', { filePath })
+  private async statsToFileInfo(filePath: string, stats: Stats | undefined): Promise<FileInfo | undefined> {
+    try {
+      const resolvedStats = stats ?? await fsp.stat(filePath)
+      return {
+        name: path.basename(filePath),
+        path: path.relative(this.workspaceRoot, filePath),
+        isDirectory: resolvedStats.isDirectory(),
+        size: resolvedStats.size,
+        modifiedTime: resolvedStats.mtimeMs,
+        createdTime: resolvedStats.birthtimeMs,
+        extension: path.extname(filePath)
+      }
+    } catch (error) {
+      logger.warn('[FileWatcher] Failed to stat file', { filePath, error: String(error) })
       return undefined
-    }
-    
-    return {
-      name: path.basename(filePath),
-      path: path.relative(this.workspaceRoot, filePath),
-      isDirectory: stats.isDirectory(),
-      size: stats.size,
-      modifiedTime: stats.mtimeMs,
-      createdTime: stats.birthtimeMs,
-      extension: path.extname(filePath)
     }
   }
 }
