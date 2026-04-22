@@ -62,7 +62,7 @@ describe('Builtin Commands', () => {
     registerConversationCommands(registry, mockEventBus as never)
     const commands = registry.getAll()
     const convCommands = commands.filter(c => c.category === '对话')
-    expect(convCommands).toHaveLength(4)
+    expect(convCommands).toHaveLength(6)
   })
 
   it('should register plan commands', () => {
@@ -76,7 +76,7 @@ describe('Builtin Commands', () => {
     registerHandbookCommands(registry, mockEventBus as never)
     const commands = registry.getAll()
     const handbookCommands = commands.filter(c => c.category === 'Handbook')
-    expect(handbookCommands).toHaveLength(2)
+    expect(handbookCommands).toHaveLength(3)
   })
 
   it('should register system commands', () => {
