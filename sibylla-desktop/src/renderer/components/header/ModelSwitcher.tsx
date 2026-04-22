@@ -41,7 +41,7 @@ export const ModelSwitcher: React.FC<ModelSwitcherProps> = ({ conversationId, on
   React.useEffect(() => {
     fetchModels()
     fetchCurrent(conversationId)
-  }, [conversationId])
+  }, [conversationId, fetchModels, fetchCurrent])
 
   React.useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

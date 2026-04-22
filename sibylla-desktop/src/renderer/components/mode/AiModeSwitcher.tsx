@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useModeStore } from '../../store/modeStore'
@@ -71,12 +71,12 @@ export function AiModeSwitcher({ conversationId }: AiModeSwitcherProps) {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, highlightIndex, modes])
+  }, [open, highlightIndex, modes, handleSelect])
 
-  const handleSelect = (mode: AiModeDefinitionShared) => {
+  const handleSelect = useCallback((mode: AiModeDefinitionShared) => {
     switchMode(conversationId, mode.id)
     setOpen(false)
-  }
+  }, [switchMode, conversationId])
 
   const displayMode = activeMode ?? modes.find(m => m.id === 'free')
 

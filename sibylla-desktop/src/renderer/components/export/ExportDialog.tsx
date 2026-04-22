@@ -1,5 +1,5 @@
 import React from 'react'
-import type { ExportFormatShared, ExportPreviewSharedV2, RedactionRuleShared } from '../../../shared/types'
+import type { ExportFormatShared, ExportPreviewSharedV2 } from '../../../shared/types'
 
 interface ExportDialogProps {
   conversationId: string
@@ -44,7 +44,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       }
     }
     fetchPreview()
-  }, [conversationId, format, includeMetadata, applyRedaction])
+  }, [conversationId, format, includeMetadata, includeReferencedFiles, applyRedaction])
 
   const handleNext = () => {
     if (step === 'config') setStep('preview')

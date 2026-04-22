@@ -55,7 +55,7 @@ export class ReviewModeEvaluator implements ModeEvaluator {
   ): Promise<ModeEvaluationResult> {
     const warnings: ModeWarning[] = []
 
-    const issueMatches = output.match(/^\s*-\s*[🔴🟠🟡⚪]/gm)
+    const issueMatches = output.match(/^\s*-\s*[🔴🟠🟡⚪]/gmu)
     const issueCount = issueMatches?.length ?? 0
 
     const reviewTargetLength = (context?.reviewTargetLength as number | undefined) ?? 500
