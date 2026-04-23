@@ -1,0 +1,4 @@
+allowed_tools:
+  - read-file
+  - search
+  - list-files

@@ -28,6 +28,7 @@
 | Sprint 3.2 | 记忆系统 v2 | TASK022-026 | [`sprint3.2-memory.md`](../../requirements/phase1/sprint3.2-memory.md) | ⬜ 待开始 |
 | Sprint 3.3 | Trace 系统与可观测性 | TASK027-029 | [`sprint3.3-trace.md`](../../requirements/phase1/sprint3.3-trace.md) | ⬜ 待开始 |
 | Sprint 3.4 | AI 模式、Plan、Wiki 与能力整合 | TASK030-034 | [`sprint3.4-mode.md`](../../requirements/phase1/sprint3.4-mode.md) | ⬜ 待开始 |
+| Sprint 3.5 | AI 能力扩展体系 | TASK035-039 | [`sprint3.5-ai_ablities.md`](../../requirements/phase1/sprint3.5-ai_ablities.md) | ⬜ 待开始 |
 
 ---
 
@@ -567,9 +568,141 @@ Sprint 3.3 Trace 系统（TASK027-029）
 
 ---
 
+## 六.5、Sprint 3.5 — AI 能力扩展体系
+
+> **目标：** 建立 Prompt 库基础设施与四层扩展能力模型（Slash Command → Skill → Sub-agent → Workflow），让每个团队能够在 Sibylla 中沉淀属于自己的 AI 能力资产。补齐 Reactive Compact 错误恢复，提供扩展能力管理 UI，完成 Phase 1 AI 能力线收官。
+>
+> **预计周期：** 4-5 周（Week 29 - Week 33）
+>
+> **前置条件：** Sprint 3.1（Harness）+ Sprint 3.2（记忆 v2）+ Sprint 3.3（Trace）+ Sprint 3.4（模式与 Plan）全部可用
+
+### Sprint 3.5 任务
+
+| 状态 | 任务 ID | 任务名称 | 优先级 | 复杂度 | 预估工时 | 对应需求 | 任务文档 | 备注 |
+|------|---------|---------|--------|--------|---------|---------|---------|------|
+| ⬜ | PHASE1-TASK035 | Prompt 库基础设施与 PromptComposer | P0 | 非常复杂 | 4-5 天 | 需求 3.5.1 | [`task035`](./phase1-task035_prompt-library-prompt-composer.md) | PromptLoader + PromptRegistry + PromptComposer + ContextEngine 集成 + Mode prompt 迁移 |
+| ⬜ | PHASE1-TASK036 | Hook 节点系统与 Reactive Compact | P0 | 非常复杂 | 4-5 天 | 需求 3.5.6 + 3.5.7 | [`task036`](./phase1-task036_hook-system-reactive-compact.md) | 8 个 Hook 节点 + 内置 Hook 适配 + ReactiveCompact + CompactOrchestrator |
+| ⬜ | PHASE1-TASK037 | Skill 系统 v2 与 Slash Command 扩展 | P0 | 非常复杂 | 4-5 天 | 需求 3.5.2 + 3.5.3 | [`task037`](./phase1-task037_skill-v2-slash-command.md) | SkillRegistry v2 + SkillExecutor + SlashCommandParser + 8 内置 Skill + 8 内置 Slash Command |
+| ⬜ | PHASE1-TASK038 | Sub-agent 独立循环系统 | P0 | 非常复杂 | 4-5 天 | 需求 3.5.4 | [`task038`](./phase1-task038_sub-agent-system.md) | SubAgentRegistry + SubAgentExecutor + spawnSubAgent 工具 + 5 内置 Sub-agent |
+| ⬜ | PHASE1-TASK039 | Workflow 自动化与管理 UI 收官 | P1 | 非常复杂 | 5-6 天 | 需求 3.5.5 + 3.5.8 + 3.5.9 + 3.5.10 | [`task039`](./phase1-task039_workflow-management-ui.md) | WorkflowExecutor + WorkflowScheduler + 管理 UI + CLAUDE.md 更新 + Prompt 版本化 |
+
+### Sprint 3.5 依赖关系
+
+```
+Sprint 3.1 Harness（TASK017-021）
+Sprint 3.2 记忆 v2（TASK022-026）
+Sprint 3.3 Trace（TASK027-029）
+Sprint 3.4 模式与 Plan（TASK030-034）
+        │
+        ▼
+  TASK035 (Prompt 库 + PromptComposer) ─── 地基
+        │
+        ├──────────────┬──────────────┐
+        ▼              ▼              ▼
+  TASK036          TASK037        TASK038
+  (Hook+Compact)   (Skill+Slash)  (Sub-agent)
+                       │              │
+                       └──────┬───────┘
+                              ▼
+                        TASK039 (Workflow+UI+Docs)
+```
+
+**推荐执行顺序：** TASK035 → TASK036 ∥ TASK037 ∥ TASK038 → TASK039
+
+### Sprint 3.5 已有代码基础
+
+| 已有模块 | 文件路径 | 行数 | Sprint 3.5 使用方式 |
+|---------|---------|------|-------------------|
+| ContextEngine | `services/context-engine.ts` | 683 | 拆分为目录结构，新增 PromptComposer 子模块 |
+| SkillEngine | `services/skill-engine.ts` | 236 | 封装为 SkillRegistry，扩展 v2 格式 |
+| CommandRegistry | `services/command/command-registry.ts` | 156 | 扩展 slash 解析方法 |
+| AiModeRegistry | `services/mode/ai-mode-registry.ts` | ~200 | buildSystemPromptPrefix 委托 PromptComposer |
+| GuardrailEngine | `services/harness/guardrails/engine.ts` | ~150 | Hook PreToolUse 委托调用（不修改） |
+| Evaluator | `services/harness/evaluator.ts` | 227 | Hook PostMessage 委托调用（不修改） |
+| Generator | `services/harness/generator.ts` | 130 | Sub-agent 复用（创建独立实例） |
+| HarnessOrchestrator | `services/harness/orchestrator.ts` | 643 | 最小侵入扩展 Hook 注入点 |
+| Tracer | `services/trace/tracer.ts` | — | 所有扩展能力产生 Trace |
+| CommandPalette | `renderer/components/command-palette/` | — | 扩展能力管理命令入口 |
+
+**完全缺失、需新建的模块：**
+
+| 模块 | 对应任务 | 说明 |
+|------|---------|------|
+| `context-engine/PromptLoader.ts` | TASK035 | Prompt 文件加载（双源：内置 + 用户覆盖） |
+| `context-engine/PromptRegistry.ts` | TASK035 | Prompt 注册索引 |
+| `context-engine/PromptComposer.ts` | TASK035 | Prompt 片段组合器 |
+| `resources/prompts/`（~16 文件） | TASK035 | 内置 prompt 资源 |
+| `hooks/`（5 文件） | TASK036 | Hook 系统（Registry + Executor + built-in 适配） |
+| `compact/`（3 文件） | TASK036 | Reactive Compact + CompactOrchestrator |
+| `skill-system/`（5 文件） | TASK037 | Skill v2 系统（Registry + Loader + Executor + Validator） |
+| `command/SlashCommandParser.ts` | TASK037 | /xxx 解析 |
+| `resources/skills/`（8 目录） | TASK037 | 内置 Skill 资源 |
+| `resources/slash-commands/`（8 文件） | TASK037 | 内置 Slash Command 资源 |
+| `sub-agent/`（6 文件） | TASK038 | Sub-agent 系统（Registry + Executor + Context + Tool） |
+| `resources/prompts/agents/`（5 文件） | TASK038 | 内置 Sub-agent 定义 |
+| `workflow/`（8 文件） | TASK039 | Workflow 系统（Parser + Registry + Executor + Scheduler + Steps） |
+| `resources/workflows/`（3 文件） | TASK039 | 内置 Workflow 模板 |
+| `components/skill-library/` | TASK039 | Skill 库 UI 面板 |
+| `components/workflow/` | TASK039 | Workflow 管理 UI 面板 |
+| `store/workflowStore.ts` | TASK039 | Zustand Workflow 状态 |
+
+### Sprint 3.5 新增 IPC 通道
+
+| IPC 通道 | 对应任务 | 方向 | 说明 |
+|---------|---------|------|------|
+| `prompt-library:list-all` | TASK035 | Renderer → Main | 列出所有 prompt 元数据 |
+| `prompt-library:read` | TASK035 | Renderer → Main | 读取 prompt 内容 |
+| `prompt-library:derive-user-copy` | TASK035 | Renderer → Main | 派生用户覆盖副本 |
+| `prompt-library:reset-user-override` | TASK035 | Renderer → Main | 重置用户覆盖 |
+| `prompt-library:validate` | TASK035 | Renderer → Main | 校验 prompt 格式 |
+| `prompt-library:estimate-tokens` | TASK035 | Renderer → Main | 估算 token 数 |
+| `hook:list` | TASK036 | Renderer → Main | 列出所有 Hook |
+| `hook:enable` | TASK036 | Renderer → Main | 启用 Hook |
+| `hook:disable` | TASK036 | Renderer → Main | 禁用 Hook |
+| `hook:trace` | TASK036 | Renderer → Main | 查询 Hook 执行日志 |
+| `compact:started` | TASK036 | Main → Renderer | Reactive Compact 开始 |
+| `compact:completed` | TASK036 | Main → Renderer | Reactive Compact 完成 |
+| `compact:failed` | TASK036 | Main → Renderer | Reactive Compact 失败 |
+| `ai:skill:get` | TASK037 | Renderer → Main | 获取 Skill 详情 |
+| `ai:skill:create` | TASK037 | Renderer → Main | 创建 Skill |
+| `ai:skill:validate` | TASK037 | Renderer → Main | 校验 Skill |
+| `ai:skill:delete` | TASK037 | Renderer → Main | 删除 Skill |
+| `ai:skill:export` | TASK037 | Renderer → Main | 导出 Skill |
+| `ai:skill:import` | TASK037 | Renderer → Main | 导入 Skill |
+| `command:parse-slash` | TASK037 | Renderer → Main | 解析 Slash Command |
+| `command:get-suggestions` | TASK037 | Renderer → Main | 自动补全建议 |
+| `sub-agent:list` | TASK038 | Renderer → Main | 列出 Sub-agent |
+| `sub-agent:create` | TASK038 | Renderer → Main | 创建 Sub-agent |
+| `sub-agent:trace` | TASK038 | Renderer → Main | 查询子 Trace |
+| `workflow:list` | TASK039 | Renderer → Main | 列出 Workflow |
+| `workflow:trigger-manual` | TASK039 | Renderer → Main | 手动触发 |
+| `workflow:get-run` | TASK039 | Renderer → Main | 获取运行详情 |
+| `workflow:cancel-run` | TASK039 | Renderer → Main | 取消运行 |
+| `workflow:list-runs` | TASK039 | Renderer → Main | 运行历史 |
+| `workflow:confirmation-required` | TASK039 | Main → Renderer | 确认请求推送 |
+| `workflow:confirm-step` | TASK039 | Renderer → Main | 用户确认决策 |
+
+### Sprint 3.5 新建模块目录
+
+| 目录 | 对应任务 | 说明 |
+|------|---------|------|
+| `services/context-engine/` | TASK035 | ContextEngine 拆分 + PromptComposer 子模块 |
+| `services/hooks/` | TASK036 | Hook 节点系统 |
+| `services/compact/` | TASK036 | Reactive Compact + CompactOrchestrator |
+| `services/skill-system/` | TASK037 | Skill v2 系统（替换现有 skill-engine.ts） |
+| `services/sub-agent/` | TASK038 | Sub-agent 独立循环 |
+| `services/workflow/` | TASK039 | Workflow 自动化 |
+| `resources/prompts/` | TASK035 | 内置 prompt 资源（core/modes/tools/contexts） |
+| `resources/skills/` | TASK037 | 内置 Skill 资源（v2 目录格式） |
+| `resources/slash-commands/` | TASK037 | 内置 Slash Command 资源 |
+| `resources/prompts/agents/` | TASK038 | 内置 Sub-agent 定义 |
+| `resources/workflows/` | TASK039 | 内置 Workflow 模板 |
+
+---
+
 ## 七、Phase 1 全局进度
 
-**Phase 1 总进度：** 4/34 任务完成
+**Phase 1 总进度：** 4/39 任务完成
 
 | Sprint | 任务数 | 已完成 | 进度 | 状态 |
 |--------|--------|--------|------|------|
@@ -580,6 +713,7 @@ Sprint 3.3 Trace 系统（TASK027-029）
 | Sprint 3.2 | 5 | 0 | 0% | ⬜ 待开始 |
 | Sprint 3.3 | 3 | 0 | 0% | ⬜ 待开始 |
 | Sprint 3.4 | 5 | 0 | 0% | ⬜ 待开始 |
+| Sprint 3.5 | 5 | 0 | 0% | ⬜ 待开始 |
 
 ---
 
@@ -618,11 +752,12 @@ Sprint 3.3 Trace 系统（TASK027-029）
 | 2026-04-20 | — | — | Sprint 3.2 记忆系统 v2 任务拆解完成，生成 5 个任务文档（TASK022-026） |
 | 2026-04-21 | — | — | Sprint 3.3 Trace 系统、任务台账与可观测性任务拆解完成，生成 3 个任务文档（TASK027-029） |
 | 2026-04-22 | — | — | Sprint 3.4 AI 模式系统、Plan 产物、Wiki 与能力整合任务拆解完成，生成 5 个任务文档（TASK030-034） |
+| 2026-04-23 | — | — | Sprint 3.5 AI 能力扩展体系任务拆解完成，生成 5 个任务文档（TASK035-039） |
 
 ---
 
 **创建时间：** 2026-03-31
-**最后更新：** 2026-04-22
+**最后更新：** 2026-04-23
 **更新记录：**
 - 2026-03-31 — 创建 Sprint 1 任务列表
 - 2026-04-01 — 追加 TASK016/017/018 完成记录
@@ -635,3 +770,4 @@ Sprint 3.3 Trace 系统（TASK027-029）
 - 2026-04-20 — Sprint 3.2 记忆系统 v2 任务拆解完成：5 个任务文档（TASK022-026）+ 依赖关系图 + 已有代码基础评估 + 新增 IPC 通道清单
 - 2026-04-21 — Sprint 3.3 Trace 系统、任务台账与可观测性任务拆解完成：3 个任务文档（TASK027-029）+ 依赖关系图 + 已有代码基础评估 + 新增 IPC 通道清单
 - 2026-04-22 — Sprint 3.4 AI 模式系统、Plan 产物、Wiki 与能力整合任务拆解完成：5 个任务文档（TASK030-034）+ 依赖关系图 + 新增 IPC 通道清单 + 新建模块目录
+- 2026-04-23 — Sprint 3.5 AI 能力扩展体系任务拆解完成：5 个任务文档（TASK035-039）+ 依赖关系图 + 已有代码基础评估 + 新增 IPC 通道清单 + 新建模块目录 + 全局进度更新（4/39）

@@ -281,7 +281,7 @@ describe('ToolScopeManager', () => {
       registerBuiltInTools(manager)
 
       const tools = manager.getRegisteredTools()
-      expect(tools.length).toBe(8)
+      expect(tools.length).toBe(9)
 
       const toolIds = tools.map(t => t.id)
       expect(toolIds).toContain('reference_file')
@@ -292,6 +292,7 @@ describe('ToolScopeManager', () => {
       expect(toolIds).toContain('memory_query')
       expect(toolIds).toContain('task_create')
       expect(toolIds).toContain('graph_traverse')
+      expect(toolIds).toContain('spawnSubAgent')
     })
   })
 

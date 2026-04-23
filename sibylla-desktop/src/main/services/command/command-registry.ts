@@ -19,8 +19,27 @@ export class CommandRegistry {
     this.commands.set(command.id, command)
   }
 
+  registerOrReplace(command: Command): void {
+    this.commands.set(command.id, command)
+  }
+
   unregister(id: string): void {
     this.commands.delete(id)
+  }
+
+  resolveBySlash(prefix: string): Command | undefined {
+    const all = this.getSlashCommands()
+    for (const cmd of all) {
+      if (cmd.id.toLowerCase() === prefix.toLowerCase()) return cmd
+      if (cmd.aliases?.map((a) => a.toLowerCase()).includes(prefix.toLowerCase())) return cmd
+    }
+    return undefined
+  }
+
+  getSlashCommands(): Command[] {
+    return Array.from(this.commands.values()).filter(
+      (cmd) => cmd.isSlashCommand === true,
+    )
   }
 
   async search(query: string, language?: string): Promise<Command[]> {

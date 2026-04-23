@@ -116,6 +116,28 @@ import type {
   ModelSwitchedEventShared,
   // QuickSettings types (TASK034)
   QuickSettingsStateShared,
+  // Prompt Library types (TASK035)
+  PromptMetadata,
+  PromptContent,
+  PromptValidationResult,
+  // Skill v2 types (TASK037)
+  SkillV2,
+  SkillTemplate,
+  SkillResult,
+  SkillValidationResult as SkillValidationResultType,
+  SlashCommandTemplate,
+  ParsedCommand,
+  CommandSuggestion,
+  // Sub-agent types (TASK038)
+  SubAgentMetadata,
+  SubAgentTemplate,
+  SubAgentTrace,
+  // Workflow types (TASK039)
+  WorkflowDefinition,
+  WorkflowRun,
+  WorkflowRunSummary,
+  RunFilter,
+  WorkflowConfirmationRequest,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -233,6 +255,20 @@ interface ElectronAPI {
     contextFiles: (query: string, limit?: number) => Promise<IPCResponse<ContextFileInfo[]>>
     skillList: () => Promise<IPCResponse<SkillSummary[]>>
     skillSearch: (params: SkillSearchParams) => Promise<IPCResponse<SkillSummary[]>>
+    skillGet: (skillId: string) => Promise<IPCResponse<SkillV2 | null>>
+    skillCreate: (template: SkillTemplate) => Promise<IPCResponse<{ skillId: string; path: string }>>
+    skillValidate: (skillId: string) => Promise<IPCResponse<SkillValidationResultType>>
+    skillDelete: (skillId: string) => Promise<IPCResponse<void>>
+    skillExport: (skillId: string) => Promise<IPCResponse<{ bundlePath: string }>>
+    skillImport: (bundlePath: string) => Promise<IPCResponse<{ skillId: string }>>
+    skillTestRun: (skillId: string, userInput: string) => Promise<IPCResponse<SkillResult>>
+  }
+
+  // Slash Command operations (TASK037)
+  slashCommand: {
+    parse: (input: string) => Promise<IPCResponse<ParsedCommand | null>>
+    create: (template: SlashCommandTemplate) => Promise<IPCResponse<{ commandId: string }>>
+    getSuggestions: (partial: string) => Promise<IPCResponse<CommandSuggestion[]>>
   }
 
   // Memory operations
@@ -441,6 +477,34 @@ interface ElectronAPI {
   quickSettings: {
     get: () => Promise<IPCResponse<QuickSettingsStateShared>>
     update: (patch: Partial<QuickSettingsStateShared>) => Promise<IPCResponse<void>>
+  }
+
+  // Prompt Library operations (TASK035)
+  promptLibrary: {
+    listAll: () => Promise<IPCResponse<PromptMetadata[]>>
+    read: (id: string) => Promise<IPCResponse<PromptContent>>
+    deriveUserCopy: (id: string) => Promise<IPCResponse<{ userPath: string }>>
+    resetUserOverride: (id: string) => Promise<IPCResponse<void>>
+    validate: (id: string, content: string) => Promise<IPCResponse<PromptValidationResult>>
+    estimateTokens: (content: string) => Promise<IPCResponse<number>>
+  }
+
+  // Sub-agent operations (TASK038)
+  subAgent: {
+    list: () => Promise<IPCResponse<SubAgentMetadata[]>>
+    create: (template: SubAgentTemplate) => Promise<IPCResponse<{ agentId: string }>>
+    trace: (traceId: string) => Promise<IPCResponse<SubAgentTrace>>
+  }
+
+  // Workflow operations (TASK039)
+  workflow: {
+    list: () => Promise<IPCResponse<WorkflowDefinition[]>>
+    triggerManual: (workflowId: string, params: Record<string, unknown>) => Promise<IPCResponse<{ runId: string }>>
+    getRun: (runId: string) => Promise<IPCResponse<WorkflowRun | null>>
+    cancelRun: (runId: string) => Promise<IPCResponse<void>>
+    listRuns: (filter?: RunFilter) => Promise<IPCResponse<WorkflowRunSummary[]>>
+    confirmStep: (runId: string, decision: 'confirm' | 'skip' | 'cancel') => Promise<IPCResponse<void>>
+    onConfirmationRequired: (callback: (request: WorkflowConfirmationRequest) => void) => () => void
   }
   
   // Event listeners (for future use)
@@ -668,6 +732,25 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   // QuickSettings operations (TASK034)
   IPC_CHANNELS.QUICK_SETTINGS_GET,
   IPC_CHANNELS.QUICK_SETTINGS_UPDATE,
+  // Prompt Library operations (TASK035)
+  IPC_CHANNELS.PROMPT_LIBRARY_LIST_ALL,
+  IPC_CHANNELS.PROMPT_LIBRARY_READ,
+  IPC_CHANNELS.PROMPT_LIBRARY_DERIVE_USER_COPY,
+  IPC_CHANNELS.PROMPT_LIBRARY_RESET_USER_OVERRIDE,
+  IPC_CHANNELS.PROMPT_LIBRARY_VALIDATE,
+  IPC_CHANNELS.PROMPT_LIBRARY_ESTIMATE_TOKENS,
+  // Sub-agent operations (TASK038)
+  IPC_CHANNELS.SUB_AGENT_LIST,
+  IPC_CHANNELS.SUB_AGENT_CREATE,
+  IPC_CHANNELS.SUB_AGENT_TRACE,
+  // Workflow operations (TASK039)
+  IPC_CHANNELS.WORKFLOW_LIST,
+  IPC_CHANNELS.WORKFLOW_TRIGGER_MANUAL,
+  IPC_CHANNELS.WORKFLOW_GET_RUN,
+  IPC_CHANNELS.WORKFLOW_CANCEL_RUN,
+  IPC_CHANNELS.WORKFLOW_LIST_RUNS,
+  IPC_CHANNELS.WORKFLOW_CONFIRMATION_REQUIRED,
+  IPC_CHANNELS.WORKFLOW_CONFIRM_STEP,
 ]
 
 /**
@@ -1050,6 +1133,48 @@ const api: ElectronAPI = {
 
     skillSearch: async (params: SkillSearchParams) => {
       return await safeInvoke<SkillSummary[]>(IPC_CHANNELS.AI_SKILL_SEARCH, params)
+    },
+
+    skillGet: async (skillId: string) => {
+      return await safeInvoke<SkillV2 | null>(IPC_CHANNELS.AI_SKILL_GET, skillId)
+    },
+
+    skillCreate: async (template: SkillTemplate) => {
+      return await safeInvoke<{ skillId: string; path: string }>(IPC_CHANNELS.AI_SKILL_CREATE, template)
+    },
+
+    skillValidate: async (skillId: string) => {
+      return await safeInvoke<SkillValidationResultType>(IPC_CHANNELS.AI_SKILL_VALIDATE, skillId)
+    },
+
+    skillDelete: async (skillId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.AI_SKILL_DELETE, skillId)
+    },
+
+    skillExport: async (skillId: string) => {
+      return await safeInvoke<{ bundlePath: string }>(IPC_CHANNELS.AI_SKILL_EXPORT, skillId)
+    },
+
+    skillImport: async (bundlePath: string) => {
+      return await safeInvoke<{ skillId: string }>(IPC_CHANNELS.AI_SKILL_IMPORT, bundlePath)
+    },
+
+    skillTestRun: async (skillId: string, userInput: string) => {
+      return await safeInvoke<SkillResult>(IPC_CHANNELS.AI_SKILL_TEST_RUN, skillId, userInput)
+    },
+  },
+
+  slashCommand: {
+    parse: async (input: string) => {
+      return await safeInvoke<ParsedCommand | null>(IPC_CHANNELS.COMMAND_PARSE_SLASH, input)
+    },
+
+    create: async (template: SlashCommandTemplate) => {
+      return await safeInvoke<{ commandId: string }>(IPC_CHANNELS.COMMAND_CREATE_SLASH, template)
+    },
+
+    getSuggestions: async (partial: string) => {
+      return await safeInvoke<CommandSuggestion[]>(IPC_CHANNELS.COMMAND_GET_SUGGESTIONS, partial)
     },
   },
 
@@ -1599,6 +1724,72 @@ const api: ElectronAPI = {
     },
     update: async (patch: Partial<QuickSettingsStateShared>) => {
       return await safeInvoke<void>(IPC_CHANNELS.QUICK_SETTINGS_UPDATE, patch)
+    },
+  },
+
+  // Prompt Library operations (TASK035)
+  promptLibrary: {
+    listAll: async () => {
+      return await safeInvoke<PromptMetadata[]>(IPC_CHANNELS.PROMPT_LIBRARY_LIST_ALL)
+    },
+    read: async (id: string) => {
+      return await safeInvoke<PromptContent>(IPC_CHANNELS.PROMPT_LIBRARY_READ, id)
+    },
+    deriveUserCopy: async (id: string) => {
+      return await safeInvoke<{ userPath: string }>(IPC_CHANNELS.PROMPT_LIBRARY_DERIVE_USER_COPY, id)
+    },
+    resetUserOverride: async (id: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PROMPT_LIBRARY_RESET_USER_OVERRIDE, id)
+    },
+    validate: async (id: string, content: string) => {
+      return await safeInvoke<PromptValidationResult>(IPC_CHANNELS.PROMPT_LIBRARY_VALIDATE, id, content)
+    },
+    estimateTokens: async (content: string) => {
+      return await safeInvoke<number>(IPC_CHANNELS.PROMPT_LIBRARY_ESTIMATE_TOKENS, content)
+    },
+  },
+
+  // Sub-agent operations (TASK038)
+  subAgent: {
+    list: async () => {
+      return await safeInvoke<SubAgentMetadata[]>(IPC_CHANNELS.SUB_AGENT_LIST)
+    },
+    create: async (template: SubAgentTemplate) => {
+      return await safeInvoke<{ agentId: string }>(IPC_CHANNELS.SUB_AGENT_CREATE, template)
+    },
+    trace: async (traceId: string) => {
+      return await safeInvoke<SubAgentTrace>(IPC_CHANNELS.SUB_AGENT_TRACE, traceId)
+    },
+  },
+
+  // Workflow operations (TASK039)
+  workflow: {
+    list: async () => {
+      return await safeInvoke<WorkflowDefinition[]>(IPC_CHANNELS.WORKFLOW_LIST)
+    },
+    triggerManual: async (workflowId: string, params: Record<string, unknown>) => {
+      return await safeInvoke<{ runId: string }>(IPC_CHANNELS.WORKFLOW_TRIGGER_MANUAL, workflowId, params)
+    },
+    getRun: async (runId: string) => {
+      return await safeInvoke<WorkflowRun | null>(IPC_CHANNELS.WORKFLOW_GET_RUN, runId)
+    },
+    cancelRun: async (runId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.WORKFLOW_CANCEL_RUN, runId)
+    },
+    listRuns: async (filter?: RunFilter) => {
+      return await safeInvoke<WorkflowRunSummary[]>(IPC_CHANNELS.WORKFLOW_LIST_RUNS, filter)
+    },
+    confirmStep: async (runId: string, decision: 'confirm' | 'skip' | 'cancel') => {
+      return await safeInvoke<void>(IPC_CHANNELS.WORKFLOW_CONFIRM_STEP, runId, decision)
+    },
+    onConfirmationRequired: (callback: (request: WorkflowConfirmationRequest) => void) => {
+      const subscription = (_event: IpcRendererEvent, request: WorkflowConfirmationRequest) => {
+        callback(request)
+      }
+      ipcRenderer.on(IPC_CHANNELS.WORKFLOW_CONFIRMATION_REQUIRED, subscription)
+      return () => {
+        ipcRenderer.off(IPC_CHANNELS.WORKFLOW_CONFIRMATION_REQUIRED, subscription)
+      }
     },
   },
   

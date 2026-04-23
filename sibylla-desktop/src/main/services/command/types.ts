@@ -12,6 +12,10 @@ export interface Command {
   }
   predicate?: () => boolean | Promise<boolean>
   execute: () => Promise<void> | void
+  promptTemplate?: string
+  params?: import('../../../shared/types').CommandParam[]
+  isSlashCommand?: boolean
+  aliases?: string[]
 }
 
 export interface CommandExecutionRecord {

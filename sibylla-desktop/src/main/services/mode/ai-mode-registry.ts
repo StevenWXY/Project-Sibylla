@@ -30,6 +30,7 @@ const BUILTIN_MODES: AiModeDefinition[] = [
     inputPlaceholder: '输入消息...',
     builtin: true,
     minModelCapability: 'basic',
+    promptFileId: 'modes.free',
   },
   {
     id: 'plan',
@@ -46,6 +47,7 @@ const BUILTIN_MODES: AiModeDefinition[] = [
     inputPlaceholder: '描述你的目标，我将产出执行计划...',
     builtin: true,
     minModelCapability: 'advanced',
+    promptFileId: 'modes.plan',
   },
   {
     id: 'analyze',
@@ -62,6 +64,7 @@ const BUILTIN_MODES: AiModeDefinition[] = [
     inputPlaceholder: '输入分析对象，我将进行多维度分析...',
     builtin: true,
     minModelCapability: 'basic',
+    promptFileId: 'modes.analyze',
   },
   {
     id: 'review',
@@ -77,6 +80,7 @@ const BUILTIN_MODES: AiModeDefinition[] = [
     inputPlaceholder: '提交待审查内容，我将产出审查报告...',
     builtin: true,
     minModelCapability: 'basic',
+    promptFileId: 'modes.review',
   },
   {
     id: 'write',
@@ -92,6 +96,7 @@ const BUILTIN_MODES: AiModeDefinition[] = [
     inputPlaceholder: '描述写作需求，我将直接产出成稿...',
     builtin: true,
     minModelCapability: 'basic',
+    promptFileId: 'modes.write',
   },
 ]
 
@@ -101,6 +106,7 @@ export class AiModeRegistry {
   private readonly configManager: ConfigManagerLike
   private readonly tracer: Tracer
   private readonly eventBus: AppEventBus
+  private promptComposer: import('../context-engine/PromptComposer').PromptComposer | null = null
 
   constructor(
     configManager: ConfigManagerLike,
@@ -195,6 +201,20 @@ export class AiModeRegistry {
     variables?: Record<string, string>,
   ): string {
     const mode = this.modes.get(aiModeId) ?? this.modes.get('free')!
+
+    if (mode.promptFileId && this.promptComposer) {
+      const cached = this.promptComposer.getCachedPart(mode.promptFileId)
+      if (cached) {
+        let body = cached.path
+        if (variables) {
+          for (const [key, value] of Object.entries(variables)) {
+            body = body.replaceAll(`{{${key}}}`, value)
+          }
+        }
+        return body
+      }
+    }
+
     let prefix = mode.systemPromptPrefix
 
     if (variables) {
@@ -226,6 +246,10 @@ export class AiModeRegistry {
     }
 
     return evaluator.evaluate(output, context)
+  }
+
+  setPromptComposer(composer: import('../context-engine/PromptComposer').PromptComposer): void {
+    this.promptComposer = composer
   }
 
   dispose(): void {

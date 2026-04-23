@@ -9,6 +9,7 @@
  */
 
 import type { ToolDefinition, ToolScopeManager } from './tool-scope'
+import { SPAWN_SUB_AGENT_TOOL } from './sub-agent-adapter'
 
 // ─── Tool Definition Constants ───
 
@@ -192,9 +193,9 @@ export function registerBuiltInTools(manager: ToolScopeManager): void {
   manager.registerTool(MEMORY_QUERY_TOOL)
   manager.registerTool(TASK_CREATE_TOOL)
   manager.registerTool(GRAPH_TRAVERSE_TOOL)
+  manager.registerTool(SPAWN_SUB_AGENT_TOOL)
 }
 
-// Export individual tools for testing
 export {
   REFERENCE_FILE_TOOL,
   DIFF_WRITE_TOOL,

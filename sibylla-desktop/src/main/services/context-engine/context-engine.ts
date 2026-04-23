@@ -6,18 +6,21 @@ import type {
   ContextLayerType,
   ContextSource,
   Skill,
-} from '../../shared/types'
-import type { HarnessMode } from '../../shared/types'
-import type { AiModeDefinition, OutputConstraints } from './mode/types'
-import { FileManager } from './file-manager'
-import { MemoryManager } from './memory-manager'
-import type { SkillEngine } from './skill-engine'
-import { logger } from '../utils/logger'
-import type { Tracer } from './trace/tracer'
-import type { PlanManager } from './plan/plan-manager'
-import type { ParsedPlan } from './plan/types'
-import type { HandbookService } from './handbook/handbook-service'
-import type { AiModeRegistry } from './mode/ai-mode-registry'
+} from '../../../shared/types'
+import type { HarnessMode } from '../../../shared/types'
+import type { AiModeDefinition, OutputConstraints } from '../mode/types'
+import { FileManager } from '../file-manager'
+import { MemoryManager } from '../memory-manager'
+import type { SkillEngine } from '../skill-engine'
+import { logger } from '../../utils/logger'
+import type { Tracer } from '../trace/tracer'
+import type { PlanManager } from '../plan/plan-manager'
+import type { ParsedPlan } from '../plan/types'
+import type { HandbookService } from '../handbook/handbook-service'
+import type { AiModeRegistry } from '../mode/ai-mode-registry'
+import { estimateTokens } from './token-utils'
+import type { PromptComposer } from './PromptComposer'
+import type { PromptPart } from '../../../shared/types'
 
 export interface ContextAssemblyRequest {
   userMessage: string
@@ -29,7 +32,7 @@ export interface ContextAssemblyRequest {
 /**
  * Guide placeholder interface — upgraded to full Guide type in TASK019.
  */
-export type GuidePlaceholder = import('./harness/guides/types').Guide
+export type GuidePlaceholder = import('../harness/guides/types').Guide
 
 export interface HarnessContextRequest extends ContextAssemblyRequest {
   mode: HarnessMode
@@ -51,6 +54,7 @@ const DEFAULT_CONFIG: Required<ContextEngineConfig> = {
   alwaysLoadFiles: ['CLAUDE.md'],
 }
 
+/** @deprecated Use PromptComposer with core/identity.md instead (TASK035) */
 const SYSTEM_PROMPT_BASE =
   '你是 Sibylla 团队协作助手。回答要直接、可执行、中文优先。\n' +
   '请在必要时引用上下文，不要伪造不存在的文件。'
@@ -72,8 +76,6 @@ const EXCLUDED_DIRECTORIES = new Set([
 
 const TRUNCATION_MARKER = '\n\n[... truncated due to token budget]'
 
-const CJK_REGEX = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/g
-
 export class ContextEngine {
   private readonly config: Required<ContextEngineConfig>
   private readonly fileManager: FileManager
@@ -83,6 +85,7 @@ export class ContextEngine {
   private planManager: PlanManager | null = null
   private handbookService: HandbookService | null = null
   private aiModeRegistry: AiModeRegistry | null = null
+  private promptComposer: PromptComposer | null = null
 
   constructor(
     fileManager: FileManager,
@@ -110,6 +113,10 @@ export class ContextEngine {
 
   setAiModeRegistry(registry: AiModeRegistry): void {
     this.aiModeRegistry = registry
+  }
+
+  setPromptComposer(composer: PromptComposer): void {
+    this.promptComposer = composer
   }
 
   async assembleContext(request: ContextAssemblyRequest): Promise<AssembledContext> {
@@ -197,7 +204,31 @@ export class ContextEngine {
       skillRefs: request.skillRefs,
     })
 
-    if (request.aiMode) {
+    let promptParts: PromptPart[] | undefined
+
+    if (this.promptComposer && request.aiMode) {
+      const composed = await this.promptComposer.compose({
+        mode: request.aiMode.id,
+        tools: base.toolDefinitions?.map((t) => ({ id: t.id })) ?? [],
+        userPreferences: {},
+        workspaceInfo: {
+          name: '',
+          rootPath: this.fileManager.getWorkspaceRoot(),
+          fileCount: 0,
+        },
+        maxTokens: base.budgetTotal,
+      })
+      promptParts = composed.parts
+
+      base = {
+        ...base,
+        systemPrompt: composed.text + '\n\n' + base.systemPrompt.replace(
+          base.systemPrompt.split('\n\n---\n\n')[0] ?? '',
+          '',
+        ).trimStart(),
+        totalTokens: base.totalTokens + composed.estimatedTokens,
+      }
+    } else if (request.aiMode) {
       let prefix: string
       if (this.aiModeRegistry) {
         prefix = this.aiModeRegistry.buildSystemPromptPrefix(request.aiMode.id, {
@@ -248,10 +279,11 @@ export class ContextEngine {
         ...base,
         systemPrompt: `${guideContent}\n\n${base.systemPrompt}`,
         totalTokens: base.totalTokens + this.estimateTokens(guideContent),
+        promptParts,
       }
     }
 
-    return base
+    return { ...base, promptParts }
   }
 
   extractPlanReferences(message: string): string[] {
@@ -665,10 +697,7 @@ export class ContextEngine {
   }
 
   private estimateTokens(text: string): number {
-    CJK_REGEX.lastIndex = 0
-    const cjkCount = (text.match(CJK_REGEX) ?? []).length
-    const nonCjkLength = text.length - cjkCount
-    return Math.ceil(nonCjkLength / 4) + Math.ceil(cjkCount / 2)
+    return estimateTokens(text)
   }
 
   private truncate(text: string, maxChars: number): string {

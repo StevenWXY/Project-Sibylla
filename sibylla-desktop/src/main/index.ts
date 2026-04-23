@@ -562,7 +562,28 @@ if (!gotTheLock) {
           registerSystemCommands(commandRegistry, appEventBus)
 
           registerPromptOptimizerHandlers(ipcMain, promptOptimizer)
-          registerCommandHandlers(ipcMain, commandRegistry)
+
+          // ── TASK037: Initialize SlashCommandLoader + Parser ──
+          const { SlashCommandLoader } = await import('./services/command/SlashCommandLoader')
+          const { SlashCommandParser } = await import('./services/command/SlashCommandParser')
+
+          const slashCommandLoader = new SlashCommandLoader(commandRegistry, fileManager)
+          const slashCommandParser = new SlashCommandParser(commandRegistry)
+
+          const slashCommandsPath = app.isPackaged
+            ? path.join(process.resourcesPath, 'resources', 'slash-commands')
+            : path.join(app.getAppPath(), 'resources', 'slash-commands')
+          try {
+            await slashCommandLoader.loadBuiltin(slashCommandsPath)
+          } catch (err) {
+            logger.warn('[Main] Failed to load builtin slash commands', {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
+
+          // Register command handlers with slash parser support
+          const { registerCommandHandlers: registerCommandHandlersFinal } = await import('./ipc/handlers/command')
+          registerCommandHandlersFinal(ipcMain, commandRegistry, slashCommandParser)
 
           // ── TASK033: Initialize HandbookService + DataSourceRegistry ──
           const { HandbookService } = await import('./services/handbook/handbook-service')
@@ -623,6 +644,27 @@ if (!gotTheLock) {
             { id: 'gpt-4o-mini', displayName: 'GPT-4o Mini' },
             { id: 'claude-haiku-3-20240307', displayName: 'Claude 3 Haiku' },
           ])
+
+          // ── TASK035: Initialize PromptLoader + PromptRegistry + PromptComposer ──
+          const { PromptLoader } = await import('./services/context-engine/PromptLoader')
+          const { PromptRegistry } = await import('./services/context-engine/PromptRegistry')
+          const { PromptComposer } = await import('./services/context-engine/PromptComposer')
+          const { registerPromptLibraryHandlers } = await import('./ipc/handlers/prompt-library')
+          const { estimateTokens } = await import('./services/context-engine/token-utils')
+
+          const promptResourcesPath = app.isPackaged
+            ? path.join(process.resourcesPath, 'resources', 'prompts')
+            : path.join(app.getAppPath(), 'resources', 'prompts')
+          const promptUserOverridePath = path.join(workspacePath, '.sibylla', 'prompts-local')
+
+          const promptLoader = new PromptLoader(promptResourcesPath, promptUserOverridePath, estimateTokens)
+          const promptRegistry = new PromptRegistry(promptLoader)
+          await promptRegistry.initialize()
+          const promptComposer = new PromptComposer(promptLoader, promptRegistry, estimateTokens)
+
+          harnessContextEngine.setPromptComposer(promptComposer)
+          aiModeRegistry.setPromptComposer(promptComposer)
+          registerPromptLibraryHandlers(ipcMain, promptLoader, promptRegistry, promptComposer, () => workspacePath)
 
           // Register trace/performance event push to renderer
           const forwardToRenderer = (eventName: string, channel: string) => {

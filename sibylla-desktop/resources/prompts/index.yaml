@@ -1,0 +1,65 @@
+version: 1
+prompts:
+  - id: core.identity
+    scope: core
+    file: core/identity.md
+  - id: core.principles
+    scope: core
+    file: core/principles.md
+  - id: core.tone
+    scope: core
+    file: core/tone.md
+  - id: modes.free
+    scope: mode
+    file: modes/free.md
+  - id: modes.plan
+    scope: mode
+    file: modes/plan.md
+  - id: modes.analyze
+    scope: mode
+    file: modes/analyze.md
+  - id: modes.review
+    scope: mode
+    file: modes/review.md
+  - id: modes.write
+    scope: mode
+    file: modes/write.md
+  - id: tools.read-file
+    scope: tool
+    file: tools/read-file.md
+  - id: tools.write-file
+    scope: tool
+    file: tools/write-file.md
+  - id: tools.edit-file
+    scope: tool
+    file: tools/edit-file.md
+  - id: tools.search
+    scope: tool
+    file: tools/search.md
+  - id: tools.list-files
+    scope: tool
+    file: tools/list-files.md
+  - id: contexts.workspace-context
+    scope: context
+    file: contexts/workspace-context.md
+  - id: contexts.user-profile
+    scope: context
+    file: contexts/user-profile.md
+  - id: contexts.time-context
+    scope: context
+    file: contexts/time-context.md
+  - id: agents.pr-reviewer
+    scope: agent
+    file: agents/pr-reviewer.md
+  - id: agents.doc-summarizer
+    scope: agent
+    file: agents/doc-summarizer.md
+  - id: agents.meeting-note-writer
+    scope: agent
+    file: agents/meeting-note-writer.md
+  - id: agents.spec-reviewer
+    scope: agent
+    file: agents/spec-reviewer.md
+  - id: agents.memory-curator
+    scope: agent
+    file: agents/memory-curator.md

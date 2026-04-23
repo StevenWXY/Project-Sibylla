@@ -1,21 +1,19 @@
+import * as path from 'path'
 import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from 'electron'
 import { IpcHandler } from '../handler'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
-  AIChatRequest,
-  AIChatResponse,
-  AIEmbedRequest,
-  AIEmbedResponse,
-  AIStreamRequest,
-  AIStreamChunk,
-  AIStreamEnd,
-  AIStreamError,
   ContextFileInfo,
   SkillSearchParams,
   SkillSummary,
+  SkillV2,
+  SkillTemplate,
+  SkillValidationResult,
+  SkillResult,
   WorkspaceInfo,
   DegradationWarning,
 } from '../../../shared/types'
+import { estimateTokens as sharedEstimateTokens } from '../../services/context-engine/token-utils'
 import { logger } from '../../utils/logger'
 import { AiGatewayClient } from '../../services/ai-gateway-client'
 import { MemoryManager } from '../../services/memory-manager'
@@ -25,6 +23,10 @@ import { WorkspaceManager } from '../../services/workspace-manager'
 import { FileManager } from '../../services/file-manager'
 import { ContextEngine, type ContextAssemblyRequest } from '../../services/context-engine'
 import { SkillEngine } from '../../services/skill-engine'
+import { SkillRegistry } from '../../services/skill-system/SkillRegistry'
+import { SkillLoader } from '../../services/skill-system/SkillLoader'
+import { SkillValidator } from '../../services/skill-system/SkillValidator'
+import { SkillExecutor } from '../../services/skill-system/SkillExecutor'
 import type { HarnessOrchestrator } from '../../services/harness/orchestrator'
 import type { ProgressLedger } from '../../services/progress/progress-ledger'
 import type { AiModeRegistry } from '../../services/mode/ai-mode-registry'
@@ -38,6 +40,9 @@ export class AIHandler extends IpcHandler {
   private readonly activeStreams = new Map<string, AbortController>()
   private readonly contextEngine: ContextEngine
   private readonly skillEngine: SkillEngine
+  private skillRegistry: SkillRegistry | null = null
+  private skillValidator: SkillValidator | null = null
+  private skillExecutor: SkillExecutor | null = null
   private streamListener: ((...args: unknown[]) => void) | null = null
   private abortListener: ((...args: unknown[]) => void) | null = null
   private harnessOrchestrator: HarnessOrchestrator | null = null
@@ -87,6 +92,13 @@ export class AIHandler extends IpcHandler {
     ipcMain.handle(IPC_CHANNELS.AI_CONTEXT_FILES, this.safeHandle(this.handleContextFiles.bind(this)))
     ipcMain.handle(IPC_CHANNELS.AI_SKILL_LIST, this.safeHandle(this.handleSkillList.bind(this)))
     ipcMain.handle(IPC_CHANNELS.AI_SKILL_SEARCH, this.safeHandle(this.handleSkillSearch.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_GET, this.safeHandle(this.handleSkillGet.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_CREATE, this.safeHandle(this.handleSkillCreate.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_VALIDATE, this.safeHandle(this.handleSkillValidate.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_DELETE, this.safeHandle(this.handleSkillDelete.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_EXPORT, this.safeHandle(this.handleSkillExport.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_IMPORT, this.safeHandle(this.handleSkillImport.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_TEST_RUN, this.safeHandle(this.handleSkillTestRun.bind(this)))
     logger.info('[AIHandler] All handlers registered')
   }
 
@@ -104,6 +116,13 @@ export class AIHandler extends IpcHandler {
     ipcMain.removeHandler(IPC_CHANNELS.AI_CONTEXT_FILES)
     ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_LIST)
     ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_SEARCH)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_GET)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_CREATE)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_VALIDATE)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_DELETE)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_EXPORT)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_IMPORT)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_TEST_RUN)
     for (const [, controller] of this.activeStreams) {
       controller.abort()
     }
@@ -450,6 +469,9 @@ export class AIHandler extends IpcHandler {
   }
 
   private async handleSkillList(): Promise<SkillSummary[]> {
+    if (this.skillRegistry) {
+      return this.skillRegistry.getSkillSummaries()
+    }
     return this.skillEngine.getSkillSummaries()
   }
 
@@ -457,7 +479,169 @@ export class AIHandler extends IpcHandler {
     _event: IpcMainInvokeEvent,
     params: SkillSearchParams
   ): Promise<SkillSummary[]> {
+    if (this.skillRegistry) {
+      const results = this.skillRegistry.search(params.query, params.limit)
+      return results.map((s) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        scenarios: s.scenarios,
+      }))
+    }
     return this.skillEngine.searchSkills(params.query, params.limit)
+  }
+
+  private async handleSkillGet(
+    _event: IpcMainInvokeEvent,
+    skillId: string,
+  ): Promise<SkillV2 | null> {
+    if (!this.skillRegistry) return null
+    return this.skillRegistry.get(skillId) ?? null
+  }
+
+  private static isValidSkillId(id: string): boolean {
+    return /^[a-zA-Z0-9][a-zA-Z0-9_-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9_-]*)*$/.test(id)
+  }
+
+  private async handleSkillCreate(
+    _event: IpcMainInvokeEvent,
+    template: SkillTemplate,
+  ): Promise<{ skillId: string; path: string }> {
+    const workspacePath = this.workspaceManager.getWorkspacePath()
+    if (!workspacePath) throw new Error('No workspace open')
+
+    if (!AIHandler.isValidSkillId(template.id)) {
+      throw new Error(`Invalid skill id: "${template.id}". Only alphanumeric, hyphens, underscores, and single slashes are allowed.`)
+    }
+
+    const skillDir = `.sibylla/skills/${template.id}`
+    const indexPath = `${skillDir}/_index.md`
+    const promptPath = `${skillDir}/prompt.md`
+
+    const indexContent = [
+      '---',
+      `id: ${template.id}`,
+      `version: 1.0.0`,
+      `name: ${template.name}`,
+      `description: ${template.description}`,
+      `category: general`,
+      `tags: []`,
+      `scope: public`,
+      '---',
+      '',
+    ].join('\n')
+
+    await this.fileManager.writeFile(indexPath, indexContent)
+    await this.fileManager.writeFile(promptPath, template.prompt)
+
+    if (template.tools && template.tools.length > 0) {
+      const toolsContent = [
+        'allowed_tools:',
+        ...template.tools.map((t) => `  - ${t}`),
+      ].join('\n')
+      const toolsPath = `${skillDir}/tools.yaml`
+      await this.fileManager.writeFile(toolsPath, toolsContent)
+    }
+
+    if (this.skillRegistry) {
+      await this.skillRegistry.discoverAll()
+    }
+
+    return { skillId: template.id, path: skillDir }
+  }
+
+  private async handleSkillValidate(
+    _event: IpcMainInvokeEvent,
+    skillId: string,
+  ): Promise<SkillValidationResult> {
+    if (!this.skillValidator) {
+      return { valid: false, errors: ['SkillValidator not initialized'], warnings: [] }
+    }
+
+    const workspacePath = this.workspaceManager.getWorkspacePath()
+    if (!workspacePath) {
+      return { valid: false, errors: ['No workspace open'], warnings: [] }
+    }
+
+    const skill = this.skillRegistry?.get(skillId)
+    if (!skill) {
+      return { valid: false, errors: [`Skill not found: ${skillId}`], warnings: [] }
+    }
+
+    return await this.skillValidator.validateSkillDir(skill.filePath)
+  }
+
+  private async handleSkillDelete(
+    _event: IpcMainInvokeEvent,
+    skillId: string,
+  ): Promise<void> {
+    const skill = this.skillRegistry?.get(skillId)
+    if (!skill) throw new Error(`Skill not found: ${skillId}`)
+    if (skill.source === 'builtin') throw new Error('Cannot delete builtin skills')
+
+    throw new Error('Skill deletion requires confirmation (not yet implemented in IPC)')
+  }
+
+  private async handleSkillExport(
+    _event: IpcMainInvokeEvent,
+    skillId: string,
+  ): Promise<{ bundlePath: string }> {
+    const skill = this.skillRegistry?.get(skillId)
+    if (!skill) throw new Error(`Skill not found: ${skillId}`)
+
+    logger.info('[AIHandler] Skill export requested', { skillId })
+    throw new Error('Skill export not yet implemented')
+  }
+
+  private async handleSkillImport(
+    _event: IpcMainInvokeEvent,
+    bundlePath: string,
+  ): Promise<{ skillId: string }> {
+    if (!bundlePath.endsWith('.sibylla-skill')) {
+      throw new Error('Invalid bundle file: must be a .sibylla-skill file')
+    }
+    if (bundlePath.includes('..') || path.isAbsolute(bundlePath)) {
+      throw new Error('Invalid bundle path')
+    }
+    logger.info('[AIHandler] Skill import requested', { bundlePath })
+    throw new Error('Skill import not yet implemented')
+  }
+
+  private async handleSkillTestRun(
+    _event: IpcMainInvokeEvent,
+    skillId: string,
+    userInput: string,
+  ): Promise<SkillResult> {
+    if (!this.skillRegistry || !this.skillExecutor) {
+      return { success: false, tokensUsed: 0, toolCallsCount: 0, errors: ['Skill system not initialized'] }
+    }
+
+    const skill = this.skillRegistry.get(skillId)
+    if (!skill) {
+      return { success: false, tokensUsed: 0, toolCallsCount: 0, errors: [`Skill not found: ${skillId}`] }
+    }
+
+    try {
+      const plan = await this.skillExecutor.execute({
+        skill,
+        userInput,
+        parentTraceId: `test-${Date.now()}`,
+      })
+
+      return {
+        success: true,
+        tokensUsed: sharedEstimateTokens(plan.additionalPromptParts.join('\n')),
+        toolCallsCount: 0,
+        errors: [],
+      }
+    } catch (error) {
+      return {
+        success: false,
+        tokensUsed: 0,
+        toolCallsCount: 0,
+        errors: [error instanceof Error ? error.message : String(error)],
+      }
+    }
   }
 
   private async handleChatLikeRequest(
@@ -659,6 +843,25 @@ export class AIHandler extends IpcHandler {
       logger.info('[AIHandler] SkillEngine initialized')
     } catch (error) {
       logger.warn('[AIHandler] SkillEngine initialization failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
+    try {
+      const tokenEstimator = sharedEstimateTokens
+
+      const loader = new SkillLoader(this.fileManager, tokenEstimator)
+      this.skillRegistry = new SkillRegistry(loader, this.fileManager)
+      await this.skillRegistry.discoverAll()
+
+      this.skillValidator = new SkillValidator(this.fileManager, [], tokenEstimator)
+      this.skillExecutor = new SkillExecutor(this.fileManager, tokenEstimator)
+
+      logger.info('[AIHandler] Skill v2 system initialized', {
+        skillCount: this.skillRegistry.getAll().length,
+      })
+    } catch (error) {
+      logger.warn('[AIHandler] Skill v2 system initialization failed', {
         error: error instanceof Error ? error.message : String(error),
       })
     }

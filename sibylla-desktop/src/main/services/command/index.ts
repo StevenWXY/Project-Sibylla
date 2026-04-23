@@ -1,6 +1,8 @@
 export type { Command, CommandExecutionRecord } from './types'
 
 export { CommandRegistry } from './command-registry'
+export { SlashCommandParser } from './SlashCommandParser'
+export type { MissingParamInfo } from './SlashCommandParser'
 
 export { registerModeCommands } from './builtin-commands/mode-commands'
 export { registerConversationCommands } from './builtin-commands/conversation-commands'

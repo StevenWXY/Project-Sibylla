@@ -223,7 +223,7 @@ export class AiGatewayClient {
   }
 }
 
-export type AiGatewaySessionRole = 'generator' | 'evaluator' | 'memory-extractor' | 'memory-compressor' | 'optimizer'
+export type AiGatewaySessionRole = 'generator' | 'evaluator' | 'memory-extractor' | 'memory-compressor' | 'optimizer' | 'sub-agent'
 
 export class AiGatewaySession {
   readonly sessionId: string

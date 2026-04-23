@@ -1,0 +1,64 @@
+# PRD 审查流程
+# 当新 PRD 文档被创建时，自动执行格式检查 → 内容审查 → 生成摘要 → 通知团队
+id: prd-review-flow
+version: 1.0.0
+name: PRD 审查流程
+description: 新 PRD 文档的自动审查与摘要
+scope: public
+
+# 触发器：PRD 文件创建 + 手动触发
+triggers:
+  - type: file_created
+    pattern: "specs/prds/**/*.md"
+  - type: manual
+    name: 手动审查
+
+# 输入参数
+params:
+  - name: file_path
+    type: string
+    required: true
+  - name: strictness
+    type: string
+    enum: [loose, medium, strict]
+    default: medium
+
+# 执行步骤
+steps:
+  - id: format_check
+    name: 检查文档格式
+    skill: spec-lint
+    input:
+      target: ${{ params.file_path }}
+    on_failure: stop
+
+  - id: content_review
+    name: 内容审查
+    sub_agent: spec-reviewer
+    input:
+      file: ${{ params.file_path }}
+      strictness: ${{ params.strictness }}
+    on_failure: continue
+    timeout: 300
+
+  - id: generate_summary
+    name: 生成摘要
+    skill: doc-summarize
+    input:
+      target: ${{ params.file_path }}
+    save_output_to: ${{ params.file_path }}.summary.md
+    requires_user_confirm: true
+
+  - id: notify_team
+    name: 通知团队
+    when: ${{ steps.content_review.output.findings.length > 0 }}
+    action: internal_notification
+    input:
+      title: "PRD 需要审查：${{ params.file_path }}"
+      body: ${{ steps.content_review.output.summary }}
+      channel: workspace
+
+# 失败策略
+on_workflow_failure:
+  notify_user: true
+  rollback: false

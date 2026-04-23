@@ -390,6 +390,54 @@ export const IPC_CHANNELS = {
   // QuickSettings operations (TASK034)
   QUICK_SETTINGS_GET: 'quickSettings:get',
   QUICK_SETTINGS_UPDATE: 'quickSettings:update',
+
+  // Prompt Library operations (TASK035)
+  PROMPT_LIBRARY_LIST_ALL: 'prompt-library:list-all',
+  PROMPT_LIBRARY_READ: 'prompt-library:read',
+  PROMPT_LIBRARY_DERIVE_USER_COPY: 'prompt-library:derive-user-copy',
+  PROMPT_LIBRARY_RESET_USER_OVERRIDE: 'prompt-library:reset-user-override',
+  PROMPT_LIBRARY_VALIDATE: 'prompt-library:validate',
+  PROMPT_LIBRARY_ESTIMATE_TOKENS: 'prompt-library:estimate-tokens',
+
+  // Hook operations (TASK036)
+  HOOK_LIST: 'hook:list',
+  HOOK_ENABLE: 'hook:enable',
+  HOOK_DISABLE: 'hook:disable',
+  HOOK_TRACE: 'hook:trace',
+
+  // Compact push events (TASK036)
+  COMPACT_STARTED: 'compact:started',
+  COMPACT_COMPLETED: 'compact:completed',
+  COMPACT_FAILED: 'compact:failed',
+
+  // Skill v2 operations (TASK037)
+  AI_SKILL_GET: 'ai:skill:get',
+  AI_SKILL_CREATE: 'ai:skill:create',
+  AI_SKILL_EDIT: 'ai:skill:edit',
+  AI_SKILL_VALIDATE: 'ai:skill:validate',
+  AI_SKILL_DELETE: 'ai:skill:delete',
+  AI_SKILL_EXPORT: 'ai:skill:export',
+  AI_SKILL_IMPORT: 'ai:skill:import',
+  AI_SKILL_TEST_RUN: 'ai:skill:test-run',
+
+  // Slash Command operations (TASK037)
+  COMMAND_PARSE_SLASH: 'command:parse-slash',
+  COMMAND_CREATE_SLASH: 'command:create-slash',
+  COMMAND_GET_SUGGESTIONS: 'command:get-suggestions',
+
+  // Sub-agent operations (TASK038)
+  SUB_AGENT_LIST: 'sub-agent:list',
+  SUB_AGENT_CREATE: 'sub-agent:create',
+  SUB_AGENT_TRACE: 'sub-agent:trace',
+
+  // Workflow operations (TASK039)
+  WORKFLOW_LIST: 'workflow:list',
+  WORKFLOW_TRIGGER_MANUAL: 'workflow:trigger-manual',
+  WORKFLOW_GET_RUN: 'workflow:get-run',
+  WORKFLOW_CANCEL_RUN: 'workflow:cancel-run',
+  WORKFLOW_LIST_RUNS: 'workflow:list-runs',
+  WORKFLOW_CONFIRMATION_REQUIRED: 'workflow:confirmation-required',
+  WORKFLOW_CONFIRM_STEP: 'workflow:confirm-step',
 } as const
 
 /**
@@ -663,6 +711,49 @@ export interface IPCChannelMap {
   // QuickSettings operations (TASK034)
   [IPC_CHANNELS.QUICK_SETTINGS_GET]: { params: []; return: QuickSettingsStateShared }
   [IPC_CHANNELS.QUICK_SETTINGS_UPDATE]: { params: [patch: Partial<QuickSettingsStateShared>]; return: void }
+
+  // Prompt Library operations (TASK035)
+  [IPC_CHANNELS.PROMPT_LIBRARY_LIST_ALL]: { params: []; return: PromptMetadata[] }
+  [IPC_CHANNELS.PROMPT_LIBRARY_READ]: { params: [id: string]; return: PromptContent }
+  [IPC_CHANNELS.PROMPT_LIBRARY_DERIVE_USER_COPY]: { params: [id: string]; return: { userPath: string } }
+  [IPC_CHANNELS.PROMPT_LIBRARY_RESET_USER_OVERRIDE]: { params: [id: string]; return: void }
+  [IPC_CHANNELS.PROMPT_LIBRARY_VALIDATE]: { params: [id: string, content: string]; return: PromptValidationResult }
+  [IPC_CHANNELS.PROMPT_LIBRARY_ESTIMATE_TOKENS]: { params: [content: string]; return: number }
+
+  // Hook operations (TASK036)
+  [IPC_CHANNELS.HOOK_LIST]: { params: []; return: HookMetadataShared[] }
+  [IPC_CHANNELS.HOOK_ENABLE]: { params: [hookId: string]; return: void }
+  [IPC_CHANNELS.HOOK_DISABLE]: { params: [hookId: string]; return: void }
+  [IPC_CHANNELS.HOOK_TRACE]: { params: [traceId: string]; return: HookExecutionLogShared[] }
+
+  // Skill v2 operations (TASK037)
+  [IPC_CHANNELS.AI_SKILL_GET]: { params: [skillId: string]; return: SkillV2 | null }
+  [IPC_CHANNELS.AI_SKILL_CREATE]: { params: [template: SkillTemplate]; return: { skillId: string; path: string } }
+  [IPC_CHANNELS.AI_SKILL_EDIT]: { params: [skillId: string, updates: Partial<SkillTemplate>]; return: void }
+  [IPC_CHANNELS.AI_SKILL_VALIDATE]: { params: [skillId: string]; return: SkillValidationResult }
+  [IPC_CHANNELS.AI_SKILL_DELETE]: { params: [skillId: string]; return: void }
+  [IPC_CHANNELS.AI_SKILL_EXPORT]: { params: [skillId: string]; return: { bundlePath: string } }
+  [IPC_CHANNELS.AI_SKILL_IMPORT]: { params: [bundlePath: string]; return: { skillId: string } }
+  [IPC_CHANNELS.AI_SKILL_TEST_RUN]: { params: [skillId: string, userInput: string]; return: SkillResult }
+
+  // Slash Command operations (TASK037)
+  [IPC_CHANNELS.COMMAND_PARSE_SLASH]: { params: [input: string]; return: ParsedCommand | null }
+  [IPC_CHANNELS.COMMAND_CREATE_SLASH]: { params: [template: SlashCommandTemplate]; return: { commandId: string } }
+  [IPC_CHANNELS.COMMAND_GET_SUGGESTIONS]: { params: [partial: string]; return: CommandSuggestion[] }
+
+  // Sub-agent operations (TASK038)
+  [IPC_CHANNELS.SUB_AGENT_LIST]: { params: []; return: SubAgentMetadata[] }
+  [IPC_CHANNELS.SUB_AGENT_CREATE]: { params: [template: SubAgentTemplate]; return: { agentId: string } }
+  [IPC_CHANNELS.SUB_AGENT_TRACE]: { params: [traceId: string]; return: SubAgentTrace }
+
+  // Workflow operations (TASK039)
+  [IPC_CHANNELS.WORKFLOW_LIST]: { params: []; return: WorkflowDefinition[] }
+  [IPC_CHANNELS.WORKFLOW_TRIGGER_MANUAL]: { params: [workflowId: string, params: Record<string, unknown>]; return: { runId: string } }
+  [IPC_CHANNELS.WORKFLOW_GET_RUN]: { params: [runId: string]; return: WorkflowRun | null }
+  [IPC_CHANNELS.WORKFLOW_CANCEL_RUN]: { params: [runId: string]; return: void }
+  [IPC_CHANNELS.WORKFLOW_LIST_RUNS]: { params: [filter?: RunFilter]; return: WorkflowRunSummary[] }
+  [IPC_CHANNELS.WORKFLOW_CONFIRM_STEP]: { params: [runId: string, decision: 'confirm' | 'skip' | 'cancel']; return: void }
+  // WORKFLOW_CONFIRMATION_REQUIRED is Main → Renderer push, not in IPCChannelMap
 }
 
 /**
@@ -1375,7 +1466,9 @@ export interface ConflictResolution {
  * context model (always-load, semantic, manual-reference).
  */
 
-export type ContextLayerType = 'always' | 'manual' | 'skill' | 'memory'
+export type ContextLayerType =
+  | 'always' | 'manual' | 'skill' | 'memory'
+  | 'mode' | 'tool' | 'agent' | 'hook' | 'context'
 
 export interface ContextSource {
   filePath: string
@@ -1400,6 +1493,8 @@ export interface AssembledContext {
   warnings: string[]
   /** Tool definitions available in the current scope (TASK020) */
   toolDefinitions?: readonly ToolDefinitionSummary[]
+  /** Prompt composition parts for traceability (TASK035) */
+  promptParts?: PromptPart[]
 }
 
 export interface ContextEngineConfig {
@@ -2323,4 +2418,356 @@ export interface ModelSwitchedEventShared {
   readonly conversationId: string
   readonly oldModel: string
   readonly newModel: string
+}
+
+// ─── Prompt Library Shared Types (TASK035) ───
+
+export type PromptScope = 'core' | 'mode' | 'tool' | 'agent' | 'hook' | 'context' | 'optimizer'
+export type PromptSource = 'builtin' | 'user-override'
+
+export interface PromptMetadata {
+  id: string
+  version: string
+  scope: PromptScope
+  source: PromptSource
+  modelHint?: string
+  estimatedTokens?: number
+  lastEvaluated?: string
+  performanceScore?: number
+  tags: string[]
+  requires?: string[]
+  conflicts?: string[]
+  builtinPath: string
+  userOverridePath?: string
+}
+
+export interface PromptContent {
+  metadata: PromptMetadata
+  body: string
+  rawFrontmatter: string
+}
+
+export interface PromptPart {
+  id: string
+  source: PromptSource
+  path: string
+  version: string
+  tokens: number
+  renderedAt: number
+}
+
+export interface PromptValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+// ─── Skill v2 Shared Types (TASK037) ───
+
+export interface SkillTrigger {
+  slash?: string
+  mention?: string
+  pattern?: string
+}
+
+export interface SkillToolsConfig {
+  allowed_tools: string[]
+  required_context?: string[]
+  budget?: {
+    max_tokens: number
+    max_tool_calls: number
+  }
+}
+
+export interface SkillV2 extends Skill {
+  version: string
+  author: string
+  category: string
+  tags: string[]
+  scope: 'public' | 'private' | 'personal'
+  source: 'builtin' | 'workspace' | 'personal'
+  triggers: SkillTrigger[]
+  allowedTools?: string[]
+  examplesDir?: string
+  assetsDir?: string
+  formatVersion: 1 | 2
+  estimatedTokens?: number
+  loadableIn?: {
+    modes?: string[]
+  }
+}
+
+export interface SkillResult {
+  success: boolean
+  tokensUsed: number
+  toolCallsCount: number
+  errors: string[]
+}
+
+export interface SkillExecutionPlan {
+  skill: SkillV2
+  additionalPromptParts: string[]
+  toolFilter: string[] | undefined
+  budget: SkillToolsConfig['budget']
+}
+
+export interface SkillTemplate {
+  id: string
+  name: string
+  description: string
+  prompt: string
+  tools?: string[]
+}
+
+export interface CommandParam {
+  name: string
+  type: 'string' | 'integer' | 'boolean' | 'enum'
+  required: boolean
+  description: string
+  default?: unknown
+  enum?: string[]
+}
+
+export interface ParsedCommand {
+  commandId: string
+  commandVersion: string
+  params: Record<string, unknown>
+  rawInput: string
+  isMeta?: boolean
+  attribution?: {
+    source: 'slash-command'
+    commandId: string
+    executedAt: number
+  }
+}
+
+export interface CommandSuggestion {
+  id: string
+  title: string
+  description: string
+  matchType: 'exact' | 'prefix' | 'alias'
+}
+
+export interface SlashCommandTemplate {
+  id: string
+  name: string
+  description: string
+  aliases?: string[]
+  params?: CommandParam[]
+  promptTemplate: string
+}
+
+export interface SkillValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+export interface InjectionWarning {
+  type: string
+  message: string
+  severity: 'low' | 'medium' | 'high'
+}
+
+// ─── Hook Shared Types (TASK036) ───
+
+export interface HookMetadataShared {
+  readonly id: string
+  readonly version: string
+  readonly name: string
+  readonly description: string
+  readonly nodes: readonly string[]
+  readonly priority: number
+  readonly source: 'builtin' | 'user'
+  readonly condition?: string
+  readonly enabled: boolean
+}
+
+export interface HookExecutionLogShared {
+  readonly hookId: string
+  readonly node: string
+  readonly decision: string
+  readonly durationMs: number
+  readonly reason?: string
+  readonly message?: string
+  readonly timestamp: number
+}
+
+// ─── Sub-agent Shared Types (TASK038) ───
+
+export interface SubAgentContextConfig {
+  inheritMemory: boolean
+  inheritTrace: boolean
+  inheritWorkspaceBoundary: boolean
+}
+
+export interface SubAgentDefinition {
+  id: string
+  version: string
+  name: string
+  description: string
+  model?: string
+  allowedTools: string[]
+  context: SubAgentContextConfig
+  maxTurns: number
+  maxTokens: number
+  outputSchema?: Record<string, unknown>
+  builtin: boolean
+  filePath: string
+}
+
+export interface SubAgentResult {
+  success: boolean
+  structuredOutput?: Record<string, unknown>
+  summary: string
+  turnsUsed: number
+  tokensUsed: number
+  traceId: string
+  errors: string[]
+}
+
+export interface SubAgentMetadata {
+  id: string
+  version: string
+  name: string
+  description: string
+  model?: string
+  allowedTools: string[]
+  maxTurns: number
+  maxTokens: number
+  hasOutputSchema: boolean
+  source: 'builtin' | 'workspace'
+}
+
+export interface SubAgentTemplate {
+  id: string
+  name: string
+  description: string
+  allowedTools: string[]
+  task: string
+  outputSchema?: Record<string, unknown>
+}
+
+export interface SubAgentTrace {
+  traceId: string
+  parentTraceId: string
+  spans: SerializedSpanShared[]
+  agentId: string
+  startedAt: number
+  endedAt: number
+}
+
+// ─── Workflow Shared Types (TASK039) ───
+
+export type WorkflowTriggerType = 'file_created' | 'file_changed' | 'schedule' | 'manual'
+
+export type WorkflowRunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'paused'
+
+export type StepResultStatus = 'completed' | 'failed' | 'skipped' | 'cancelled'
+
+export interface WorkflowMetadata {
+  id: string
+  version: string
+  name: string
+  description: string
+  scope: 'public' | 'private' | 'personal'
+  author?: string
+}
+
+export interface WorkflowTrigger {
+  type: WorkflowTriggerType
+  pattern?: string
+  cron?: string
+  name?: string
+}
+
+export interface WorkflowParam {
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object'
+  required?: boolean
+  default?: unknown
+  enum?: string[]
+}
+
+export interface WorkflowStep {
+  id: string
+  name: string
+  type?: 'skill' | 'sub_agent' | 'condition' | 'notify'
+  skill?: string
+  sub_agent?: string
+  expression?: string
+  action?: string
+  input?: Record<string, unknown>
+  when?: string
+  on_failure?: 'stop' | 'continue'
+  timeout?: number
+  save_output_to?: string
+  requires_user_confirm?: boolean
+}
+
+export interface WorkflowFailurePolicy {
+  notify_user: boolean
+  rollback: false
+}
+
+export interface WorkflowDefinition {
+  metadata: WorkflowMetadata
+  triggers: WorkflowTrigger[]
+  params?: WorkflowParam[]
+  steps: WorkflowStep[]
+  onFailure?: WorkflowFailurePolicy
+}
+
+export interface StepResult {
+  status: StepResultStatus
+  output?: unknown
+  error?: string
+  startedAt?: number
+  endedAt?: number
+}
+
+export interface WorkflowRun {
+  runId: string
+  workflowId: string
+  workflowVersion: string
+  status: WorkflowRunStatus
+  startedAt: number
+  endedAt?: number
+  params: Record<string, unknown>
+  steps: Record<string, StepResult>
+  parentTraceId?: string
+  errors: WorkflowError[]
+}
+
+export interface WorkflowError {
+  stepId: string
+  message: string
+  timestamp: number
+}
+
+export interface WorkflowRunSummary {
+  runId: string
+  workflowId: string
+  status: WorkflowRunStatus
+  startedAt: number
+  endedAt?: number
+  stepCount: number
+  completedSteps: number
+}
+
+export interface RunFilter {
+  workflowId?: string
+  status?: WorkflowRunStatus
+  from?: number
+  to?: number
+  limit?: number
+}
+
+export interface WorkflowConfirmationRequest {
+  runId: string
+  workflowId: string
+  workflowName: string
+  step: WorkflowStep
+  previousSteps: Record<string, StepResult>
+  diffPreview?: string
 }

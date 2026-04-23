@@ -32,6 +32,8 @@ import type { Span } from '../trace/types'
 import type { AiModeRegistry } from '../mode/ai-mode-registry'
 import type { AiModeDefinition } from '../mode/types'
 import type { PlanManager } from '../plan/plan-manager'
+import type { HookExecutor } from '../hooks/HookExecutor'
+import type { HookContext } from '../hooks/types'
 
 /** Spec file pattern for Panel mode auto-resolution */
 const SPEC_FILE_PATTERN = /(_spec\.md|CLAUDE\.md|design\.md|requirements\.md|tasks\.md)$/
@@ -44,6 +46,7 @@ export class HarnessOrchestrator {
   private tracer?: Tracer
   private aiModeRegistry: AiModeRegistry | null = null
   private planManager: PlanManager | null = null
+  private hookExecutor: HookExecutor | null = null
 
   constructor(
     private readonly generator: Generator,
@@ -93,6 +96,11 @@ export class HarnessOrchestrator {
     this.planManager = pm
   }
 
+  /** Inject HookExecutor for Hook system integration (TASK036) */
+  setHookExecutor(executor: HookExecutor): void {
+    this.hookExecutor = executor
+  }
+
   async execute(request: AIChatRequest): Promise<HarnessResult> {
     if (this.tracer?.isEnabled()) {
       return this.tracer.withSpan('ai.handle-message', async (rootSpan) => {
@@ -109,6 +117,29 @@ export class HarnessOrchestrator {
 
   private async executeInternal(request: AIChatRequest, rootSpan?: Span): Promise<HarnessResult> {
     const traceId = `harness-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    // === TASK036: PreUserMessage Hook ===
+    if (this.hookExecutor) {
+      const preUserResults = await this.hookExecutor.executeNode('PreUserMessage', {
+        node: 'PreUserMessage',
+        trigger: { userMessage: request.message },
+        conversationId: request.sessionId ?? '',
+        workspacePath: request.workspaceId ?? '',
+        parentTraceId: rootSpan?.context()?.traceId,
+      })
+      const blocked = preUserResults.find(r => r.decision === 'block')
+      if (blocked) {
+        return {
+          finalResponse: { id: `blocked-${Date.now()}`, model: '', provider: 'mock', content: blocked.message ?? 'PreUserMessage hook blocked', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0 }, intercepted: true, warnings: [], ragHits: [], memory: { tokenCount: 0, tokenDebt: 0, flushTriggered: false } },
+          mode: 'single',
+          generatorAttempts: 0,
+          evaluations: [],
+          sensorSignals: [],
+          guardrailVerdicts: [],
+          degraded: false,
+        }
+      }
+    }
 
     // === TASK030: Read user-selected AiMode ===
     const aiMode: AiModeDefinition | undefined = request.aiModeId && this.aiModeRegistry
@@ -170,6 +201,22 @@ export class HarnessOrchestrator {
       guides,
       aiMode,
     })
+
+    // === TASK036: PreSystemPrompt Hook ===
+    if (this.hookExecutor) {
+      const preSystemResults = await this.hookExecutor.executeNode('PreSystemPrompt', {
+        node: 'PreSystemPrompt',
+        trigger: { userMessage: effectiveRequest.message },
+        conversationId: effectiveRequest.sessionId ?? '',
+        workspacePath: effectiveRequest.workspaceId ?? '',
+        parentTraceId: rootSpan?.context()?.traceId,
+      })
+      for (const r of preSystemResults) {
+        if (r.decision === 'modify' && r.modifications?.systemPromptAppend) {
+          baseContext.systemPrompt += '\n' + r.modifications.systemPromptAppend
+        }
+      }
+    }
 
     if (this.shouldRequireTaskDeclaration(effectiveRequest)) {
       baseContext.systemPrompt += this.buildDeclarationHint()
@@ -392,6 +439,13 @@ export class HarnessOrchestrator {
       result: 'success',
     }, rootSpan)
 
+    await this.runPostMessageHook(
+      response.content,
+      request.sessionId ?? '',
+      request.workspaceId ?? '',
+      rootSpan?.context()?.traceId,
+    )
+
     return {
       finalResponse: response,
       mode: 'single',
@@ -470,6 +524,13 @@ export class HarnessOrchestrator {
         details: [String(sensorResult.signals.length), String(sensorResult.corrections)],
       }, rootSpan)
     }
+
+    await this.runPostMessageHook(
+      suggestion.content,
+      request.sessionId ?? '',
+      request.workspaceId ?? '',
+      rootSpan?.context()?.traceId,
+    )
 
     return {
       finalResponse: suggestion,
@@ -605,6 +666,13 @@ export class HarnessOrchestrator {
       }, rootSpan)
     }
 
+    await this.runPostMessageHook(
+      suggestion.content,
+      request.sessionId ?? '',
+      request.workspaceId ?? '',
+      rootSpan?.context()?.traceId,
+    )
+
     return {
       finalResponse: suggestion,
       mode: 'panel',
@@ -639,5 +707,16 @@ export class HarnessOrchestrator {
         details: event.details?.join(', ') ?? '',
       })
     }
+  }
+
+  private async runPostMessageHook(content: string, conversationId: string, workspacePath: string, parentTraceId?: string): Promise<void> {
+    if (!this.hookExecutor) return
+    await this.hookExecutor.executeNode('PostMessage', {
+      node: 'PostMessage',
+      trigger: { assistantMessage: content },
+      conversationId,
+      workspacePath,
+      parentTraceId,
+    })
   }
 }

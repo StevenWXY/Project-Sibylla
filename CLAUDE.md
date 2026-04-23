@@ -84,6 +84,11 @@ Sibylla 是一个以 AI 共享上下文为核心的团队知识协作平台。
 | 日期         | 决策                        | 理由                             |
 | ---------- | ------------------------- | ------------------------------ |
 | 2026-xx-xx | Token 系统 MVP 阶段采用积分制，暂不上链 | 降低初期复杂度，预留 Token 化接口           |
+| 2026-04-19 | AI 能力扩展采用 Claude Code 风格四层模型 | 保持非技术用户友好；调试复杂度更低 |
+| 2026-04-19 | Workflow 使用声明式 YAML，不提供图形化编辑器 | 避免成为小型编程平台 |
+| 2026-04-19 | Sub-agent 默认不继承主 agent 的 MEMORY.md | 避免记忆污染 |
+| 2026-04-19 | Prompt 作为 Markdown 文件存储，纳入 Git | 文件即真相原则 |
+| 2026-04-19 | 暂不实现 MCP 协议支持 | MCP 涉及外部协议，留到 Phase 2 |
 
 > 后续决策请按时间顺序追加到此表中。
 
@@ -101,7 +106,19 @@ Sibylla 是一个以 AI 共享上下文为核心的团队知识协作平台。
 
 ## 十、当前阶段
 
-Phase 0 — 基础设施搭建。目标：跑通 Electron + 本地文件 + Git + 云端认证最小链路。
+Phase 1 — AI 能力线构建（收官中）。
+
+已完成：
+- Sprint 3.0 - AI 对话基线
+- Sprint 3.1 - Harness（Guardrail + Evaluator）
+- Sprint 3.2 - 三层记忆系统
+- Sprint 3.3 - Trace 可观测性
+- Sprint 3.4 - 模式与 Plan 产物
+
+进行中：
+- Sprint 3.5 - AI 能力扩展体系（Prompt 库、Skill、Sub-agent、Workflow）
+
+即将进入 Phase 2 — 团队协作与云端能力。
 
 ## 十一、详细设计文档索引
 
@@ -119,3 +136,10 @@ Phase 0 — 基础设施搭建。目标：跑通 Electron + 本地文件 + Git +
 - [文档规范与工作流](specs/design/documentation-standards.md) - 命名规范、Markdown 规范、Spec 工作流、Changelog 维护
 - [UI/UX 设计规范](specs/design/ui-ux-design.md) - 布局结构、色彩体系、交互规范、组件规范
 - [测试与安全策略](specs/design/testing-and-security.md) - 测试金字塔、质量保障、安全设计、隐私保护
+
+### AI 能力扩展（Phase 1 Sprint 3.5）
+- [Prompt 库与组合器设计](specs/design/prompt-library.md) - 分层结构、用户覆盖、动态渲染、冲突检测
+- [Skill 系统设计](specs/design/skill-system.md) - Skill 规范、注册加载、执行模型、内置清单
+- [Sub-agent 系统设计](specs/design/sub-agent-system.md) - 独立循环、权限隔离、结构化输出
+- [Workflow 自动化设计](specs/design/workflow-system.md) - YAML 规范、执行器、触发器、用户确认
+- [Hook 节点与错误恢复设计](specs/design/hooks-and-recovery.md) - 8 个挂载点、Reactive Compact

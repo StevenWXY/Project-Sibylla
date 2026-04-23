@@ -1,0 +1,53 @@
+# 每日工作日报
+# 每天早上自动收集工作目录变更并生成日报摘要
+id: daily-summary-flow
+version: 1.0.0
+name: 每日工作日报
+description: 自动生成每日工作日报摘要
+scope: public
+
+# 触发器：每天早上 9 点 + 手动触发
+triggers:
+  - type: schedule
+    cron: "0 9 * * *"
+  - type: manual
+    name: 手动生成日报
+
+# 输入参数
+params:
+  - name: date
+    type: string
+    required: false
+    description: "日报日期，默认为昨天"
+
+# 执行步骤
+steps:
+  - id: collect_changes
+    name: 收集变更
+    skill: doc-summarize
+    input:
+      target: "daily/"
+      scope: workspace
+    on_failure: stop
+
+  - id: generate_report
+    name: 生成日报
+    sub_agent: doc-summarizer
+    input:
+      task: "生成昨日工作日报"
+      source: ${{ steps.collect_changes.output }}
+    timeout: 300
+
+  - id: notify_report
+    name: 发送日报通知
+    action: internal_notification
+    input:
+      title: "每日工作日报"
+      body: ${{ steps.generate_report.output.summary }}
+      channel: workspace
+    requires_user_confirm: true
+
+# 失败策略
+on_workflow_failure:
+  notify_user: true
+  rollback: false

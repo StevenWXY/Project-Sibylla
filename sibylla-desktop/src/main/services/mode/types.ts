@@ -37,6 +37,8 @@ export interface AiModeDefinition {
   requiresContext?: Array<'workspace-files' | 'selection' | 'url'>
   minModelCapability?: 'basic' | 'advanced'
   builtin: boolean
+  /** Prompt file ID for loading from PromptComposer (TASK035) */
+  promptFileId?: string
 }
 
 export interface ActiveAiModeState {
