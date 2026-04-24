@@ -17,6 +17,14 @@ function createMockRegistry() {
     register: vi.fn((cmd: Command) => {
       registered.push(cmd)
     }),
+    registerOrReplace: vi.fn((cmd: Command) => {
+      const idx = registered.findIndex((c) => c.id === cmd.id)
+      if (idx >= 0) {
+        registered[idx] = cmd
+      } else {
+        registered.push(cmd)
+      }
+    }),
     getRegistered: () => registered,
     getSlashCommands: vi.fn(() => registered.filter((c) => c.isSlashCommand)),
     resolveBySlash: vi.fn(),
@@ -88,7 +96,7 @@ Some template content
 
     await loader.loadBuiltin('/builtin')
 
-    expect(registry.register).toHaveBeenCalledTimes(1)
+    expect(registry.registerOrReplace).toHaveBeenCalledTimes(1)
   })
 
   it('registers the command to CommandRegistry with correct properties', async () => {
@@ -131,7 +139,7 @@ Some template content
 
     await loader.loadBuiltin('/builtin')
 
-    expect(registry.register).not.toHaveBeenCalled()
+    expect(registry.registerOrReplace).not.toHaveBeenCalled()
   })
 
   it('handles missing id in frontmatter gracefully', async () => {
@@ -149,7 +157,7 @@ Some template content
 
     await loader.loadBuiltin('/builtin')
 
-    expect(registry.register).not.toHaveBeenCalled()
+    expect(registry.registerOrReplace).not.toHaveBeenCalled()
   })
 
   it('skips non-.md files', async () => {
@@ -169,7 +177,7 @@ Some template content
 
     await loader.loadBuiltin('/builtin')
 
-    expect(registry.register).toHaveBeenCalledTimes(1)
+    expect(registry.registerOrReplace).toHaveBeenCalledTimes(1)
     expect(registry.getRegistered()[0].id).toBe('my-cmd')
   })
 
@@ -179,7 +187,7 @@ Some template content
 
     await loader.loadBuiltin('/empty')
 
-    expect(registry.register).not.toHaveBeenCalled()
+    expect(registry.registerOrReplace).not.toHaveBeenCalled()
   })
 
   it('handles non-existent directory gracefully', async () => {
@@ -188,7 +196,7 @@ Some template content
 
     await loader.loadBuiltin('/nonexistent')
 
-    expect(registry.register).not.toHaveBeenCalled()
+    expect(registry.registerOrReplace).not.toHaveBeenCalled()
   })
 
   it('loadUser delegates to loadFromDir', async () => {
@@ -206,7 +214,7 @@ Some template content
 
     await loader.loadUser('/user-commands')
 
-    expect(registry.register).toHaveBeenCalledTimes(1)
+    expect(registry.registerOrReplace).toHaveBeenCalledTimes(1)
   })
 
   it('skips directories in listing', async () => {
@@ -225,7 +233,7 @@ Some template content
 
     await loader.loadBuiltin('/builtin')
 
-    expect(registry.register).toHaveBeenCalledTimes(1)
+    expect(registry.registerOrReplace).toHaveBeenCalledTimes(1)
     expect(registry.getRegistered()[0].id).toBe('my-cmd')
   })
 
@@ -253,7 +261,7 @@ Second template
 
     await loader.loadBuiltin('/builtin')
 
-    expect(registry.register).toHaveBeenCalledTimes(2)
+    expect(registry.registerOrReplace).toHaveBeenCalledTimes(2)
     const ids = registry.getRegistered().map((c) => c.id)
     expect(ids).toContain('my-cmd')
     expect(ids).toContain('second-cmd')

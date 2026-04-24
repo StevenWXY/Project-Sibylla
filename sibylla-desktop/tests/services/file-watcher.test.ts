@@ -76,7 +76,7 @@ describe('FileWatcher', () => {
 
       // Create a new file
       const testFile = 'test-file.txt'
-      await fileManager.writeFile(testFile, 'Hello, World!')
+      await fs.writeFile(path.join(testWorkspace, testFile), 'Hello, World!')
 
       // Wait for event with polling
       await waitForCondition(() => 
