@@ -33,7 +33,7 @@ import type { AiModeRegistry } from '../mode/ai-mode-registry'
 import type { AiModeDefinition } from '../mode/types'
 import type { PlanManager } from '../plan/plan-manager'
 import type { HookExecutor } from '../hooks/HookExecutor'
-import type { HookContext } from '../hooks/types'
+
 
 /** Spec file pattern for Panel mode auto-resolution */
 const SPEC_FILE_PATTERN = /(_spec\.md|CLAUDE\.md|design\.md|requirements\.md|tasks\.md)$/

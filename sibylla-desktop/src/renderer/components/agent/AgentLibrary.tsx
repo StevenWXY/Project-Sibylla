@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Search, RefreshCw, Bot } from 'lucide-react'
-import { AgentCard } from '../agent/AgentCard'
-import { Button, Input, Badge } from '../ui'
+import { Input, Badge } from '../ui'
 import { cn } from '../../utils/cn'
 
 interface AgentSummary {

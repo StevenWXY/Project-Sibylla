@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../shared/types'
-import type { SubAgentMetadata, SubAgentTemplate, SubAgentTrace } from '../../../shared/types'
+import type { SubAgentTemplate, SubAgentTrace } from '../../../shared/types'
 import { IpcHandler } from '../handler'
 import type { SubAgentRegistry } from '../../services/sub-agent/SubAgentRegistry'
 import type { SubAgentExecutor } from '../../services/sub-agent/SubAgentExecutor'

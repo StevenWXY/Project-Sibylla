@@ -540,7 +540,6 @@ if (!gotTheLock) {
           const { registerPlanCommands } = await import('./services/command/builtin-commands/plan-commands')
           const { registerSystemCommands } = await import('./services/command/builtin-commands/system-commands')
           const { registerPromptOptimizerHandlers } = await import('./ipc/handlers/prompt-optimizer')
-          const { registerCommandHandlers } = await import('./ipc/handlers/command')
 
           const promptOptimizer = new PromptOptimizer(
             aiGatewayClient,

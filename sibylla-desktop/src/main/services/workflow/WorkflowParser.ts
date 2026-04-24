@@ -15,7 +15,7 @@ const VALID_TRIGGER_TYPES = new Set(['file_created', 'file_changed', 'schedule',
 const TEMPLATE_REGEX = /\$\{\{\s*([^}]+)\s*\}\}/g
 
 export class WorkflowParser {
-  parse(yamlContent: string, filePath: string): ParseResult<WorkflowDefinition> {
+  parse(yamlContent: string, _filePath: string): ParseResult<WorkflowDefinition> {
     const errors: string[] = []
     const warnings: string[] = []
 

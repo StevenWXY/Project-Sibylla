@@ -140,11 +140,14 @@ export function useSlashCommandState() {
   }
 }
 
-export const SlashCommandParamForm: React.FC<{
+interface SlashCommandParamFormProps {
   missingParams: MissingParams
   onSubmit: (params: Record<string, unknown>) => void
   onCancel: () => void
-}> = ({ missingParams, onSubmit, onCancel }) => {
+}
+
+/* eslint-disable react/prop-types */
+export const SlashCommandParamForm: React.FC<SlashCommandParamFormProps> = ({ missingParams, onSubmit, onCancel }) => {
   const [formValues, setFormValues] = useState<Record<string, unknown>>({})
 
   const handleSubmit = useCallback(() => {
@@ -220,3 +223,4 @@ export const SlashCommandParamForm: React.FC<{
     </div>
   )
 }
+/* eslint-enable react/prop-types */

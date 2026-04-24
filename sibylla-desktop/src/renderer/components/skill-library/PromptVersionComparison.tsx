@@ -27,7 +27,7 @@ interface PromptVersionComparisonProps {
   className?: string
 }
 
-const MetricRow: React.FC<{ label: string; values: (string | number)[]; highlight?: 'min' | 'max' }> = ({ label, values, highlight }) => (
+const MetricRow: React.FC<{ label: string; values: (string | number)[]; highlight?: 'min' | 'max' }> = ({ label, values }) => (
   <tr className="border-b border-sys-darkBorder">
     <td className="px-3 py-2 text-xs text-sys-muted whitespace-nowrap">{label}</td>
     {values.map((val, i) => (

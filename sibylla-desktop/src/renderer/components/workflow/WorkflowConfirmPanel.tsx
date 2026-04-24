@@ -1,7 +1,6 @@
 import React, { useCallback } from 'react'
 import { Shield, SkipForward, XCircle, CheckCircle, FileText } from 'lucide-react'
 import { Button, Modal } from '../ui'
-import { cn } from '../../utils/cn'
 import type { WorkflowConfirmationRequest, StepResult } from '../../../shared/types'
 
 interface WorkflowConfirmPanelProps {

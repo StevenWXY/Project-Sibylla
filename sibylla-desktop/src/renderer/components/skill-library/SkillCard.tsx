@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import { FileCode, Edit, Trash2, Download, Copy, RotateCcw } from 'lucide-react'
+import { Edit, Trash2, Download, Copy, RotateCcw } from 'lucide-react'
 import { Button, Badge } from '../ui'
 import { cn } from '../../utils/cn'
 
@@ -32,7 +32,6 @@ const CATEGORY_ICONS: Record<string, string> = {
 export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefresh, className }) => {
   const [expanded, setExpanded] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [showTrashOptions, setShowTrashOptions] = useState(false)
 
   const handleEdit = useCallback(async () => {
     if (skill.source === 'builtin') {

@@ -1,6 +1,5 @@
 import type { SkillValidationResult, InjectionWarning } from '../../../shared/types'
 import type { FileManager } from '../file-manager'
-import { logger } from '../../utils/logger'
 
 const INJECTION_PATTERNS: ReadonlyArray<{
   pattern: RegExp

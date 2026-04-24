@@ -15,7 +15,7 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({ className }) =
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [, setError] = useState<string | null>(null)
   const [disabledTriggers, setDisabledTriggers] = useState<Set<string>>(new Set())
 
   const fetchWorkflows = useCallback(async () => {
@@ -135,6 +135,7 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({ className }) =
                   </button>
                   <TriggerButton workflowId={selectedWorkflow.metadata.id} />
                 </div>
+              </div>
 
               <div className="flex items-center gap-4 mt-2 text-xs text-sys-muted">
                 <span>版本 {selectedWorkflow.metadata.version}</span>

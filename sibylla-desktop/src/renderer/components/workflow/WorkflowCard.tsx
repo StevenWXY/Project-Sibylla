@@ -1,5 +1,4 @@
 import React from 'react'
-import { Clock, Zap } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import type { WorkflowDefinition } from '../../../shared/types'
 

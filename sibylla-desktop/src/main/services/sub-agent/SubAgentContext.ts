@@ -1,9 +1,8 @@
-import type { SubAgentDefinition, SubAgentContextConfig } from '../../../shared/types'
+import type { SubAgentDefinition } from '../../../shared/types'
 import type { SubAgentContextData, SubAgentContextOptions } from './types'
 import { Generator } from '../harness/generator'
 import { GuardrailEngine } from '../harness/guardrails/engine'
 import type { logger as loggerType } from '../../utils/logger'
-import { logger } from '../../utils/logger'
 
 const MAX_NESTING_DEPTH = 3
 

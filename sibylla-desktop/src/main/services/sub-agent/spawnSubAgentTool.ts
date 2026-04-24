@@ -1,4 +1,4 @@
-import type { SubAgentResult, SubAgentDefinition } from '../../../shared/types'
+import type { SubAgentResult } from '../../../shared/types'
 import type { SubAgentExecutor } from './SubAgentExecutor'
 import type { SubAgentRegistry } from './SubAgentRegistry'
 import type { ToolDefinition } from '../harness/tool-scope'

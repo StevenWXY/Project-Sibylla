@@ -1,7 +1,6 @@
 import { promises as fs } from 'fs'
 import * as path from 'path'
 import type { WorkflowRun, WorkflowRunSummary, WorkflowRunStatus, RunFilter } from '../../../shared/types'
-import { logger } from '../../utils/logger'
 
 export class WorkflowRunStore {
   constructor(private readonly baseDir: string) {}

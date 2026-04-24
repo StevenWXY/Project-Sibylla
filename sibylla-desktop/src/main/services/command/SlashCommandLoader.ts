@@ -46,7 +46,7 @@ export class SlashCommandLoader {
 
   private parseSlashCommandFile(
     content: string,
-    filePath: string,
+    _filePath: string,
   ): SlashCommandTemplate | null {
     const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/)
     if (!match) return null

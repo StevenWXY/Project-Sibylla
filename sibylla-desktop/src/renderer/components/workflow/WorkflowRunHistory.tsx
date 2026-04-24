@@ -17,7 +17,7 @@ interface WorkflowRunHistoryProps {
   className?: string
 }
 
-export const WorkflowRunHistory: React.FC<WorkflowRunHistoryProps> = ({ runs, onRefresh, className }) => {
+export const WorkflowRunHistory: React.FC<WorkflowRunHistoryProps> = ({ runs, className }) => {
   if (runs.length === 0) {
     return (
       <div className={cn('flex items-center justify-center h-32 text-sys-muted text-sm', className)}>

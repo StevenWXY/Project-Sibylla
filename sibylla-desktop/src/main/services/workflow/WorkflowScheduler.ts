@@ -1,6 +1,6 @@
 import chokidar from 'chokidar'
 import type { BrowserWindow } from 'electron'
-import type { WorkflowDefinition, WorkflowRun } from '../../../shared/types'
+import type { WorkflowDefinition } from '../../../shared/types'
 import type { UserConfirmationDecision } from './types'
 import { WorkflowRegistry } from './WorkflowRegistry'
 import { WorkflowExecutor } from './WorkflowExecutor'

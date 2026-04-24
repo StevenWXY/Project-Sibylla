@@ -1,11 +1,9 @@
 import type {
   SubAgentDefinition,
-  SubAgentResult,
 } from '../../../shared/types'
 import type { Generator } from '../harness/generator'
 import type { GuardrailEngine } from '../harness/guardrails/engine'
 import type { AiGatewayClient } from '../ai-gateway-client'
-import type { PromptComposer } from '../context-engine/PromptComposer'
 import type { Tracer } from '../trace/tracer'
 import type { logger as loggerType } from '../../utils/logger'
 

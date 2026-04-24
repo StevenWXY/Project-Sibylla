@@ -49,7 +49,7 @@ export class HookHandler extends IpcHandler {
 
     ipcMain.handle(
       IPC_CHANNELS.HOOK_TRACE,
-      this.safeHandle(async (_event: IpcMainInvokeEvent, traceId: string): Promise<HookExecutionLogShared[]> => {
+      this.safeHandle(async (_event: IpcMainInvokeEvent, _traceId: string): Promise<HookExecutionLogShared[]> => {
         if (!this.tracer?.isEnabled()) return []
         return []
       }),
