@@ -400,30 +400,23 @@ export class McpSyncManager {
     this.stopTimer(taskId)
     const intervalMs = task.intervalMinutes * 60 * 1000
 
-    const scheduleNext = (): void => {
-      const timer = setTimeout(async () => {
-        try {
-          await this.triggerSync(taskId)
-        } catch (err) {
-          logger.warn('[McpSyncManager] Scheduled sync failed', {
-            taskId,
-            error: err instanceof Error ? err.message : String(err),
-          })
-        }
-        if (this.timers.has(taskId)) {
-          scheduleNext()
-        }
-      }, intervalMs)
-      this.timers.set(taskId, timer)
-    }
-
-    scheduleNext()
+    const timer = setInterval(async () => {
+      try {
+        await this.triggerSync(taskId)
+      } catch (err) {
+        logger.warn('[McpSyncManager] Scheduled sync failed', {
+          taskId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }, intervalMs)
+    this.timers.set(taskId, timer)
   }
 
   private stopTimer(taskId: string): void {
     const timer = this.timers.get(taskId)
     if (timer) {
-      clearTimeout(timer)
+      clearInterval(timer)
       this.timers.delete(taskId)
     }
   }

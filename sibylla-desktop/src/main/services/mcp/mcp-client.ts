@@ -73,7 +73,7 @@ export class MCPClient {
 
     try {
       await this.initializeProtocol(config.name)
-      connection.tools = await this.listTools(config.name)
+      connection.tools = await this.listTools(config.name, true)
       connection.state = 'connected'
       connection.retryCount = 0
     } catch (err) {
@@ -108,9 +108,9 @@ export class MCPClient {
     logger.info(`[MCPClient] Disconnected from "${serverName}"`)
   }
 
-  async listTools(serverName: string): Promise<MCPTool[]> {
+  async listTools(serverName: string, _internal?: boolean): Promise<MCPTool[]> {
     const connection = this.connections.get(serverName)
-    if (!connection || connection.state !== 'connected') {
+    if (!connection || (!_internal && connection.state !== 'connected')) {
       throw new Error(`MCPClient: server "${serverName}" not connected`)
     }
 

@@ -7,6 +7,8 @@ const SENSITIVE_KEY_PATTERNS = [
   /\btoken$/i,
   /\bpassword$/i,
   /\bsecret$/i,
+  /\bsecret_/i,
+  /_secret$/i,
   /\bapi[-_]?key$/i,
   /\bauth$/i,
   /\bcredential$/i,
