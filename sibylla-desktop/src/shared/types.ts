@@ -39,6 +39,10 @@ export type {
 export interface AppConfig {
   version: string
   environment: 'development' | 'production' | 'test'
+  onboardingCompleted: boolean
+  mcp?: {
+    enabled: boolean
+  }
 }
 
 /**
@@ -209,6 +213,20 @@ export const IPC_CHANNELS = {
   // File import operations
   FILE_IMPORT: 'file:import',
   FILE_IMPORT_PROGRESS: 'file:importProgress',
+
+  // Import pipeline operations (TASK040)
+  FILE_IMPORT_PLAN: 'file:import:plan',
+  FILE_IMPORT_EXECUTE: 'file:import:execute',
+  FILE_IMPORT_CANCEL: 'file:import:cancel',
+  FILE_IMPORT_PAUSE: 'file:import:pause',
+  FILE_IMPORT_RESUME: 'file:import:resume',
+  FILE_IMPORT_PIPELINE_PROGRESS: 'file:import:progress',
+  FILE_IMPORT_HISTORY: 'file:import:history',
+  FILE_IMPORT_ROLLBACK: 'file:import:rollback',
+
+  // Import classification operations (TASK041)
+  FILE_IMPORT_CLASSIFICATION: 'file:import:classification',
+  FILE_IMPORT_CONFIRM_CLASSIFICATION: 'file:import:confirmClassification',
 
   // Auto-save operations
   /** Renderer → Main: Notify that file content has changed (send/on, one-way) */
@@ -438,6 +456,29 @@ export const IPC_CHANNELS = {
   WORKFLOW_LIST_RUNS: 'workflow:list-runs',
   WORKFLOW_CONFIRMATION_REQUIRED: 'workflow:confirmation-required',
   WORKFLOW_CONFIRM_STEP: 'workflow:confirm-step',
+
+  // MCP operations (TASK042)
+  MCP_CONNECT: 'mcp:connect',
+  MCP_DISCONNECT: 'mcp:disconnect',
+  MCP_LIST_SERVERS: 'mcp:listServers',
+  MCP_LIST_TOOLS: 'mcp:listTools',
+  MCP_CALL_TOOL: 'mcp:callTool',
+  MCP_PERMISSION_PROMPT: 'mcp:permissionPrompt',
+  MCP_GRANT_PERMISSION: 'mcp:grantPermission',
+  MCP_REVOKE_PERMISSION: 'mcp:revokePermission',
+  MCP_SERVER_STATUS_CHANGED: 'mcp:serverStatusChanged',
+
+  // MCP Sync operations (TASK043)
+  MCP_CONFIGURE_SYNC: 'mcp:configureSync',
+  MCP_TRIGGER_SYNC: 'mcp:triggerSync',
+  MCP_SYNC_PROGRESS: 'mcp:syncProgress',
+  MCP_LIST_SYNC_TASKS: 'mcp:listSyncTasks',
+  MCP_PAUSE_SYNC: 'mcp:pauseSync',
+  MCP_RESUME_SYNC: 'mcp:resumeSync',
+
+  // App configuration (TASK044)
+  APP_GET_CONFIG: 'app:getConfig',
+  APP_UPDATE_CONFIG: 'app:updateConfig',
 } as const
 
 /**
@@ -754,6 +795,33 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.WORKFLOW_LIST_RUNS]: { params: [filter?: RunFilter]; return: WorkflowRunSummary[] }
   [IPC_CHANNELS.WORKFLOW_CONFIRM_STEP]: { params: [runId: string, decision: 'confirm' | 'skip' | 'cancel']; return: void }
   // WORKFLOW_CONFIRMATION_REQUIRED is Main → Renderer push, not in IPCChannelMap
+
+  // Import classification operations (TASK041)
+  // FILE_IMPORT_CLASSIFICATION: Main → Renderer push, not in IPCChannelMap
+  [IPC_CHANNELS.FILE_IMPORT_CONFIRM_CLASSIFICATION]: { params: [importId: string, result: ClassificationResultShared]; return: void }
+
+  // MCP operations (TASK042)
+  [IPC_CHANNELS.MCP_CONNECT]: { params: [config: MCPServerConfigShared]; return: void }
+  [IPC_CHANNELS.MCP_DISCONNECT]: { params: [serverName: string]; return: void }
+  [IPC_CHANNELS.MCP_LIST_SERVERS]: { params: []; return: MCPServerInfoShared[] }
+  [IPC_CHANNELS.MCP_LIST_TOOLS]: { params: []; return: MCPToolShared[] }
+  [IPC_CHANNELS.MCP_CALL_TOOL]: { params: [serverName: string, toolName: string, args: Record<string, unknown>]; return: MCPToolResultShared }
+  // MCP_PERMISSION_PROMPT: Main → Renderer push, not in IPCChannelMap
+  [IPC_CHANNELS.MCP_GRANT_PERMISSION]: { params: [requestId: string, level: MCPPermissionLevelShared]; return: void }
+  [IPC_CHANNELS.MCP_REVOKE_PERMISSION]: { params: [serverName: string, toolName: string]; return: void }
+  // MCP_SERVER_STATUS_CHANGED: Main → Renderer push, not in IPCChannelMap
+
+  // MCP Sync operations (TASK043)
+  [IPC_CHANNELS.MCP_CONFIGURE_SYNC]: { params: [config: SyncTaskConfigShared]; return: void }
+  [IPC_CHANNELS.MCP_TRIGGER_SYNC]: { params: [taskId: string]; return: SyncProgressShared }
+  [IPC_CHANNELS.MCP_LIST_SYNC_TASKS]: { params: []; return: SyncTaskWithStateShared[] }
+  [IPC_CHANNELS.MCP_PAUSE_SYNC]: { params: [taskId: string]; return: void }
+  [IPC_CHANNELS.MCP_RESUME_SYNC]: { params: [taskId: string]; return: void }
+  // MCP_SYNC_PROGRESS: Main → Renderer push, not in IPCChannelMap
+
+  // App configuration (TASK044)
+  [IPC_CHANNELS.APP_GET_CONFIG]: { params: []; return: AppConfig }
+  [IPC_CHANNELS.APP_UPDATE_CONFIG]: { params: [updates: Partial<AppConfig>]; return: void }
 }
 
 /**
@@ -1151,6 +1219,9 @@ export interface WorkspaceConfig {
   
   /** Last sync timestamp (ISO 8601) */
   lastSyncAt: string | null
+
+  /** MCP configuration (TASK042) */
+  mcp?: MCPWorkspaceConfigShared
 }
 
 /**
@@ -1405,6 +1476,21 @@ export interface ImportProgress {
   readonly fileName: string
 }
 
+export type DocumentCategoryShared = 'meeting' | 'contract' | 'tech_doc' | 'article' | 'unknown'
+
+export interface ClassificationResultShared {
+  readonly category: DocumentCategoryShared
+  readonly targetPath: string
+  readonly confidence: number
+  readonly tags: readonly string[]
+}
+
+export interface ClassificationConfirmationPayload {
+  readonly importId: string
+  readonly classification: ClassificationResultShared
+  readonly fileName: string
+}
+
 /**
  * Auto-Save Types
  *
@@ -1469,6 +1555,7 @@ export interface ConflictResolution {
 export type ContextLayerType =
   | 'always' | 'manual' | 'skill' | 'memory'
   | 'mode' | 'tool' | 'agent' | 'hook' | 'context'
+  | 'mcp'
 
 export interface ContextSource {
   filePath: string
@@ -2770,4 +2857,100 @@ export interface WorkflowConfirmationRequest {
   step: WorkflowStep
   previousSteps: Record<string, StepResult>
   diffPreview?: string
+}
+
+export type MCPPermissionLevelShared = 'once' | 'session' | 'permanent' | 'deny'
+
+export type MCPConnectionStateShared = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
+
+export type MCPTransportTypeShared = 'stdio' | 'sse' | 'websocket'
+
+export interface MCPServerConfigShared {
+  name: string
+  transport: MCPTransportTypeShared
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
+  timeout?: number
+  autoReconnect?: boolean
+  maxRetries?: number
+}
+
+export interface MCPServerInfoShared {
+  name: string
+  state: MCPConnectionStateShared
+  toolCount: number
+  lastConnectedAt?: number
+  error?: string
+}
+
+export interface MCPToolShared {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+  serverName: string
+}
+
+export interface MCPToolResultShared {
+  content: string | Array<{ type: string; text: string }>
+  isError?: boolean
+}
+
+export interface MCPPermissionPromptShared {
+  requestId: string
+  serverName: string
+  toolName: string
+  toolDescription: string
+  args: Record<string, unknown>
+  isSensitive: boolean
+}
+
+export interface MCPWorkspaceConfigShared {
+  enabled: boolean
+  servers: Record<string, MCPServerConfigShared>
+  auditEnabled: boolean
+}
+
+// ─── TASK043: MCP Sync Shared Types ───
+
+export interface SyncTaskConfigShared {
+  id: string
+  name: string
+  serverName: string
+  toolName: string
+  args: Record<string, unknown>
+  intervalMinutes: number
+  targetPath: string
+  writeMode: 'append' | 'replace'
+  transformTemplate?: string
+  conflictStrategy: 'last-write-wins'
+  enabled: boolean
+}
+
+export interface SyncStateShared {
+  taskId: string
+  lastSyncAt: number | null
+  cursor: string | null
+  errorCount: number
+  status: 'active' | 'paused' | 'error'
+  lastError?: string
+  lastSyncDurationMs?: number
+  totalSyncedItems?: number
+}
+
+export interface SyncProgressShared {
+  taskId: string
+  taskName: string
+  status: 'running' | 'success' | 'error'
+  itemsSynced: number
+  durationMs: number
+  error?: string
+  timestamp: number
+}
+
+export interface SyncTaskWithStateShared {
+  task: SyncTaskConfigShared
+  state: SyncStateShared
 }

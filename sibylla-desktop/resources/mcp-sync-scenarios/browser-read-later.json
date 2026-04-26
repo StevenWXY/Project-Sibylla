@@ -1,0 +1,12 @@
+{
+  "id": "browser-read-later",
+  "name": "浏览器稍后读同步",
+  "description": "手动触发将浏览器保存的页面同步到工作区阅读收件箱",
+  "serverTemplateId": "browser",
+  "toolName": "save_page",
+  "defaultArgs": {},
+  "defaultIntervalMinutes": 0,
+  "targetPathTemplate": "docs/reading/inbox/YYYY-MM-DD.md",
+  "writeMode": "append",
+  "transformTemplate": "generic-list"
+}

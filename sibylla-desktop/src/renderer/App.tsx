@@ -6,6 +6,7 @@ import { ThemeShowcase } from './pages/ThemeShowcase'
 import { LayoutShowcase } from './pages/LayoutShowcase'
 import UIComponentsShowcase from './pages/UIComponentsShowcase'
 import { WorkspaceStudioPage } from './pages/WorkspaceStudioPage'
+import { OnboardingPage } from './pages/OnboardingPage'
 import { CreateWorkspaceWizard } from './components/workspace/CreateWorkspaceWizard'
 import { OpenWorkspaceDialog } from './components/workspace/OpenWorkspaceDialog'
 import { LoginPage } from './components/auth/LoginPage'
@@ -26,6 +27,7 @@ type Page =
   | 'profile'
   | 'workspace'
   | 'workspace-studio'
+  | 'onboarding'
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('workspace-studio')
@@ -45,6 +47,8 @@ export default function App() {
   const isAuthenticated = useAppStore((state) => state.isAuthenticated)
   const setAuthenticated = useAppStore((state) => state.setAuthenticated)
   const setCurrentWorkspace = useAppStore((state) => state.setCurrentWorkspace)
+  const onboardingCompleted = useAppStore((state) => state.onboardingCompleted)
+  const setOnboardingCompleted = useAppStore((state) => state.setOnboardingCompleted)
 
   // Check existing session on mount
   useEffect(() => {
@@ -72,6 +76,45 @@ export default function App() {
     }
     checkAuth()
   }, [setAuthenticated])
+
+  // TASK044: Sync onboarding status from config.json and intercept route
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const syncOnboardingStatus = async () => {
+      try {
+        const response = await window.electronAPI?.app?.getConfig()
+        if (response?.success && response.data) {
+          setOnboardingCompleted(response.data.onboardingCompleted)
+        }
+      } catch (error) {
+        console.error('[App] Failed to sync onboarding status:', error)
+      }
+    }
+    syncOnboardingStatus()
+  }, [isAuthenticated, setOnboardingCompleted])
+
+  // TASK044: Route interception for first-time users
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      !onboardingCompleted &&
+      currentWorkspace === null &&
+      currentPage !== 'onboarding'
+    ) {
+      setCurrentPage('onboarding')
+    }
+  }, [isAuthenticated, onboardingCompleted, currentWorkspace, currentPage])
+
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      onboardingCompleted &&
+      currentPage === 'onboarding'
+    ) {
+      setCurrentPage('workspace-studio')
+    }
+  }, [isAuthenticated, onboardingCompleted, currentPage])
 
   useEffect(() => {
     if (!isAuthenticated || currentWorkspace) {
@@ -217,6 +260,8 @@ export default function App() {
 
   const renderPage = () => {
     switch (currentPage) {
+      case 'onboarding':
+        return <OnboardingPage />
       case 'components':
         return <ComponentShowcase />
       case 'theme':

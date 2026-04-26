@@ -35,13 +35,49 @@ const MAX_DIRECTORY_DEPTH = 20
 /** Supported file extensions for import */
 const SUPPORTED_EXTENSIONS: readonly string[] = ['.md', '.docx', '.pdf', '.csv', '.txt']
 
+import type { ImportPipelineResult, ImportPipelineOptions } from './import/types'
+import type { ImportPipeline } from './import/import-pipeline'
+import type { PdfAdapter } from './import/adapters/pdf-adapter'
+
 export class ImportManager {
+  private pipeline: ImportPipeline | null = null
+  private pdfAdapter: PdfAdapter | null = null
+
   constructor(
     private readonly fileManager: FileManager
   ) {}
 
+  setPipeline(pipeline: ImportPipeline): void {
+    this.pipeline = pipeline
+  }
+
+  setPdfAdapter(adapter: PdfAdapter): void {
+    this.pdfAdapter = adapter
+  }
+
+  async importWithPipeline(
+    input: string,
+    options?: ImportPipelineOptions
+  ): Promise<ImportPipelineResult> {
+    if (!this.pipeline) {
+      throw new Error('Pipeline not initialized')
+    }
+
+    const defaultOptions: ImportPipelineOptions = {
+      targetDir: options?.targetDir ?? 'imports',
+      conflictStrategy: options?.conflictStrategy ?? 'skip',
+      preserveStructure: options?.preserveStructure ?? true,
+      importId: options?.importId ?? `import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ...options,
+    }
+
+    return this.pipeline.run(input, defaultOptions)
+  }
+
   /**
    * Import multiple files and/or directories into the workspace.
+   *
+   * @deprecated Use importWithPipeline() instead for the new pipeline architecture.
    *
    * @param sourcePaths - Absolute paths to files or directories on the host filesystem
    * @param options - Import options including target directory and progress callback
@@ -262,6 +298,30 @@ export class ImportManager {
     sourcePath: string,
     targetDir: string
   ): Promise<ImportFileResult> {
+    if (this.pdfAdapter) {
+      const plan = await this.pdfAdapter.scan(sourcePath)
+      const options: ImportPipelineOptions = {
+        targetDir,
+        conflictStrategy: 'skip',
+        preserveStructure: false,
+        importId: `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        enableOcr: true,
+        enableClassification: false,
+      }
+
+      for await (const item of this.pdfAdapter.transform(plan, options)) {
+        const destPath = path.join(targetDir, path.basename(item.targetPath))
+        await this.fileManager.writeFile(destPath, item.content)
+      }
+
+      return {
+        sourcePath,
+        destPath: path.join(targetDir, path.basename(sourcePath, '.pdf') + '.md'),
+        action: 'converted',
+        sourceType: '.pdf',
+      }
+    }
+
     const fileName = path.basename(sourcePath, '.pdf') + '.md'
     const destPath = path.join(targetDir, fileName)
 

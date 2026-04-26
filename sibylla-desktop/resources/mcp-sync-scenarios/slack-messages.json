@@ -1,0 +1,14 @@
+{
+  "id": "slack-messages",
+  "name": "Slack 频道消息同步",
+  "description": "定期同步 Slack 重要频道的消息到工作区日志",
+  "serverTemplateId": "slack",
+  "toolName": "get_messages",
+  "defaultArgs": {
+    "limit": 100
+  },
+  "defaultIntervalMinutes": 60,
+  "targetPathTemplate": "docs/logs/slack/YYYY-MM-DD.md",
+  "writeMode": "append",
+  "transformTemplate": "slack-messages"
+}

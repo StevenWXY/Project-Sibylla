@@ -1,0 +1,32 @@
+{
+  "id": "filesystem",
+  "name": "Filesystem",
+  "description": "Read, write, and manage local files and directories",
+  "icon": "folder",
+  "category": "utility",
+  "serverConfig": {
+    "name": "filesystem",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+    "env": {}
+  },
+  "credentialFields": [
+    {
+      "key": "ALLOWED_DIRS",
+      "label": "Allowed Directories (comma-separated paths)",
+      "type": "text",
+      "required": true,
+      "placeholder": "/path/to/dir1,/path/to/dir2"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "Node.js",
+      "checkCommand": "node --version",
+      "installUrl": "https://nodejs.org"
+    }
+  ],
+  "tools": ["read_file", "write_file", "list_directory", "create_directory", "move_file", "search_files"],
+  "sensitiveToolPatterns": ["write_*", "delete_*", "move_*"]
+}

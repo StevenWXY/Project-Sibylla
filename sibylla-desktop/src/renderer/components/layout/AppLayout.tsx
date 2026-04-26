@@ -8,11 +8,13 @@ import { MainContent } from './MainContent'
 import { PixelOctoIcon } from '../brand/PixelOctoIcon'
 import { DropZoneOverlay } from '../import/DropZoneOverlay'
 import { ImportSummaryDialog } from '../import/ImportSummaryDialog'
+import { ClassificationConfirmPanel } from '../import/ClassificationConfirmPanel'
+import { McpPermissionDialog } from '../mcp/McpPermissionDialog'
 import { useDropZone } from '../../hooks/useDropZone'
 import { StatusBar } from '../statusbar'
 import { SyncStatusIndicator } from '../statusbar/SyncStatusIndicator'
 import { useSyncStatus } from '../../hooks/useSyncStatus'
-import type { ImportResult } from '../../../shared/types'
+import type { ImportResult, ClassificationConfirmationPayload, ClassificationResultShared } from '../../../shared/types'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -38,6 +40,7 @@ export function AppLayout({
   const currentUser = useAppStore((state) => state.currentUser)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = React.useState(false)
   const [importResult, setImportResult] = React.useState<ImportResult | null>(null)
+  const [classificationPayload, setClassificationPayload] = React.useState<ClassificationConfirmationPayload | null>(null)
   const workspaceMenuRef = React.useRef<HTMLDivElement | null>(null)
 
   const avatarUrl =
@@ -55,6 +58,43 @@ export function AppLayout({
   const { isDragging } = useDropZone(handleDrop)
 
   useSyncStatus()
+
+  React.useEffect(() => {
+    const unsub = window.electronAPI.importPipeline.onClassification(
+      (data: ClassificationConfirmationPayload) => {
+        setClassificationPayload(data)
+      }
+    )
+    return unsub
+  }, [])
+
+  const handleClassificationConfirm = React.useCallback(
+    (result: ClassificationResultShared) => {
+      if (classificationPayload) {
+        window.electronAPI.importPipeline.confirmClassification(
+          classificationPayload.importId,
+          result
+        )
+        setClassificationPayload(null)
+      }
+    },
+    [classificationPayload]
+  )
+
+  const handleClassificationSkip = React.useCallback(() => {
+    if (classificationPayload) {
+      window.electronAPI.importPipeline.confirmClassification(
+        classificationPayload.importId,
+        {
+          category: classificationPayload.classification.category,
+          targetPath: classificationPayload.classification.targetPath,
+          confidence: classificationPayload.classification.confidence,
+          tags: classificationPayload.classification.tags,
+        }
+      )
+      setClassificationPayload(null)
+    }
+  }, [classificationPayload])
 
   React.useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -79,8 +119,26 @@ export function AppLayout({
         <ImportSummaryDialog
           result={importResult}
           onClose={() => setImportResult(null)}
+          onRetry={async (sourcePath) => {
+            const retryResult = await window.electronAPI.file.import([sourcePath])
+            if (retryResult.success && retryResult.data) {
+              setImportResult(retryResult.data)
+            }
+          }}
         />
       )}
+      {classificationPayload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <ClassificationConfirmPanel
+            classification={classificationPayload.classification}
+            fileName={classificationPayload.fileName}
+            onConfirm={handleClassificationConfirm}
+            onModify={handleClassificationConfirm}
+            onSkip={handleClassificationSkip}
+          />
+        </div>
+      )}
+      <McpPermissionDialog />
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-sys-darkBorder bg-sys-black px-4">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-white">

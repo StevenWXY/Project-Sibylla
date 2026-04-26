@@ -1,0 +1,34 @@
+{
+  "id": "notion",
+  "name": "Notion",
+  "description": "Access Notion pages, databases, and content",
+  "icon": "notion",
+  "category": "productivity",
+  "serverConfig": {
+    "name": "notion",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-notion"],
+    "env": {
+      "NOTION_TOKEN": "{{NOTION_TOKEN}}"
+    }
+  },
+  "credentialFields": [
+    {
+      "key": "NOTION_TOKEN",
+      "label": "Integration Token",
+      "type": "password",
+      "required": true,
+      "placeholder": "ntn_xxxxxxxxxxxx"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "Node.js",
+      "checkCommand": "node --version",
+      "installUrl": "https://nodejs.org"
+    }
+  ],
+  "tools": ["search", "get_page", "create_page", "update_page", "list_databases"],
+  "sensitiveToolPatterns": ["create_*", "update_*", "delete_*"]
+}

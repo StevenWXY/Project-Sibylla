@@ -1,0 +1,14 @@
+{
+  "id": "discord-announcements",
+  "name": "Discord 公告同步",
+  "description": "每天同步 Discord 服务器公告到工作区",
+  "serverTemplateId": "discord",
+  "toolName": "get_announcements",
+  "defaultArgs": {
+    "limit": 50
+  },
+  "defaultIntervalMinutes": 1440,
+  "targetPathTemplate": "docs/announcements/YYYY-MM.md",
+  "writeMode": "append",
+  "transformTemplate": "generic-list"
+}

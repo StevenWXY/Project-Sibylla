@@ -1,0 +1,24 @@
+{
+  "id": "browser",
+  "name": "Browser",
+  "description": "Automate browser interactions using Playwright",
+  "icon": "globe",
+  "category": "utility",
+  "serverConfig": {
+    "name": "browser",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@playwright/mcp"],
+    "env": {}
+  },
+  "credentialFields": [],
+  "dependencies": [
+    {
+      "name": "Node.js",
+      "checkCommand": "node --version",
+      "installUrl": "https://nodejs.org"
+    }
+  ],
+  "tools": ["navigate", "click", "fill", "screenshot", "get_text"],
+  "sensitiveToolPatterns": ["click_*", "fill_*", "submit_*"]
+}

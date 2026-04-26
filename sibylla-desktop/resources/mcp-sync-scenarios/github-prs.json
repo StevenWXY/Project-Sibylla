@@ -1,0 +1,16 @@
+{
+  "id": "github-prs",
+  "name": "GitHub Pull Requests 同步",
+  "description": "定期同步指定仓库的 pull requests 到工作区",
+  "serverTemplateId": "github",
+  "toolName": "list_prs",
+  "defaultArgs": {
+    "state": "open",
+    "sort": "updated",
+    "direction": "desc"
+  },
+  "defaultIntervalMinutes": 30,
+  "targetPathTemplate": ".sibylla/inbox/prs/{repo}.md",
+  "writeMode": "replace",
+  "transformTemplate": "github-prs"
+}

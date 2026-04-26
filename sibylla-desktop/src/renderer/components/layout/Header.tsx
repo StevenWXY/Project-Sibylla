@@ -1,10 +1,11 @@
 import React from 'react'
-import { Sun, Moon, Monitor, Settings } from 'lucide-react'
+import { Sun, Moon, Monitor, Settings, Zap } from 'lucide-react'
 import { useTheme } from '../providers/ThemeProvider'
 import { cn } from '../../utils/cn'
 import { useAppStore } from '../../store/appStore'
 import { useTabStore, selectActiveTab } from '../../store/tabStore'
 import { WorkspaceSettings } from '../settings/WorkspaceSettings'
+import { McpSettingsPage } from '../mcp/McpSettingsPage'
 import { ModelSwitcher } from '../header/ModelSwitcher'
 import { QuickSettingsPanel } from '../header/QuickSettingsPanel'
 
@@ -13,6 +14,7 @@ export const Header = React.memo(function Header() {
   const currentWorkspace = useAppStore((state) => state.currentWorkspace)
   const [showWorkspaceSettings, setShowWorkspaceSettings] = React.useState(false)
   const [showQuickSettings, setShowQuickSettings] = React.useState(false)
+  const [showMcpSettings, setShowMcpSettings] = React.useState(false)
   const activeTab = useTabStore(selectActiveTab)
   
   const cycleTheme = React.useCallback(() => {
@@ -71,9 +73,24 @@ export const Header = React.memo(function Header() {
         )}
       </div>
       
-      {/* 右侧：ModelSwitcher + QuickSettings + 主题切换 */}
+      {/* 右侧：ModelSwitcher + MCP + QuickSettings + 主题切换 */}
       <div className="flex items-center gap-2">
-        {currentWorkspace && <ModelSwitcher conversationId={activeTab?.conversationId ?? 'default'} />}
+        {currentWorkspace && <ModelSwitcher conversationId={activeTab?.id ?? 'default'} />}
+        {currentWorkspace && (
+          <button
+            onClick={() => setShowMcpSettings(true)}
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-3 py-2',
+              'transition-colors duration-200',
+              'hover:bg-sys-darkSurface',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
+            )}
+            aria-label="MCP 集成管理"
+            title="MCP 集成管理"
+          >
+            <Zap size={18} className="text-sys-darkMuted" />
+          </button>
+        )}
         <div className="relative">
           {currentWorkspace && (
             <button
@@ -117,6 +134,10 @@ export const Header = React.memo(function Header() {
         <WorkspaceSettings
           onClose={() => setShowWorkspaceSettings(false)}
         />
+      )}
+
+      {showMcpSettings && (
+        <McpSettingsPage onClose={() => setShowMcpSettings(false)} />
       )}
     </header>
   )

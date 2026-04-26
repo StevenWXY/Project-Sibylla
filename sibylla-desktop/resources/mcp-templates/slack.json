@@ -1,0 +1,34 @@
+{
+  "id": "slack",
+  "name": "Slack",
+  "description": "Access Slack channels, messages, and search",
+  "icon": "slack",
+  "category": "communication",
+  "serverConfig": {
+    "name": "slack",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-slack"],
+    "env": {
+      "SLACK_BOT_TOKEN": "{{SLACK_BOT_TOKEN}}"
+    }
+  },
+  "credentialFields": [
+    {
+      "key": "SLACK_BOT_TOKEN",
+      "label": "Bot Token",
+      "type": "password",
+      "required": true,
+      "placeholder": "xoxb-xxxxxxxxxxxx"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "Node.js",
+      "checkCommand": "node --version",
+      "installUrl": "https://nodejs.org"
+    }
+  ],
+  "tools": ["list_channels", "get_channel_history", "send_message", "search_messages"],
+  "sensitiveToolPatterns": ["send_*", "write_*", "delete_*"]
+}

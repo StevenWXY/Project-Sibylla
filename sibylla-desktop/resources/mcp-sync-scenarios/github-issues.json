@@ -1,0 +1,16 @@
+{
+  "id": "github-issues",
+  "name": "GitHub Issues 同步",
+  "description": "定期同步指定仓库的 issues 到工作区",
+  "serverTemplateId": "github",
+  "toolName": "list_issues",
+  "defaultArgs": {
+    "state": "open",
+    "sort": "updated",
+    "direction": "desc"
+  },
+  "defaultIntervalMinutes": 30,
+  "targetPathTemplate": "docs/github/{repo}/issues.md",
+  "writeMode": "replace",
+  "transformTemplate": "github-issues"
+}

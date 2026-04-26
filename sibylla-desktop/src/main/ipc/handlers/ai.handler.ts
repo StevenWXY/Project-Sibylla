@@ -32,6 +32,11 @@ import type { ProgressLedger } from '../../services/progress/progress-ledger'
 import type { AiModeRegistry } from '../../services/mode/ai-mode-registry'
 import { TaskDeclarationParser, stripDeclarationBlocks } from '../../services/ai/task-declaration-parser'
 import type { ChecklistItemStatus } from '../../services/progress/types'
+import type { MCPClient } from '../../services/mcp/mcp-client'
+import type { MCPRegistry } from '../../services/mcp/mcp-registry'
+import type { MCPPermission } from '../../services/mcp/mcp-permission'
+import type { MCPAuditLog } from '../../services/mcp/mcp-audit'
+import type { MCPPermissionLevel, ToolCallIntent } from '../../services/mcp/types'
 
 type StreamErrorCode = AIStreamError['code']
 
@@ -48,6 +53,15 @@ export class AIHandler extends IpcHandler {
   private harnessOrchestrator: HarnessOrchestrator | null = null
   private progressLedger: ProgressLedger | null = null
   private aiModeRegistry: AiModeRegistry | null = null
+  private mcpClient: MCPClient | null = null
+  private mcpRegistry: MCPRegistry | null = null
+  private mcpPermission: MCPPermission | null = null
+  private mcpAuditLog: MCPAuditLog | null = null
+  private mcpEnabled: boolean = false
+  private readonly pendingPermissionRequests = new Map<string, {
+    resolve: (level: MCPPermissionLevel) => void
+    timeout: ReturnType<typeof setTimeout>
+  }>()
 
   constructor(
     private readonly gatewayClient: AiGatewayClient,
@@ -72,6 +86,29 @@ export class AIHandler extends IpcHandler {
 
   setAiModeRegistry(registry: AiModeRegistry): void {
     this.aiModeRegistry = registry
+  }
+
+  setMcpServices(deps: {
+    client: MCPClient
+    registry: MCPRegistry
+    permission: MCPPermission
+    auditLog: MCPAuditLog
+    enabled: boolean
+  }): void {
+    this.mcpClient = deps.client
+    this.mcpRegistry = deps.registry
+    this.mcpPermission = deps.permission
+    this.mcpAuditLog = deps.auditLog
+    this.mcpEnabled = deps.enabled
+  }
+
+  resolvePermissionRequest(requestId: string, level: MCPPermissionLevel): void {
+    const pending = this.pendingPermissionRequests.get(requestId)
+    if (pending) {
+      clearTimeout(pending.timeout)
+      this.pendingPermissionRequests.delete(requestId)
+      pending.resolve(level)
+    }
   }
 
   register(): void {
@@ -255,8 +292,36 @@ export class AIHandler extends IpcHandler {
         abortController.signal
       )
 
+      let streamPaused = false
+      const pendingInjections: string[] = []
+      let accumulatedText = ''
+
       for await (const chunk of stream) {
         fullContent.push(chunk)
+        accumulatedText += chunk
+
+        if (this.mcpEnabled && !streamPaused) {
+          const mayContainToolCall = accumulatedText.includes('<tool_call') || accumulatedText.includes('"tool_call"')
+          if (mayContainToolCall) {
+            const toolIntent = this.detectToolCall(accumulatedText)
+            if (toolIntent) {
+              streamPaused = true
+              const toolResult = await this.handleToolCall(toolIntent, sender)
+              if (toolResult) {
+                pendingInjections.push(toolResult)
+                fullContent.push(toolResult)
+                accumulatedText += toolResult
+                if (!sender.isDestroyed()) {
+                  const resultChunk: AIStreamChunk = { id: streamId, delta: toolResult }
+                  sender.send(IPC_CHANNELS.AI_STREAM_CHUNK, resultChunk)
+                }
+              }
+              streamPaused = false
+              continue
+            }
+          }
+        }
+
         if (!sender.isDestroyed()) {
           const streamChunk: AIStreamChunk = { id: streamId, delta: chunk }
           sender.send(IPC_CHANNELS.AI_STREAM_CHUNK, streamChunk)
@@ -941,5 +1006,121 @@ export class AIHandler extends IpcHandler {
         error: err instanceof Error ? err.message : String(err),
       })
     }
+  }
+
+  private detectToolCall(accumulated: string): ToolCallIntent | null {
+    const xmlMatch = accumulated.match(
+      /<tool_call\s+server="([^"]+)"\s+tool="([^"]+)">(.+?)<\/tool_call\s*>/s
+    )
+    if (xmlMatch) {
+      try {
+        const args = JSON.parse(xmlMatch[3]!) as Record<string, unknown>
+        return {
+          serverName: xmlMatch[1]!,
+          toolName: xmlMatch[2]!,
+          args,
+        }
+      } catch {
+        return null
+      }
+    }
+
+    const jsonPattern = /\{"type"\s*:\s*"tool_call"\s*,\s*"server"\s*:\s*"([^"]+)"\s*,\s*"tool"\s*:\s*"([^"]+)"\s*,\s*"args"\s*:\s*(\{[^}]+\})\s*\}/
+    const jsonMatch = accumulated.match(jsonPattern)
+    if (jsonMatch) {
+      try {
+        const args = JSON.parse(jsonMatch[3]!) as Record<string, unknown>
+        return {
+          serverName: jsonMatch[1]!,
+          toolName: jsonMatch[2]!,
+          args,
+        }
+      } catch {
+        return null
+      }
+    }
+
+    return null
+  }
+
+  private async handleToolCall(
+    intent: ToolCallIntent,
+    sender: Electron.IpcMainEvent['sender'],
+  ): Promise<string | null> {
+    if (!this.mcpEnabled || !this.mcpClient || !this.mcpPermission || !this.mcpAuditLog || !this.mcpRegistry) {
+      return null
+    }
+
+    try {
+      const existingPermission = this.mcpPermission.checkPermission(intent.serverName, intent.toolName)
+
+      if (existingPermission === 'deny') {
+        return '\n[Tool call denied by user policy]\n'
+      }
+
+      if (!existingPermission) {
+        const tool = this.mcpRegistry.getTool(intent.serverName, intent.toolName)
+        const decision = await this.promptUserPermission(sender, {
+          requestId: `perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          serverName: intent.serverName,
+          toolName: intent.toolName,
+          toolDescription: tool?.description ?? '',
+          args: intent.args,
+          isSensitive: this.mcpPermission.isSensitiveTool(intent.serverName, intent.toolName),
+        })
+
+        if (decision === 'deny') {
+          this.mcpPermission.grantPermission(intent.serverName, intent.toolName, 'deny')
+          return '\n[Tool call denied by user]\n'
+        }
+
+        this.mcpPermission.grantPermission(intent.serverName, intent.toolName, decision)
+      }
+
+      const startTime = Date.now()
+      const result = await this.mcpClient.callTool(intent.serverName, intent.toolName, intent.args)
+      const durationMs = Date.now() - startTime
+
+      await this.mcpAuditLog.record({
+        timestamp: Date.now(),
+        serverName: intent.serverName,
+        toolName: intent.toolName,
+        args: JSON.stringify(intent.args),
+        result: result.isError ? 'error' : 'success',
+        durationMs,
+        userDecision: existingPermission ? 'auto' : 'confirmed',
+      })
+
+      const resultContent = typeof result.content === 'string'
+        ? result.content
+        : result.content.map(c => c.text).join('\n')
+
+      return `\n[Tool Result (${intent.serverName}/${intent.toolName})]:\n${resultContent}\n`
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      return `\n[Tool call failed: ${errorMsg}. AI should try alternative approach.]\n`
+    }
+  }
+
+  private promptUserPermission(
+    sender: Electron.IpcMainEvent['sender'],
+    prompt: { requestId: string; serverName: string; toolName: string; toolDescription: string; args: Record<string, unknown>; isSensitive: boolean },
+  ): Promise<MCPPermissionLevel> {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.pendingPermissionRequests.delete(prompt.requestId)
+        resolve('deny')
+      }, 60000)
+
+      this.pendingPermissionRequests.set(prompt.requestId, { resolve, timeout })
+
+      if (!sender.isDestroyed()) {
+        sender.send(IPC_CHANNELS.MCP_PERMISSION_PROMPT, prompt)
+      } else {
+        clearTimeout(timeout)
+        this.pendingPermissionRequests.delete(prompt.requestId)
+        resolve('deny')
+      }
+    })
   }
 }

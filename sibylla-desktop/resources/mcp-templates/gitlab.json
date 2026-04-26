@@ -1,0 +1,34 @@
+{
+  "id": "gitlab",
+  "name": "GitLab",
+  "description": "Access GitLab repositories, issues, merge requests, and code search",
+  "icon": "gitlab",
+  "category": "developer",
+  "serverConfig": {
+    "name": "gitlab",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-gitlab"],
+    "env": {
+      "GITLAB_PERSONAL_ACCESS_TOKEN": "{{GITLAB_TOKEN}}"
+    }
+  },
+  "credentialFields": [
+    {
+      "key": "GITLAB_TOKEN",
+      "label": "Personal Access Token",
+      "type": "password",
+      "required": true,
+      "placeholder": "glpat-xxxxxxxxxxxx"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "Node.js",
+      "checkCommand": "node --version",
+      "installUrl": "https://nodejs.org"
+    }
+  ],
+  "tools": ["list_issues", "get_issue", "create_issue", "list_merge_requests", "get_merge_request", "search_code"],
+  "sensitiveToolPatterns": ["create_*", "write_*", "delete_*"]
+}

@@ -63,3 +63,6 @@ prompts:
   - id: agents.memory-curator
     scope: agent
     file: agents/memory-curator.md
+  - id: import.classify
+    scope: import
+    file: import/classify.md

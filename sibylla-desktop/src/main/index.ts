@@ -13,6 +13,7 @@ import { AuthHandler } from './ipc/handlers/auth.handler'
 import { AIHandler } from './ipc/handlers/ai.handler'
 import { SearchHandler } from './ipc/handlers/search.handler'
 import { MemoryHandler } from './ipc/handlers/memory.handler'
+import { AppHandler } from './ipc/handlers/app.handler'
 import { FileManager } from './services/file-manager'
 import { ImportManager } from './services/import-manager'
 import { WorkspaceManager } from './services/workspace-manager'
@@ -415,6 +416,11 @@ if (!gotTheLock) {
 
           // Initialize fulltext search (DatabaseManager + LocalSearchEngine)
           databaseManager = new DatabaseManager(workspacePath)
+
+          // ── TASK044: Initialize AppHandler for config read/write ──
+          const appHandler = new AppHandler(workspacePath)
+          ipcManager.registerHandler(appHandler)
+
           localSearchEngineRef = new LocalSearchEngine(
             databaseManager,
             fileManager,
@@ -664,6 +670,82 @@ if (!gotTheLock) {
           harnessContextEngine.setPromptComposer(promptComposer)
           aiModeRegistry.setPromptComposer(promptComposer)
           registerPromptLibraryHandlers(ipcMain, promptLoader, promptRegistry, promptComposer, () => workspacePath)
+
+          // ── TASK042: Initialize MCP services ──
+          const { MCPAuditLog } = await import('./services/mcp/mcp-audit')
+          const { MCPClient } = await import('./services/mcp/mcp-client')
+          const { MCPCredentials } = await import('./services/mcp/mcp-credentials')
+          const { MCPPermission } = await import('./services/mcp/mcp-permission')
+          const { MCPRegistry } = await import('./services/mcp/mcp-registry')
+          const { MCPTemplateLoader } = await import('./services/mcp/mcp-templates')
+          const { McpHandler } = await import('./ipc/handlers/mcp.handler')
+
+          const mcpConfigPath = path.join(workspacePath, '.sibylla', 'config.json')
+          let mcpEnabled = false
+          try {
+            const fsModule = await import('fs')
+            if (fsModule.existsSync(mcpConfigPath)) {
+              const configContent = await fsModule.promises.readFile(mcpConfigPath, 'utf-8')
+              const parsedConfig = JSON.parse(configContent) as { mcp?: { enabled?: boolean } }
+              mcpEnabled = parsedConfig.mcp?.enabled === true
+            }
+          } catch {
+            mcpEnabled = false
+          }
+
+          if (mcpEnabled) {
+            const mcpAuditLog = new MCPAuditLog(
+              path.join(workspacePath, '.sibylla', 'mcp', 'audit-log.jsonl'),
+              true,
+            )
+            const mcpClient = new MCPClient(mcpAuditLog)
+            const mcpCredentials = new MCPCredentials(
+              workspacePath,
+              workspaceInfo.config.workspaceId,
+            )
+            await mcpCredentials.initialize()
+
+            const mcpPermission = new MCPPermission(
+              path.join(workspacePath, '.sibylla', 'mcp', 'permissions.json'),
+              [],
+            )
+            await mcpPermission.initialize()
+
+            const mcpRegistry = new MCPRegistry(
+              mcpClient,
+              mcpCredentials,
+              mcpConfigPath,
+            )
+            await mcpRegistry.initialize()
+
+            const mcpTemplateLoader = new MCPTemplateLoader(
+              app.isPackaged
+                ? path.join(process.resourcesPath, 'resources', 'mcp-templates')
+                : path.join(app.getAppPath(), 'resources', 'mcp-templates'),
+            )
+            await mcpTemplateLoader.initialize()
+
+            aiHandler.setMcpServices({
+              client: mcpClient,
+              registry: mcpRegistry,
+              permission: mcpPermission,
+              auditLog: mcpAuditLog,
+              enabled: true,
+            })
+
+            harnessContextEngine.setMcpRegistry(mcpRegistry, true)
+
+            const mcpHandler = new McpHandler(
+              mcpClient,
+              mcpRegistry,
+              mcpPermission,
+              mcpAuditLog,
+              aiHandler,
+            )
+            ipcManager.registerHandler(mcpHandler)
+
+            logger.info('[Main] MCP services initialized', { workspace: workspacePath })
+          }
 
           // Register trace/performance event push to renderer
           const forwardToRenderer = (eventName: string, channel: string) => {

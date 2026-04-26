@@ -1,0 +1,16 @@
+{
+  "id": "zotero-references",
+  "name": "Zotero 文献同步",
+  "description": "每天同步 Zotero 新增文献引用到工作区参考文献目录",
+  "serverTemplateId": "zotero",
+  "toolName": "list_items",
+  "defaultArgs": {
+    "sort": "dateAdded",
+    "direction": "desc",
+    "limit": 50
+  },
+  "defaultIntervalMinutes": 1440,
+  "targetPathTemplate": "docs/references/YYYY-MM.md",
+  "writeMode": "append",
+  "transformTemplate": "generic-list"
+}

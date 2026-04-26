@@ -21,6 +21,8 @@ import type { AiModeRegistry } from '../mode/ai-mode-registry'
 import { estimateTokens } from './token-utils'
 import type { PromptComposer } from './PromptComposer'
 import type { PromptPart } from '../../../shared/types'
+import type { MCPTool } from '../mcp/types'
+import type { MCPRegistry } from '../mcp/mcp-registry'
 
 export interface ContextAssemblyRequest {
   userMessage: string
@@ -40,11 +42,25 @@ export interface HarnessContextRequest extends ContextAssemblyRequest {
   aiMode?: AiModeDefinition
 }
 
+/**
+ * External reference for MCP-synced data sources (TASK043).
+ * Parsed from @source:resource-identifier syntax.
+ */
+export interface ExternalReference {
+  /** Data source: github, slack, gitlab, notion */
+  source: string
+  /** Resource type: issue, pr, message, general */
+  resource: string
+  /** Identifier: 123, channel-name, etc. Empty string if not specified */
+  identifier: string
+}
+
 interface BudgetAllocation {
   alwaysTokens: number
   memoryTokens: number
   skillTokens: number
   manualTokens: number
+  mcpTokens: number
   overBudget: boolean
 }
 
@@ -86,6 +102,8 @@ export class ContextEngine {
   private handbookService: HandbookService | null = null
   private aiModeRegistry: AiModeRegistry | null = null
   private promptComposer: PromptComposer | null = null
+  private mcpRegistry: MCPRegistry | null = null
+  private mcpEnabled: boolean = false
 
   constructor(
     fileManager: FileManager,
@@ -119,6 +137,11 @@ export class ContextEngine {
     this.promptComposer = composer
   }
 
+  setMcpRegistry(registry: MCPRegistry, enabled: boolean): void {
+    this.mcpRegistry = registry
+    this.mcpEnabled = enabled
+  }
+
   async assembleContext(request: ContextAssemblyRequest): Promise<AssembledContext> {
     if (!this.tracer?.isEnabled()) {
       return this.assembleContextInternal(request)
@@ -137,23 +160,25 @@ export class ContextEngine {
     const warnings: string[] = []
     const totalBudget = this.config.maxContextTokens - this.config.systemPromptReserve
 
-    const [alwaysSources, memorySources, skillSources, manualSources] = await Promise.all([
+    const [alwaysSources, memorySources, skillSources, manualSources, mcpSources] = await Promise.all([
       this.collectAlwaysLoad(request),
       this.collectMemoryContext(request),
       this.collectSkillRefs(request.skillRefs ?? []),
       this.collectManualRefs(request.manualRefs),
+      this.collectMcpContext(),
     ])
 
-    const allocation = this.allocateBudget(alwaysSources, memorySources, skillSources, manualSources, totalBudget, warnings)
+    const allocation = this.allocateBudget(alwaysSources, memorySources, skillSources, manualSources, mcpSources, totalBudget, warnings)
 
     const adjustedAlways = this.truncateToBudget(alwaysSources, allocation.alwaysTokens, warnings, 'always-load')
     const adjustedMemory = this.truncateToBudget(memorySources, allocation.memoryTokens, warnings, 'memory')
     const adjustedSkill = this.truncateToBudget(skillSources, allocation.skillTokens, warnings, 'skill')
     const adjustedManual = this.truncateToBudget(manualSources, allocation.manualTokens, warnings, 'manual-ref')
+    const adjustedMcp = this.truncateToBudget(mcpSources, allocation.mcpTokens, warnings, 'mcp')
 
-    const allSources = [...adjustedAlways, ...adjustedMemory, ...adjustedSkill, ...adjustedManual]
-    const layers = this.buildLayers(adjustedAlways, adjustedMemory, adjustedSkill, adjustedManual)
-    const systemPrompt = this.buildSystemPrompt(adjustedAlways, adjustedMemory, adjustedSkill, adjustedManual)
+    const allSources = [...adjustedAlways, ...adjustedMemory, ...adjustedSkill, ...adjustedManual, ...adjustedMcp]
+    const layers = this.buildLayers(adjustedAlways, adjustedMemory, adjustedSkill, adjustedManual, adjustedMcp)
+    const systemPrompt = this.buildSystemPrompt(adjustedAlways, adjustedMemory, adjustedSkill, adjustedManual, adjustedMcp)
 
     const totalTokens = allSources.reduce((sum, s) => sum + s.tokenCount, 0)
 
@@ -162,6 +187,7 @@ export class ContextEngine {
       memorySources: adjustedMemory.length,
       skillSources: adjustedSkill.length,
       manualSources: adjustedManual.length,
+      mcpSources: adjustedMcp.length,
       totalTokens,
       budgetUsed: totalTokens,
       budgetTotal: totalBudget,
@@ -328,6 +354,144 @@ export class ContextEngine {
     return [...new Set(matches)]
   }
 
+  // ─── TASK043: External Reference Syntax (@github:issue-123) ───
+
+  /**
+   * Extract external data source references from text.
+   *
+   * Supports patterns like:
+   * - @github:issue-123
+   * - @slack:general
+   * - @gitlab:mr-45
+   * - @notion:page-abc
+   *
+   * @param text - User message text to parse
+   * @returns Array of parsed external references
+   */
+  extractExternalReferences(text: string): ExternalReference[] {
+    const pattern = /@(github|slack|gitlab|notion):(\w+)(?:-([\w-]+))?/g
+    const refs: ExternalReference[] = []
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(text)) !== null) {
+      const source = match[1]
+      const part1 = match[2]
+      const part2 = match[3]
+
+      if (part2) {
+        // @github:issue-123 → source=github, resource=issue, identifier=123
+        refs.push({ source, resource: part1, identifier: part2 })
+      } else {
+        // @slack:general → source=slack, resource=general, identifier=''
+        refs.push({ source, resource: part1, identifier: '' })
+      }
+    }
+    return refs
+  }
+
+  /**
+   * Resolve an external reference to its content from synced data files.
+   *
+   * Searches workspace for matching sync data and extracts relevant content.
+   * Returns null if not found — never crashes.
+   */
+  async resolveExternalReference(ref: ExternalReference): Promise<string | null> {
+    try {
+      // Build search paths based on source type
+      const searchPaths = this.getExternalRefSearchPaths(ref)
+
+      for (const searchPath of searchPaths) {
+        try {
+          const fileResult = await this.fileManager.readFile(searchPath)
+          const content = fileResult.content
+
+          // If identifier is provided, search for matching content
+          if (ref.identifier) {
+            const searchTerm = ref.resource === 'issue' || ref.resource === 'pr' || ref.resource === 'mr'
+              ? `#${ref.identifier}`
+              : ref.identifier
+
+            const lines = content.split('\n')
+            const matchingLines: string[] = []
+            let capturing = false
+
+            for (const line of lines) {
+              if (line.includes(searchTerm)) {
+                capturing = true
+                matchingLines.push(line)
+              } else if (capturing) {
+                // Capture continuation lines (indented or empty)
+                if (line.startsWith('  ') || line.startsWith('\t') || line.trim() === '') {
+                  matchingLines.push(line)
+                } else if (line.startsWith('- ') || line.startsWith('# ')) {
+                  // New item — stop capturing
+                  break
+                } else {
+                  matchingLines.push(line)
+                  break
+                }
+              }
+            }
+
+            if (matchingLines.length > 0) {
+              return matchingLines.join('\n')
+            }
+          } else {
+            // No identifier — return the whole file content
+            return content
+          }
+        } catch {
+          // File not found at this path — try next
+          continue
+        }
+      }
+
+      logger.debug('[ContextEngine] External reference not found in synced data', {
+        source: ref.source,
+        resource: ref.resource,
+        identifier: ref.identifier,
+      })
+      return null
+    } catch (err) {
+      logger.debug('[ContextEngine] External reference resolution failed', {
+        source: ref.source,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return null
+    }
+  }
+
+  /**
+   * Get candidate file paths for an external reference.
+   */
+  private getExternalRefSearchPaths(ref: ExternalReference): string[] {
+    const paths: string[] = []
+
+    switch (ref.source) {
+      case 'github':
+        if (ref.resource === 'issue') {
+          paths.push('docs/github/issues.md')
+        } else if (ref.resource === 'pr') {
+          paths.push('.sibylla/inbox/prs/prs.md')
+        }
+        break
+      case 'slack':
+        paths.push(`docs/logs/slack/${ref.resource}.md`)
+        break
+      case 'gitlab':
+        if (ref.resource === 'mr') {
+          paths.push('docs/gitlab/merge-requests.md')
+        } else if (ref.resource === 'issue') {
+          paths.push('docs/gitlab/issues.md')
+        }
+        break
+      case 'notion':
+        paths.push(`docs/notion/${ref.resource}.md`)
+        break
+    }
+
+    return paths
+  }
+
   async findMatchingFiles(query: string, limit: number = 20): Promise<ContextFileInfo[]> {
     try {
       const workspaceRoot = this.fileManager.getWorkspaceRoot()
@@ -465,6 +629,54 @@ export class ContextEngine {
     }
   }
 
+  private async collectMcpContext(): Promise<ContextSource[]> {
+    if (!this.mcpEnabled || !this.mcpRegistry) return []
+    try {
+      const tools = this.mcpRegistry.listAllTools()
+      if (tools.length === 0) return []
+      const content = this.formatMcpToolDescriptions(tools)
+      return [{
+        filePath: 'mcp:tools',
+        content,
+        tokenCount: this.estimateTokens(content),
+        layer: 'mcp' as ContextLayerType,
+      }]
+    } catch (err) {
+      logger.debug('[ContextEngine] MCP context collection unavailable', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return []
+    }
+  }
+
+  private formatMcpToolDescriptions(tools: MCPTool[]): string {
+    const byServer = new Map<string, MCPTool[]>()
+    for (const tool of tools) {
+      const existing = byServer.get(tool.serverName) ?? []
+      existing.push(tool)
+      byServer.set(tool.serverName, existing)
+    }
+
+    const lines: string[] = [
+      '你可以通过以下外部工具获取信息或执行操作。调用格式：',
+      '<tool_call server="服务名" tool="工具名">参数JSON</tool_call >',
+      '',
+    ]
+
+    for (const [serverName, serverTools] of byServer) {
+      lines.push(`### ${serverName} (已连接)`)
+      for (const tool of serverTools) {
+        const schemaKeys = tool.inputSchema?.properties
+          ? Object.keys(tool.inputSchema.properties as Record<string, unknown>).join(', ')
+          : ''
+        lines.push(`- ${tool.name}: ${tool.description}${schemaKeys ? ` 参数: { ${schemaKeys} }` : ''}`)
+      }
+      lines.push('')
+    }
+
+    return lines.join('\n')
+  }
+
   private async collectSkillRefs(skillRefs: string[]): Promise<ContextSource[]> {
     if (!this.skillEngine || skillRefs.length === 0) return []
     const sources: ContextSource[] = []
@@ -518,6 +730,7 @@ export class ContextEngine {
     memorySources: ContextSource[],
     skillSources: ContextSource[],
     manualSources: ContextSource[],
+    mcpSources: ContextSource[],
     totalBudget: number,
     warnings: string[]
   ): BudgetAllocation {
@@ -525,27 +738,43 @@ export class ContextEngine {
     const memoryTokens = memorySources.reduce((sum, s) => sum + s.tokenCount, 0)
     const skillTokens = skillSources.reduce((sum, s) => sum + s.tokenCount, 0)
     const manualTokens = manualSources.reduce((sum, s) => sum + s.tokenCount, 0)
-    const fixedTokens = alwaysTokens + memoryTokens + skillTokens + manualTokens
+    const mcpTokens = mcpSources.reduce((sum, s) => sum + s.tokenCount, 0)
+    const fixedTokens = alwaysTokens + memoryTokens + skillTokens + manualTokens + mcpTokens
 
     if (fixedTokens <= totalBudget) {
-      return { alwaysTokens, memoryTokens, skillTokens, manualTokens, overBudget: false }
+      return { alwaysTokens, memoryTokens, skillTokens, manualTokens, mcpTokens, overBudget: false }
     }
 
     warnings.push(
       `Context exceeds budget: ${fixedTokens} tokens used, ${totalBudget} available. Truncating.`
     )
 
-    // Token budget: always 55%, memory 15%, skill 15%, manual 15%
+    if (this.mcpEnabled && mcpSources.length > 0) {
+      const alwaysAllocation = Math.floor(totalBudget * 0.55)
+      const memoryAllocation = Math.floor(totalBudget * 0.15)
+      const skillAllocation = Math.floor(totalBudget * 0.10)
+      const manualAllocation = Math.floor(totalBudget * 0.10)
+      const mcpAllocation = totalBudget - alwaysAllocation - memoryAllocation - skillAllocation - manualAllocation
+      return {
+        alwaysTokens: alwaysAllocation,
+        memoryTokens: memoryAllocation,
+        skillTokens: skillAllocation,
+        manualTokens: manualAllocation,
+        mcpTokens: mcpAllocation,
+        overBudget: true,
+      }
+    }
+
     const alwaysAllocation = Math.floor(totalBudget * 0.55)
     const memoryAllocation = Math.floor(totalBudget * 0.15)
     const skillAllocation = Math.floor(totalBudget * 0.15)
     const manualAllocation = totalBudget - alwaysAllocation - memoryAllocation - skillAllocation
-
     return {
       alwaysTokens: alwaysAllocation,
       memoryTokens: memoryAllocation,
       skillTokens: skillAllocation,
       manualTokens: manualAllocation,
+      mcpTokens: 0,
       overBudget: true,
     }
   }
@@ -612,7 +841,8 @@ export class ContextEngine {
     alwaysSources: ContextSource[],
     memorySources: ContextSource[],
     skillSources: ContextSource[],
-    manualSources: ContextSource[]
+    manualSources: ContextSource[],
+    mcpSources: ContextSource[]
   ): ContextLayer[] {
     const layers: ContextLayer[] = []
 
@@ -648,6 +878,14 @@ export class ContextEngine {
       })
     }
 
+    if (mcpSources.length > 0) {
+      layers.push({
+        type: 'mcp',
+        sources: mcpSources,
+        totalTokens: mcpSources.reduce((sum, s) => sum + s.tokenCount, 0),
+      })
+    }
+
     return layers
   }
 
@@ -655,7 +893,8 @@ export class ContextEngine {
     alwaysSources: ContextSource[],
     memorySources: ContextSource[],
     skillSources: ContextSource[],
-    manualSources: ContextSource[]
+    manualSources: ContextSource[],
+    mcpSources: ContextSource[]
   ): string {
     const segments: string[] = [SYSTEM_PROMPT_BASE]
 
@@ -673,6 +912,10 @@ export class ContextEngine {
 
     for (const source of manualSources) {
       segments.push(`--- Manual-Ref: ${source.filePath} ---\n${source.content}`)
+    }
+
+    for (const source of mcpSources) {
+      segments.push(`--- MCP Tools: ${source.filePath} ---\n${source.content}`)
     }
 
     return segments.join('\n\n')

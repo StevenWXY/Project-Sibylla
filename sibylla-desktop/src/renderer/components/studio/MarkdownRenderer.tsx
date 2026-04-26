@@ -6,14 +6,20 @@ import rehypeHighlight from 'rehype-highlight'
 interface MarkdownRendererProps {
   content: string
   onHandbookReference?: (entryId: string) => void
+  onFileReference?: (filePath: string) => void
 }
 
-export function MarkdownRenderer({ content, onHandbookReference }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, onHandbookReference, onFileReference }: MarkdownRendererProps) {
   const processedContent = useMemo(() => {
-    return content.replace(
+    let result = content.replace(
       /\[Handbook:\s*([^\]]+)\]/g,
       (_match, id: string) => `📖 来自用户手册：[📖 ${id}](handbook-ref:${id})`
     )
+    result = result.replace(
+      /\[([^\]]*\.(?:md|txt|csv|json|yaml|yml|pdf|docx))\]\(([^)]+)\)/g,
+      (_match, label: string, href: string) => `[${label}](file-ref:${href})`
+    )
+    return result
   }, [content])
 
   const components = useMemo(
@@ -142,6 +148,18 @@ export function MarkdownRenderer({ content, onHandbookReference }: MarkdownRende
             </button>
           )
         }
+        if (href?.startsWith('file-ref:')) {
+          const filePath = href.replace('file-ref:', '')
+          return (
+            <button
+              onClick={() => onFileReference?.(filePath)}
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[12px] text-emerald-300 transition-colors hover:bg-emerald-500/25"
+            >
+              <span>📄</span>
+              <span>{children}</span>
+            </button>
+          )
+        }
         return (
           <a
             href={href}
@@ -165,7 +183,7 @@ export function MarkdownRenderer({ content, onHandbookReference }: MarkdownRende
         )
       },
     }),
-    [onHandbookReference]
+    [onHandbookReference, onFileReference]
   )
 
   return (

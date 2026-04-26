@@ -1,0 +1,34 @@
+{
+  "id": "linear",
+  "name": "Linear",
+  "description": "Access Linear issues, teams, and project management",
+  "icon": "linear",
+  "category": "project-management",
+  "serverConfig": {
+    "name": "linear",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "mcp-linear"],
+    "env": {
+      "LINEAR_API_KEY": "{{LINEAR_API_KEY}}"
+    }
+  },
+  "credentialFields": [
+    {
+      "key": "LINEAR_API_KEY",
+      "label": "API Key",
+      "type": "password",
+      "required": true,
+      "placeholder": "lin_api_xxxxxxxxxxxx"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "Node.js",
+      "checkCommand": "node --version",
+      "installUrl": "https://nodejs.org"
+    }
+  ],
+  "tools": ["list_issues", "get_issue", "create_issue", "update_issue", "list_teams"],
+  "sensitiveToolPatterns": ["create_*", "update_*", "delete_*"]
+}

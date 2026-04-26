@@ -138,6 +138,22 @@ import type {
   WorkflowRunSummary,
   RunFilter,
   WorkflowConfirmationRequest,
+  // Classification types (TASK041)
+  ClassificationResultShared,
+  ClassificationConfirmationPayload,
+  // MCP types (TASK042)
+  MCPServerConfigShared,
+  MCPServerInfoShared,
+  MCPToolShared,
+  MCPToolResultShared,
+  MCPPermissionLevelShared,
+  MCPPermissionPromptShared,
+  // MCP Sync types (TASK043)
+  SyncTaskConfigShared,
+  SyncProgressShared,
+  SyncTaskWithStateShared,
+  // App config types (TASK044)
+  AppConfig,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -506,10 +522,50 @@ interface ElectronAPI {
     confirmStep: (runId: string, decision: 'confirm' | 'skip' | 'cancel') => Promise<IPCResponse<void>>
     onConfirmationRequired: (callback: (request: WorkflowConfirmationRequest) => void) => () => void
   }
+
+  // Import Pipeline operations (TASK040)
+  importPipeline: {
+    plan: (input: string) => Promise<IPCResponse<unknown>>
+    execute: (input: string, options?: Record<string, unknown>) => Promise<IPCResponse<unknown>>
+    cancel: () => Promise<IPCResponse<void>>
+    pause: () => Promise<IPCResponse<void>>
+    resume: () => Promise<IPCResponse<void>>
+    onProgress: (callback: (data: Record<string, unknown>) => void) => () => void
+    history: () => Promise<IPCResponse<unknown[]>>
+    rollback: (importId: string) => Promise<IPCResponse<unknown>>
+    onClassification: (callback: (data: ClassificationConfirmationPayload) => void) => () => void
+    confirmClassification: (importId: string, result: ClassificationResultShared) => Promise<IPCResponse<void>>
+  }
   
   // Event listeners (for future use)
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
   off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => () => void
+
+  // MCP operations (TASK042)
+  mcp: {
+    connect: (config: MCPServerConfigShared) => Promise<IPCResponse<void>>
+    disconnect: (serverName: string) => Promise<IPCResponse<void>>
+    listServers: () => Promise<IPCResponse<MCPServerInfoShared[]>>
+    listTools: () => Promise<IPCResponse<MCPToolShared[]>>
+    callTool: (serverName: string, toolName: string, args: Record<string, unknown>) => Promise<IPCResponse<MCPToolResultShared>>
+    grantPermission: (requestId: string, level: MCPPermissionLevelShared) => Promise<IPCResponse<void>>
+    revokePermission: (serverName: string, toolName: string) => Promise<IPCResponse<void>>
+    onPermissionPrompt: (callback: (prompt: MCPPermissionPromptShared) => void) => () => void
+    onServerStatusChanged: (callback: (info: MCPServerInfoShared) => void) => () => void
+    // TASK043 sync methods
+    configureSync: (config: SyncTaskConfigShared) => Promise<IPCResponse<void>>
+    triggerSync: (taskId: string) => Promise<IPCResponse<SyncProgressShared>>
+    listSyncTasks: () => Promise<IPCResponse<SyncTaskWithStateShared[]>>
+    pauseSync: (taskId: string) => Promise<IPCResponse<void>>
+    resumeSync: (taskId: string) => Promise<IPCResponse<void>>
+    onSyncProgress: (callback: (progress: SyncProgressShared) => void) => () => void
+  }
+
+  // App configuration (TASK044)
+  app: {
+    getConfig: () => Promise<IPCResponse<AppConfig>>
+    updateConfig: (updates: Partial<AppConfig>) => Promise<IPCResponse<void>>
+  }
 }
 
 // Whitelist of allowed channels for security
@@ -751,6 +807,38 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.WORKFLOW_LIST_RUNS,
   IPC_CHANNELS.WORKFLOW_CONFIRMATION_REQUIRED,
   IPC_CHANNELS.WORKFLOW_CONFIRM_STEP,
+  // Import Pipeline operations (TASK040)
+  IPC_CHANNELS.FILE_IMPORT_PLAN,
+  IPC_CHANNELS.FILE_IMPORT_EXECUTE,
+  IPC_CHANNELS.FILE_IMPORT_CANCEL,
+  IPC_CHANNELS.FILE_IMPORT_PAUSE,
+  IPC_CHANNELS.FILE_IMPORT_RESUME,
+  IPC_CHANNELS.FILE_IMPORT_PIPELINE_PROGRESS,
+  IPC_CHANNELS.FILE_IMPORT_HISTORY,
+  IPC_CHANNELS.FILE_IMPORT_ROLLBACK,
+  // Import Classification operations (TASK041)
+  IPC_CHANNELS.FILE_IMPORT_CLASSIFICATION,
+  IPC_CHANNELS.FILE_IMPORT_CONFIRM_CLASSIFICATION,
+  // MCP operations (TASK042)
+  IPC_CHANNELS.MCP_CONNECT,
+  IPC_CHANNELS.MCP_DISCONNECT,
+  IPC_CHANNELS.MCP_LIST_SERVERS,
+  IPC_CHANNELS.MCP_LIST_TOOLS,
+  IPC_CHANNELS.MCP_CALL_TOOL,
+  IPC_CHANNELS.MCP_PERMISSION_PROMPT,
+  IPC_CHANNELS.MCP_GRANT_PERMISSION,
+  IPC_CHANNELS.MCP_REVOKE_PERMISSION,
+  IPC_CHANNELS.MCP_SERVER_STATUS_CHANGED,
+  // MCP Sync operations (TASK043)
+  IPC_CHANNELS.MCP_CONFIGURE_SYNC,
+  IPC_CHANNELS.MCP_TRIGGER_SYNC,
+  IPC_CHANNELS.MCP_SYNC_PROGRESS,
+  IPC_CHANNELS.MCP_LIST_SYNC_TASKS,
+  IPC_CHANNELS.MCP_PAUSE_SYNC,
+  IPC_CHANNELS.MCP_RESUME_SYNC,
+  // App configuration (TASK044)
+  IPC_CHANNELS.APP_GET_CONFIG,
+  IPC_CHANNELS.APP_UPDATE_CONFIG,
 ]
 
 /**
@@ -1792,6 +1880,48 @@ const api: ElectronAPI = {
       }
     },
   },
+
+  // Import Pipeline operations (TASK040)
+  importPipeline: {
+    plan: async (input: string) => {
+      return await safeInvoke(IPC_CHANNELS.FILE_IMPORT_PLAN, input)
+    },
+    execute: async (input: string, options?: Record<string, unknown>) => {
+      return await safeInvoke(IPC_CHANNELS.FILE_IMPORT_EXECUTE, input, options)
+    },
+    cancel: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_IMPORT_CANCEL)
+    },
+    pause: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_IMPORT_PAUSE)
+    },
+    resume: async () => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_IMPORT_RESUME)
+    },
+    onProgress: (callback: (data: Record<string, unknown>) => void) => {
+      const handler = (_event: IpcRendererEvent, data: Record<string, unknown>) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.FILE_IMPORT_PIPELINE_PROGRESS, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.FILE_IMPORT_PIPELINE_PROGRESS, handler)
+      }
+    },
+    history: async () => {
+      return await safeInvoke(IPC_CHANNELS.FILE_IMPORT_HISTORY)
+    },
+    rollback: async (importId: string) => {
+      return await safeInvoke(IPC_CHANNELS.FILE_IMPORT_ROLLBACK, importId)
+    },
+    onClassification: (callback: (data: ClassificationConfirmationPayload) => void) => {
+      const handler = (_event: IpcRendererEvent, data: ClassificationConfirmationPayload) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.FILE_IMPORT_CLASSIFICATION, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.FILE_IMPORT_CLASSIFICATION, handler)
+      }
+    },
+    confirmClassification: async (importId: string, result: ClassificationResultShared) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_IMPORT_CONFIRM_CLASSIFICATION, importId, result)
+    },
+  },
   
   // Event listener registration
   on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => {
@@ -1838,6 +1968,78 @@ const api: ElectronAPI = {
     if (isDev) {
       console.debug(`[Preload] Event listener removed for channel: ${channel}`)
     }
+  },
+
+  // MCP operations (TASK042)
+  mcp: {
+    connect: async (config: MCPServerConfigShared) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MCP_CONNECT, config)
+    },
+    disconnect: async (serverName: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MCP_DISCONNECT, serverName)
+    },
+    listServers: async () => {
+      return await safeInvoke<MCPServerInfoShared[]>(IPC_CHANNELS.MCP_LIST_SERVERS)
+    },
+    listTools: async () => {
+      return await safeInvoke<MCPToolShared[]>(IPC_CHANNELS.MCP_LIST_TOOLS)
+    },
+    callTool: async (serverName: string, toolName: string, args: Record<string, unknown>) => {
+      return await safeInvoke<MCPToolResultShared>(IPC_CHANNELS.MCP_CALL_TOOL, serverName, toolName, args)
+    },
+    grantPermission: async (requestId: string, level: MCPPermissionLevelShared) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MCP_GRANT_PERMISSION, requestId, level)
+    },
+    revokePermission: async (serverName: string, toolName: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MCP_REVOKE_PERMISSION, serverName, toolName)
+    },
+    onPermissionPrompt: (callback: (prompt: MCPPermissionPromptShared) => void) => {
+      const handler = (_event: IpcRendererEvent, prompt: MCPPermissionPromptShared) => callback(prompt)
+      ipcRenderer.on(IPC_CHANNELS.MCP_PERMISSION_PROMPT, handler)
+      return () => {
+        ipcRenderer.off(IPC_CHANNELS.MCP_PERMISSION_PROMPT, handler)
+      }
+    },
+    onServerStatusChanged: (callback: (info: MCPServerInfoShared) => void) => {
+      const handler = (_event: IpcRendererEvent, info: MCPServerInfoShared) => callback(info)
+      ipcRenderer.on(IPC_CHANNELS.MCP_SERVER_STATUS_CHANGED, handler)
+      return () => {
+        ipcRenderer.off(IPC_CHANNELS.MCP_SERVER_STATUS_CHANGED, handler)
+      }
+    },
+    // TASK043 sync methods
+    configureSync: async (config: SyncTaskConfigShared) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MCP_CONFIGURE_SYNC, config)
+    },
+    triggerSync: async (taskId: string) => {
+      return await safeInvoke<SyncProgressShared>(IPC_CHANNELS.MCP_TRIGGER_SYNC, taskId)
+    },
+    listSyncTasks: async () => {
+      return await safeInvoke<SyncTaskWithStateShared[]>(IPC_CHANNELS.MCP_LIST_SYNC_TASKS)
+    },
+    pauseSync: async (taskId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MCP_PAUSE_SYNC, taskId)
+    },
+    resumeSync: async (taskId: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.MCP_RESUME_SYNC, taskId)
+    },
+    onSyncProgress: (callback: (progress: SyncProgressShared) => void) => {
+      const handler = (_event: IpcRendererEvent, progress: SyncProgressShared) => callback(progress)
+      ipcRenderer.on(IPC_CHANNELS.MCP_SYNC_PROGRESS, handler)
+      return () => {
+        ipcRenderer.off(IPC_CHANNELS.MCP_SYNC_PROGRESS, handler)
+      }
+    },
+  },
+
+  // App configuration (TASK044)
+  app: {
+    getConfig: async () => {
+      return await safeInvoke<AppConfig>(IPC_CHANNELS.APP_GET_CONFIG)
+    },
+    updateConfig: async (updates: Partial<AppConfig>) => {
+      return await safeInvoke<void>(IPC_CHANNELS.APP_UPDATE_CONFIG, updates)
+    },
   },
 }
 

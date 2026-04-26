@@ -1,5 +1,6 @@
 import {
   Bell,
+  Brain,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -24,6 +25,8 @@ import {
   type FileTreeNode,
 } from '../layout/file-tree.utils'
 import { cn } from '../../utils/cn'
+import { useAppStore } from '../../store/appStore'
+import { useOnboardingStore } from '../../store/onboardingStore'
 import type {
   LeftToolMode,
   NotificationItem,
@@ -126,6 +129,8 @@ export function StudioLeftPanel({
   onMarkNotificationRead,
   onClearNotifications,
 }: StudioLeftPanelProps) {
+  const onboardingCompleted = useAppStore((s) => s.onboardingCompleted)
+  const resetOnboarding = useOnboardingStore((s) => s.reset)
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() => {
     const initial = new Set<string>()
     collectFolderIds(treeNodes, initial)
@@ -492,6 +497,23 @@ export function StudioLeftPanel({
           </div>
         )}
       </nav>
+      {!onboardingCompleted && (
+        <button
+          type="button"
+          onClick={() => {
+            resetOnboarding()
+          }}
+          className="
+            flex items-center gap-2 px-4 py-3 mx-2 mb-4
+            bg-indigo-500 text-white rounded-lg
+            hover:bg-indigo-600 transition-colors
+            animate-pulse
+          "
+        >
+          <Brain className="w-5 h-5" />
+          <span className="font-medium text-sm">倒入你的大脑</span>
+        </button>
+      )}
     </aside>
   )
 }

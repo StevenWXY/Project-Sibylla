@@ -1,0 +1,34 @@
+{
+  "id": "github",
+  "name": "GitHub",
+  "description": "Access GitHub repositories, issues, pull requests, and code search",
+  "icon": "github",
+  "category": "developer",
+  "serverConfig": {
+    "name": "github",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "{{GITHUB_PAT}}"
+    }
+  },
+  "credentialFields": [
+    {
+      "key": "GITHUB_PAT",
+      "label": "Personal Access Token",
+      "type": "password",
+      "required": true,
+      "placeholder": "ghp_xxxxxxxxxxxx"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "Node.js",
+      "checkCommand": "node --version",
+      "installUrl": "https://nodejs.org"
+    }
+  ],
+  "tools": ["list_issues", "get_issue", "create_issue", "list_prs", "get_pr", "search_code", "get_file_contents"],
+  "sensitiveToolPatterns": ["create_*", "write_*", "delete_*"]
+}

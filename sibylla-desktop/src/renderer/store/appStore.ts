@@ -78,6 +78,10 @@ interface AppState {
   toggleCommandPalette: () => void
   toggleSettings: () => void
   
+  // ========== Onboarding (TASK044) ==========
+  onboardingCompleted: boolean
+  setOnboardingCompleted: (value: boolean) => void
+  
   // ========== Reset ==========
   reset: () => void
 }
@@ -101,6 +105,7 @@ const initialState = {
   errorDetails: null,
   showCommandPalette: false,
   showSettings: false,
+  onboardingCompleted: false,
 }
 
 /**
@@ -290,6 +295,13 @@ export const useAppStore = create<AppState>()(
           'toggleSettings'
         ),
         
+        // ========== Onboarding Actions (TASK044) ==========
+        setOnboardingCompleted: (value) => set(
+          { onboardingCompleted: value },
+          false,
+          'setOnboardingCompleted'
+        ),
+        
         // ========== Reset ==========
         reset: () => set(initialState, false, 'reset'),
       }),
@@ -301,6 +313,7 @@ export const useAppStore = create<AppState>()(
           sidebarCollapsed: state.sidebarCollapsed,
           sidebarWidth: state.sidebarWidth,
           recentWorkspaces: state.recentWorkspaces,
+          onboardingCompleted: state.onboardingCompleted,
         }),
       }
     ),

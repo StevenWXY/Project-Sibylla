@@ -131,6 +131,10 @@ export class GitAbstraction extends EventEmitter {
     })
   }
 
+  getWorkspaceDir(): string {
+    return this.workspaceDir
+  }
+
   /**
    * Initialize a new Git repository in the workspace directory
    * 
@@ -2275,5 +2279,204 @@ export class GitAbstraction extends EventEmitter {
     }
 
     return conflictFiles
+  }
+
+  // ─── Import Pipeline Extension Methods (TASK040) ────────────────────────
+
+  /**
+   * Create a branch without switching to it
+   *
+   * @param name - Branch name to create
+   * @throws {GitAbstractionError} If the repository is not initialized
+   * @throws {GitAbstractionError} If the branch already exists
+   */
+  async createBranch(name: string): Promise<void> {
+    logger.info(`${LOG_PREFIX} Creating branch`, { name })
+
+    try {
+      await this.ensureInitialized()
+
+      await git.branch({
+        fs,
+        dir: this.workspaceDir,
+        ref: name,
+        checkout: false,
+      })
+
+      logger.info(`${LOG_PREFIX} Branch created`, { name })
+    } catch (error: unknown) {
+      if (error instanceof GitAbstractionError) {
+        throw error
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`${LOG_PREFIX} Failed to create branch`, {
+        name,
+        error: errorMessage,
+      })
+
+      throw new GitAbstractionError(
+        GitAbstractionErrorCode.UNKNOWN_ERROR,
+        `Failed to create branch '${name}': ${errorMessage}`,
+        { name, originalError: errorMessage }
+      )
+    }
+  }
+
+  /**
+   * Create a tag at the current HEAD
+   *
+   * Creates an annotated tag if a message is provided, otherwise a lightweight tag.
+   *
+   * @param tagName - Tag name (e.g., 'sibylla-import/2026-04-24-001')
+   * @param message - Optional annotation message for the tag
+   * @throws {GitAbstractionError} If the repository is not initialized
+   */
+  async createTag(tagName: string, message?: string): Promise<void> {
+    logger.info(`${LOG_PREFIX} Creating tag`, { tagName, hasMessage: !!message })
+
+    try {
+      await this.ensureInitialized()
+
+      if (message) {
+        await git.annotatedTag({
+          fs,
+          dir: this.workspaceDir,
+          ref: tagName,
+          message,
+          author: {
+            name: this.authorName,
+            email: this.authorEmail,
+          },
+        })
+      } else {
+        await git.tag({
+          fs,
+          dir: this.workspaceDir,
+          ref: tagName,
+        })
+      }
+
+      logger.info(`${LOG_PREFIX} Tag created`, { tagName })
+    } catch (error: unknown) {
+      if (error instanceof GitAbstractionError) {
+        throw error
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`${LOG_PREFIX} Failed to create tag`, {
+        tagName,
+        error: errorMessage,
+      })
+
+      throw new GitAbstractionError(
+        GitAbstractionErrorCode.UNKNOWN_ERROR,
+        `Failed to create tag '${tagName}': ${errorMessage}`,
+        { tagName, originalError: errorMessage }
+      )
+    }
+  }
+
+  /**
+   * Revert a commit by creating a new commit that undoes its changes
+   *
+   * Reads the target commit's diff against its parent, then applies
+   * reverse changes and creates a new revert commit.
+   *
+   * @param commitHash - The SHA-1 hash of the commit to revert
+   * @returns The SHA-1 hash of the newly created revert commit
+   * @throws {GitAbstractionError} If the repository is not initialized
+   */
+  async revertCommit(commitHash: string): Promise<string> {
+    logger.info(`${LOG_PREFIX} Reverting commit`, { commitHash: commitHash.slice(0, 7) })
+
+    try {
+      await this.ensureInitialized()
+
+      const commitData = await git.readCommit({
+        fs,
+        dir: this.workspaceDir,
+        oid: commitHash,
+      })
+
+      const parentOid = commitData.commit.parent[0]
+
+      const changedFiles = await this.findChangedFiles(commitHash, parentOid)
+
+      for (const filepath of changedFiles) {
+        if (parentOid) {
+          const parentContent = await this.getFileContent(filepath, parentOid)
+          const fullPath = path.join(this.workspaceDir, filepath)
+
+          if (parentContent === '') {
+            try {
+              await fs.promises.unlink(fullPath)
+            } catch {
+              // file may already be gone
+            }
+            await git.remove({ fs, dir: this.workspaceDir, filepath })
+          } else {
+            await fs.promises.mkdir(path.dirname(fullPath), { recursive: true })
+            await fs.promises.writeFile(fullPath, parentContent, 'utf-8')
+            await git.add({ fs, dir: this.workspaceDir, filepath })
+          }
+        }
+      }
+
+      const oid = await this.commitInternal(`还原导入操作`)
+
+      logger.info(`${LOG_PREFIX} Commit reverted`, {
+        originalCommit: commitHash.slice(0, 7),
+        revertCommit: oid.slice(0, 7),
+      })
+
+      return oid
+    } catch (error: unknown) {
+      if (error instanceof GitAbstractionError) {
+        throw error
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`${LOG_PREFIX} Failed to revert commit`, {
+        commitHash,
+        error: errorMessage,
+      })
+
+      throw new GitAbstractionError(
+        GitAbstractionErrorCode.COMMIT_FAILED,
+        `Failed to revert commit '${commitHash.slice(0, 7)}': ${errorMessage}`,
+        { commitHash, originalError: errorMessage }
+      )
+    }
+  }
+
+  /**
+   * Get the current HEAD commit hash
+   *
+   * @returns The SHA-1 hash of the current HEAD commit
+   * @throws {GitAbstractionError} If the repository is not initialized
+   */
+  async getCommitHash(): Promise<string> {
+    logger.debug(`${LOG_PREFIX} Getting HEAD commit hash`)
+
+    try {
+      await this.ensureInitialized()
+      return await this.resolveHead()
+    } catch (error: unknown) {
+      if (error instanceof GitAbstractionError) {
+        throw error
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`${LOG_PREFIX} Failed to get commit hash`, {
+        error: errorMessage,
+      })
+
+      throw new GitAbstractionError(
+        GitAbstractionErrorCode.INVALID_REF,
+        `Failed to get HEAD commit hash: ${errorMessage}`,
+        { originalError: errorMessage }
+      )
+    }
   }
 }
