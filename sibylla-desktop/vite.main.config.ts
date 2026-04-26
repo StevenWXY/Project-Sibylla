@@ -34,6 +34,7 @@ export default defineConfig({
         'https',
         'url',
         'querystring',
+        'readline',
         
         // Native modules
         'chokidar', // File watcher with native dependencies
