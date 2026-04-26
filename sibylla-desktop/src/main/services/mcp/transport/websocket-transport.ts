@@ -22,7 +22,7 @@ interface WsConstructor {
 
 let WsModule: WsConstructor | null = null
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   WsModule = require('ws') as WsConstructor
 } catch {
   // ws not available — WebSocket transport will fail at connect time

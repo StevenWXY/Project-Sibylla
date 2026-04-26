@@ -247,7 +247,7 @@ export function McpSettingsPage({ onClose }: { onClose: () => void }) {
                 <div className="rounded-lg border border-white/5 bg-white/5 py-8 text-center">
                   <Server className="mx-auto mb-3 h-8 w-8 text-gray-600" />
                   <p className="text-sm text-gray-400">暂无 MCP 服务器</p>
-                  <p className="mt-1 text-xs text-gray-500">点击"添加服务器"或从模板库快速开始</p>
+                  <p className="mt-1 text-xs text-gray-500">{'点击"添加服务器"或从模板库快速开始'}</p>
                 </div>
               ) : (
                 servers.map((server) => (

@@ -80,18 +80,23 @@ export class ImportRegistry {
   static createDefault(): ImportRegistry {
     const registry = new ImportRegistry()
 
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { NotionAdapter } = require('./adapters/notion-adapter') as {
       NotionAdapter: new () => ImportAdapter
     }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { GoogleDocsAdapter } = require('./adapters/google-docs-adapter') as {
       GoogleDocsAdapter: new () => ImportAdapter
     }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { ObsidianAdapter } = require('./adapters/obsidian-adapter') as {
       ObsidianAdapter: new () => ImportAdapter
     }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { MarkdownAdapter } = require('./adapters/markdown-adapter') as {
       MarkdownAdapter: new () => ImportAdapter
     }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { DocxAdapter } = require('./adapters/docx-adapter') as {
       DocxAdapter: new () => ImportAdapter
     }

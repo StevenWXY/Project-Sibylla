@@ -12,7 +12,7 @@ interface KeytarModule {
 
 let keytar: KeytarModule | null = null
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   keytar = require('keytar') as KeytarModule
 } catch {
   logger.info('[MCPCredentials] keytar not available, using safeStorage fallback')
