@@ -1,4 +1,6 @@
 import type { ConversationData, ConversationMessage, ExportOptions } from './types'
+import { extractCitations, citationToMarkdown } from '../../shared/citation-parser'
+import type { Citation } from '../../shared/citation-parser'
 
 const INLINE_CSS = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -65,6 +67,8 @@ footer {
   text-align: center;
 }
 .attribution { font-size: 0.85rem; color: #999; }
+.citation { color: #4F46E5; text-decoration: underline; cursor: pointer; font-weight: 500; }
+a.citation:hover { color: #3730A3; }
 @media (max-width: 600px) {
   .container { padding: 12px 8px; }
   .message { max-width: 95%; }
@@ -80,9 +84,30 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;')
 }
 
-function renderBasicMarkdown(text: string): string {
-  let html = escapeHtml(text)
+function renderCitationLink(citation: Citation): string {
+  const md = citationToMarkdown(citation)
+  let display = ''
+  switch (citation.kind) {
+    case 'file':
+      display = citation.path.split('/').pop() ?? citation.path
+      break
+    case 'memory':
+      display = citation.entryId
+      break
+    case 'handbook':
+      display = citation.entryId
+      break
+    case 'mcp':
+      display = `${citation.provider}/${citation.ref}`
+      break
+    case 'plan':
+      display = citation.planId
+      break
+  }
+  return `<a class="citation" title="${escapeHtml(md)}">${escapeHtml(display)}</a>`
+}
 
+function applyMarkdownPatterns(html: string): string {
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
     return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`
   })
@@ -96,6 +121,30 @@ function renderBasicMarkdown(text: string): string {
   html = html.replace(/\n/g, '<br>\n')
 
   return html
+}
+
+function renderBasicMarkdown(text: string): string {
+  const citations = extractCitations(text)
+
+  if (citations.length > 0) {
+    let result = ''
+    let lastIndex = 0
+    for (const extracted of citations) {
+      if (extracted.index > lastIndex) {
+        const segment = text.slice(lastIndex, extracted.index)
+        result += applyMarkdownPatterns(escapeHtml(segment))
+      }
+      result += renderCitationLink(extracted.citation)
+      lastIndex = extracted.index + extracted.raw.length
+    }
+    if (lastIndex < text.length) {
+      const segment = text.slice(lastIndex)
+      result += applyMarkdownPatterns(escapeHtml(segment))
+    }
+    return result
+  }
+
+  return applyMarkdownPatterns(escapeHtml(text))
 }
 
 function renderMessage(msg: ConversationMessage, includeMetadata: boolean): string {

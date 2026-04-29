@@ -57,3 +57,20 @@ vi.mock('../src/main/utils/logger', () => ({
     ERROR: 'ERROR',
   },
 }))
+
+// Mock logger for deeply nested relative imports (e.g., ../../utils/logger from unified-search/adapters)
+vi.mock('../../src/main/utils/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    setLevel: vi.fn(),
+  },
+  LogLevel: {
+    DEBUG: 'DEBUG',
+    INFO: 'INFO',
+    WARN: 'WARN',
+    ERROR: 'ERROR',
+  },
+}))

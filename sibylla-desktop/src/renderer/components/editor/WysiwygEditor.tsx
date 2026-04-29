@@ -21,6 +21,9 @@ import { EditorBubbleMenu } from './EditorBubbleMenu'
 import { SlashCommandMenu, useSlashCommandState } from './SlashCommandMenu'
 import { createSlashCommandExtension } from './extensions/slash-command'
 import { CodeBlockWithHighlight } from './extensions/code-block-lowlight'
+import { WikiLink } from './extensions/wiki-link'
+import { WikiLinkSuggest } from './extensions/wiki-link-suggest'
+import { WikiLinkPreview } from './extensions/wiki-link-preview'
 import { cn } from '../../utils/cn'
 import type { SaveFailedPayload } from '../../../shared/types'
 import { SaveFailureBanner } from './SaveFailureBanner'
@@ -149,6 +152,16 @@ export function WysiwygEditor({
       TableHeader,
       createSaveShortcutExtension(handleSaveShortcut),
       createSlashCommandExtension((cb) => slashCallbackRef.current(cb)),
+      WikiLink.configure({
+        onNavigate: (target: string) => {
+          const fileName = target.split('/').pop() ?? target
+          import('../../../store/tabStore').then(({ useTabStore }) => {
+            useTabStore.getState().openTab(target, fileName)
+          })
+        },
+      }),
+      WikiLinkSuggest,
+      WikiLinkPreview,
     ],
     content: initialContent ?? '',
     editable: !readOnly,

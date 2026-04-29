@@ -466,3 +466,122 @@
   font-size: 11px;
   color: #6b7280;
 }
+
+/* WikiLink styles */
+.ProseMirror .wiki-link {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 0 1px;
+  transition: background-color 0.15s ease;
+}
+
+.ProseMirror .wiki-link:hover {
+  background-color: rgba(96, 165, 250, 0.15);
+}
+
+.ProseMirror .wiki-link.broken {
+  color: #f87171;
+  text-decoration: underline dotted;
+  cursor: not-allowed;
+}
+
+.ProseMirror .wiki-link.broken:hover {
+  background-color: rgba(248, 113, 113, 0.1);
+}
+
+/* WikiLink Picker styles */
+.wiki-link-picker {
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  min-width: 240px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.wiki-link-picker-empty {
+  padding: 12px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.wiki-link-picker-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  transition: background-color 0.1s ease;
+}
+
+.wiki-link-picker-item:hover,
+.wiki-link-picker-item.selected {
+  background-color: rgba(96, 165, 250, 0.15);
+}
+
+.wiki-link-picker-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e5e7eb;
+}
+
+.wiki-link-picker-path {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* WikiLink Preview styles */
+.tippy-box[data-theme~="wiki-link-preview"] {
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #d1d5db;
+  max-width: 400px;
+  line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.tippy-box[data-theme~="wiki-link-preview"] .tippy-arrow {
+  color: #1e1e2e;
+}
+
+.wiki-link-preview-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* WikiLink Picker tippy theme */
+.tippy-box[data-theme~="wiki-link-picker"] {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Backlinks Panel */
+.backlinks-panel {
+  background: transparent;
+}
+
+.backlink-card {
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.backlink-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.03);
+}

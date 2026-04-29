@@ -154,6 +154,10 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
   // ─── Listener cleanup references ──────────────────────────────────────
   private powerResumeHandler: (() => void) | null = null
 
+  // ─── Sync hooks (Phase2-TASK005) ─────────────────────────────────────
+  private beforeSyncHooks: Array<() => Promise<void>> = []
+  private afterSyncHooks: Array<() => Promise<void>> = []
+
   /**
    * Create a new SyncManager instance
    *
@@ -527,6 +531,12 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
     this.updateStatus('syncing')
 
     try {
+      for (const hook of this.beforeSyncHooks) {
+        try { await hook() } catch (err) {
+          logger.warn(`${LOG_PREFIX} beforeSync hook failed`, { error: String(err) })
+        }
+      }
+
       const result = await this.enqueueGitOp(() => this.gitAbstraction.sync())
 
       if (result.success) {
@@ -540,6 +550,12 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
         const errorMsg = result.error ?? 'Unknown sync error'
         this.emit('sync:error', new Error(errorMsg))
         this.updateStatus('error', errorMsg)
+      }
+
+      for (const hook of this.afterSyncHooks) {
+        try { await hook() } catch (err) {
+          logger.warn(`${LOG_PREFIX} afterSync hook failed`, { error: String(err) })
+        }
       }
 
       return result
@@ -556,6 +572,14 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
       this.isSyncing = false
       this.emit('sync:end')
     }
+  }
+
+  addBeforeSyncHook(hook: () => Promise<void>): void {
+    this.beforeSyncHooks.push(hook)
+  }
+
+  addAfterSyncHook(hook: () => Promise<void>): void {
+    this.afterSyncHooks.push(hook)
   }
 
   // ─── AutoSaveManager Integration (TASK006) ────────────────────────────

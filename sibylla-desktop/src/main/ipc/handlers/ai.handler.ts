@@ -22,6 +22,7 @@ import { TokenStorage } from '../../services/token-storage'
 import { WorkspaceManager } from '../../services/workspace-manager'
 import { FileManager } from '../../services/file-manager'
 import { ContextEngine, type ContextAssemblyRequest } from '../../services/context-engine'
+import type { ContextAssemblyRequestV2 } from '../../services/context-engine/types-v2'
 import { SkillEngine } from '../../services/skill-engine'
 import { SkillRegistry } from '../../services/skill-system/SkillRegistry'
 import { SkillLoader } from '../../services/skill-system/SkillLoader'
@@ -43,7 +44,7 @@ type StreamErrorCode = AIStreamError['code']
 export class AIHandler extends IpcHandler {
   readonly namespace = 'ai'
   private readonly activeStreams = new Map<string, AbortController>()
-  private readonly contextEngine: ContextEngine
+  readonly contextEngine: ContextEngine
   private readonly skillEngine: SkillEngine
   private skillRegistry: SkillRegistry | null = null
   private skillValidator: SkillValidator | null = null
@@ -58,6 +59,7 @@ export class AIHandler extends IpcHandler {
   private mcpPermission: MCPPermission | null = null
   private mcpAuditLog: MCPAuditLog | null = null
   private mcpEnabled: boolean = false
+  private agenticRetrievalEnabled: boolean = true
   private readonly pendingPermissionRequests = new Map<string, {
     resolve: (level: MCPPermissionLevel) => void
     timeout: ReturnType<typeof setTimeout>
@@ -100,6 +102,10 @@ export class AIHandler extends IpcHandler {
     this.mcpPermission = deps.permission
     this.mcpAuditLog = deps.auditLog
     this.mcpEnabled = deps.enabled
+  }
+
+  setAgenticRetrievalEnabled(enabled: boolean): void {
+    this.agenticRetrievalEnabled = enabled
   }
 
   resolvePermissionRequest(requestId: string, level: MCPPermissionLevel): void {
@@ -257,7 +263,15 @@ export class AIHandler extends IpcHandler {
         manualRefs: normalized.manualRefs ?? [],
         skillRefs: normalized.skillRefs ?? [],
       }
-      const assembled = await this.contextEngine.assembleContext(contextRequest)
+
+      const assembled = await this.assembleContextWithV2Fallback({
+        userMessage: normalized.message,
+        currentFile: normalized.currentFile,
+        manualRefs: normalized.manualRefs ?? [],
+        skillRefs: normalized.skillRefs ?? [],
+        aiModeId: normalized.aiModeId,
+        intent: normalized.intent,
+      })
 
       const ragHits = useRag ? await this.queryRagSafely(normalized.message) : []
       const ragContext = ragHits
@@ -740,7 +754,15 @@ export class AIHandler extends IpcHandler {
       manualRefs: request.manualRefs ?? [],
       skillRefs: request.skillRefs ?? [],
     }
-    const assembled = await this.contextEngine.assembleContext(contextRequest)
+
+    const assembled = await this.assembleContextWithV2Fallback({
+      userMessage: request.message,
+      currentFile: request.currentFile,
+      manualRefs: request.manualRefs ?? [],
+      skillRefs: request.skillRefs ?? [],
+      aiModeId: request.aiModeId,
+      intent: request.intent,
+    })
 
     const ragHits = useRag ? await this.queryRagSafely(request.message) : []
     const ragContext = ragHits
@@ -1047,6 +1069,10 @@ export class AIHandler extends IpcHandler {
     intent: ToolCallIntent,
     sender: Electron.IpcMainEvent['sender'],
   ): Promise<string | null> {
+    if (intent.toolName === 'unified_search') {
+      return this.handleBuiltinToolCall(intent, sender)
+    }
+
     if (!this.mcpEnabled || !this.mcpClient || !this.mcpPermission || !this.mcpAuditLog || !this.mcpRegistry) {
       return null
     }
@@ -1100,6 +1126,112 @@ export class AIHandler extends IpcHandler {
       const errorMsg = err instanceof Error ? err.message : String(err)
       return `\n[Tool call failed: ${errorMsg}. AI should try alternative approach.]\n`
     }
+  }
+
+  private async handleBuiltinToolCall(
+    intent: ToolCallIntent,
+    sender: Electron.IpcMainEvent['sender'],
+  ): Promise<string | null> {
+    if (intent.toolName === 'unified_search') {
+      if (this.harnessOrchestrator) {
+        const sessionId = this.activeStreams.keys().next().value ?? ''
+        const verdict = await this.harnessOrchestrator.checkToolCallGuards('unified_search', sessionId)
+        if (verdict.allow !== true) {
+          const reason = 'reason' in verdict ? verdict.reason : 'Tool call blocked by guardrail'
+          if ('requireConfirmation' in verdict && verdict.requireConfirmation) {
+            sender.send(IPC_CHANNELS.AI_STREAM_CHUNK, {
+              id: `guard-${Date.now()}`,
+              delta: `\n[Guardrail: ${reason}]\n`,
+            })
+          }
+          return `\n[Search blocked: ${reason}]\n`
+        }
+      }
+
+      const query = (intent.args as Record<string, unknown>)?.query as string ?? ''
+      const sources = (intent.args as Record<string, unknown>)?.sources as string[] | undefined
+      const limit = (intent.args as Record<string, unknown>)?.limit as number | undefined
+
+      if (!this.contextEngine.hasUnifiedSearch()) {
+        return '\n[Search engine not available. Answer based on existing context.]\n'
+      }
+
+      try {
+        const response = await this.contextEngine.searchViaUnifiedSearch({
+          query,
+          sources: sources as import('../../services/unified-search/types').SearchSource[] | undefined,
+          limit: limit ?? 5,
+          timeoutMs: 500,
+        })
+
+        const formatted = response.results.map(r => ({
+          source: r.source,
+          title: r.title,
+          snippet: r.snippet,
+          navigation: r.navigation,
+          relevance_score: r.metadata.score,
+        }))
+
+        const hint = formatted.length === 0
+          ? 'No results found. Try different keywords.'
+          : `Found ${formatted.length} results. Cite using [${formatted[0]?.source}:${formatted[0]?.title}] format.`
+
+        return `\n[Unified Search Results]:\n${JSON.stringify({ results: formatted, partial: response.partial, hint }, null, 2)}\n`
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return `\n[Search failed: ${msg}. Answer based on existing context.]\n`
+      }
+    }
+
+    return null
+  }
+
+  private async assembleContextWithV2Fallback(params: {
+    userMessage: string
+    currentFile?: string
+    manualRefs: string[]
+    skillRefs: string[]
+    aiModeId?: string
+    intent?: string
+  }): Promise<import('../../../shared/types').AssembledContext> {
+    if (this.agenticRetrievalEnabled && this.contextEngine.hasUnifiedSearch()) {
+      const v2Request: ContextAssemblyRequestV2 = {
+        userMessage: params.userMessage,
+        currentFile: params.currentFile,
+        manualRefs: params.manualRefs,
+        aiMode: params.aiModeId && this.aiModeRegistry
+          ? this.aiModeRegistry.get(params.aiModeId)
+          : undefined,
+        activeSkills: params.skillRefs,
+        intent: params.intent,
+      }
+      const v2Result = await this.contextEngine.assembleContextV2(v2Request)
+      return {
+        layers: v2Result.layers.map(l => ({
+          type: l.type === 'cross-source' || l.type === 'ai-mode' ? 'always' as const : l.type,
+          sources: [],
+          totalTokens: l.tokens,
+        })),
+        systemPrompt: v2Result.systemPrompt,
+        totalTokens: v2Result.totalTokens,
+        budgetUsed: v2Result.totalTokens,
+        budgetTotal: 50000,
+        sources: v2Result.sources.map(s => ({
+          filePath: `${s.kind}:${s.id ?? ''}`,
+          content: '',
+          tokenCount: 0,
+          layer: 'always' as const,
+        })),
+        warnings: v2Result.warnings,
+      }
+    }
+
+    return this.contextEngine.assembleContext({
+      userMessage: params.userMessage,
+      currentFile: params.currentFile,
+      manualRefs: params.manualRefs,
+      skillRefs: params.skillRefs,
+    })
   }
 
   private promptUserPermission(

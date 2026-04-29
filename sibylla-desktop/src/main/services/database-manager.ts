@@ -22,6 +22,10 @@ export class DatabaseManager {
   private db: Database.Database
   private readonly dbPath: string
 
+  get database(): Database.Database {
+    return this.db
+  }
+
   constructor(workspacePath: string) {
     const indexDir = path.join(workspacePath, '.sibylla', 'index')
     fs.mkdirSync(indexDir, { recursive: true })
@@ -70,6 +74,17 @@ export class DatabaseManager {
 
       CREATE INDEX IF NOT EXISTS idx_search_files_modified
         ON search_files(last_modified);
+
+      CREATE TABLE IF NOT EXISTS wiki_links (
+        source_path TEXT NOT NULL,
+        target_path TEXT NOT NULL,
+        link_text TEXT NOT NULL,
+        position INTEGER,
+        created_at TEXT,
+        PRIMARY KEY (source_path, target_path, position)
+      );
+      CREATE INDEX IF NOT EXISTS idx_wiki_target ON wiki_links(target_path);
+      CREATE INDEX IF NOT EXISTS idx_wiki_source ON wiki_links(source_path);
     `)
 
     const triggerExists = this.db.prepare(

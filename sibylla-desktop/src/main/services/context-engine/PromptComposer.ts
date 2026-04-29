@@ -67,6 +67,25 @@ export class PromptComposer {
       if (hookIp) internals.push(hookIp)
     }
 
+    if (context.additionalSections && context.additionalSections.length > 0) {
+      for (const section of context.additionalSections) {
+        if (section.content) {
+          const body = `--- ${section.type} ---\n${section.content}`
+          internals.push({
+            part: {
+              id: `additional.${section.type}`,
+              source: 'dynamic' as const,
+              path: '',
+              version: '0',
+              tokens: section.tokens,
+              renderedAt: Date.now(),
+            },
+            body,
+          })
+        }
+      }
+    }
+
     const wsIp = await this.renderInternalPart('contexts.workspace-context', {
       workspace: context.workspaceInfo,
     })

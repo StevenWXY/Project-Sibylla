@@ -59,7 +59,7 @@ describe('ToolScopeManager', () => {
 
   describe('select() — intent-based tool selection', () => {
     // Test 1: chat intent → 3 tools
-    it('should return reference_file, search, skill_activate for chat intent', async () => {
+    it('should return reference_file, unified_search, skill_activate for chat intent', async () => {
       const classifier = createMockClassifier(createClassifyResult('chat'))
       manager = new ToolScopeManager(classifier, mockLogger as never)
       registerBuiltInTools(manager)
@@ -68,14 +68,14 @@ describe('ToolScopeManager', () => {
 
       const toolIds = selection.tools.map(t => t.id)
       expect(toolIds).toContain('reference_file')
-      expect(toolIds).toContain('search')
+      expect(toolIds).toContain('unified_search')
       expect(toolIds).toContain('skill_activate')
       expect(selection.intent).toBe('chat')
       expect(selection.profile.intent).toBe('chat')
     })
 
     // Test 2: edit_file intent → 4 tools
-    it('should return reference_file, diff_write, search, spec_lookup for edit_file intent', async () => {
+    it('should return reference_file, diff_write, unified_search, spec_lookup for edit_file intent', async () => {
       const classifier = createMockClassifier(createClassifyResult('edit_file'))
       manager = new ToolScopeManager(classifier, mockLogger as never)
       registerBuiltInTools(manager)
@@ -85,13 +85,13 @@ describe('ToolScopeManager', () => {
       const toolIds = selection.tools.map(t => t.id)
       expect(toolIds).toContain('reference_file')
       expect(toolIds).toContain('diff_write')
-      expect(toolIds).toContain('search')
+      expect(toolIds).toContain('unified_search')
       expect(toolIds).toContain('spec_lookup')
       expect(selection.intent).toBe('edit_file')
     })
 
     // Test 3: analyze intent → 4 tools
-    it('should return reference_file, search, memory_query, graph_traverse for analyze intent', async () => {
+    it('should return reference_file, unified_search, memory_query, graph_traverse for analyze intent', async () => {
       const classifier = createMockClassifier(createClassifyResult('analyze'))
       manager = new ToolScopeManager(classifier, mockLogger as never)
       registerBuiltInTools(manager)
@@ -100,14 +100,14 @@ describe('ToolScopeManager', () => {
 
       const toolIds = selection.tools.map(t => t.id)
       expect(toolIds).toContain('reference_file')
-      expect(toolIds).toContain('search')
+      expect(toolIds).toContain('unified_search')
       expect(toolIds).toContain('memory_query')
       expect(toolIds).toContain('graph_traverse')
       expect(selection.intent).toBe('analyze')
     })
 
     // Test 12: search intent → 2 tools
-    it('should return search, reference_file for search intent', async () => {
+    it('should return unified_search, reference_file for search intent', async () => {
       const classifier = createMockClassifier(createClassifyResult('search'))
       manager = new ToolScopeManager(classifier, mockLogger as never)
       registerBuiltInTools(manager)
@@ -115,7 +115,7 @@ describe('ToolScopeManager', () => {
       const selection = await manager.select(createMockRequest('search'))
 
       const toolIds = selection.tools.map(t => t.id)
-      expect(toolIds).toContain('search')
+      expect(toolIds).toContain('unified_search')
       expect(toolIds).toContain('reference_file')
       expect(selection.intent).toBe('search')
     })
@@ -133,7 +133,7 @@ describe('ToolScopeManager', () => {
       const toolIds = selection.tools.map(t => t.id)
       // Original chat tools + explicit override
       expect(toolIds).toContain('reference_file')
-      expect(toolIds).toContain('search')
+      expect(toolIds).toContain('unified_search')
       expect(toolIds).toContain('skill_activate')
       expect(toolIds).toContain('diff_write')
       expect(selection.explicitOverrides).toContain('diff_write')
@@ -144,12 +144,11 @@ describe('ToolScopeManager', () => {
       manager = new ToolScopeManager(classifier, mockLogger as never)
       registerBuiltInTools(manager)
 
-      const selection = await manager.select(createMockRequest('hello', ['search']))
+      const selection = await manager.select(createMockRequest('hello', ['unified_search']))
 
-      // search is already in chat profile, should not be duplicated
-      const searchCount = selection.tools.filter(t => t.id === 'search').length
+      const searchCount = selection.tools.filter(t => t.id === 'unified_search').length
       expect(searchCount).toBe(1)
-      expect(selection.explicitOverrides).not.toContain('search')
+      expect(selection.explicitOverrides).not.toContain('unified_search')
     })
   })
 
@@ -206,7 +205,7 @@ describe('ToolScopeManager', () => {
 
       const tools = [
         createSimpleTool('reference_file', 'Reference File'),
-        createSimpleTool('search', 'Full-text Search'),
+        createSimpleTool('unified_search', 'Unified Search'),
       ]
 
       const errorMsg = manager.getToolError('diff_write', tools)
@@ -214,7 +213,7 @@ describe('ToolScopeManager', () => {
       expect(errorMsg).toContain('diff_write')
       expect(errorMsg).toContain('tool not available')
       expect(errorMsg).toContain('Reference File')
-      expect(errorMsg).toContain('Full-text Search')
+      expect(errorMsg).toContain('Unified Search')
     })
   })
 
@@ -286,7 +285,7 @@ describe('ToolScopeManager', () => {
       const toolIds = tools.map(t => t.id)
       expect(toolIds).toContain('reference_file')
       expect(toolIds).toContain('diff_write')
-      expect(toolIds).toContain('search')
+      expect(toolIds).toContain('unified_search')
       expect(toolIds).toContain('skill_activate')
       expect(toolIds).toContain('spec_lookup')
       expect(toolIds).toContain('memory_query')

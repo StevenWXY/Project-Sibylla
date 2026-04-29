@@ -42,6 +42,7 @@ export interface ComposeContext {
   }
   maxTokens?: number
   includeHooks?: string[]
+  additionalSections?: Array<{ type: string; content: string; tokens: number }>
 }
 
 export interface ComposedPrompt {

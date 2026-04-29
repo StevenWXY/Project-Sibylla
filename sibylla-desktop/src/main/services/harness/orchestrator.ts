@@ -33,6 +33,7 @@ import type { AiModeRegistry } from '../mode/ai-mode-registry'
 import type { AiModeDefinition } from '../mode/types'
 import type { PlanManager } from '../plan/plan-manager'
 import type { HookExecutor } from '../hooks/HookExecutor'
+import type { ToolCallGuard } from './guardrails/excessive-search'
 
 
 /** Spec file pattern for Panel mode auto-resolution */
@@ -47,6 +48,7 @@ export class HarnessOrchestrator {
   private aiModeRegistry: AiModeRegistry | null = null
   private planManager: PlanManager | null = null
   private hookExecutor: HookExecutor | null = null
+  private toolCallGuards: ToolCallGuard[] = []
 
   constructor(
     private readonly generator: Generator,
@@ -99,6 +101,10 @@ export class HarnessOrchestrator {
   /** Inject HookExecutor for Hook system integration (TASK036) */
   setHookExecutor(executor: HookExecutor): void {
     this.hookExecutor = executor
+  }
+
+  addToolCallGuard(guard: ToolCallGuard): void {
+    this.toolCallGuards.push(guard)
   }
 
   async execute(request: AIChatRequest): Promise<HarnessResult> {
@@ -328,8 +334,10 @@ export class HarnessOrchestrator {
         }
       }
 
+      this.resetToolCallGuards(effectiveRequest.sessionId ?? '')
       return result
     } catch (err) {
+      this.resetToolCallGuards(request.sessionId ?? '')
       this.logger.error('harness.execute.failed', {
         mode,
         traceId,
@@ -718,5 +726,19 @@ export class HarnessOrchestrator {
       workspacePath,
       parentTraceId,
     })
+  }
+
+  private resetToolCallGuards(sessionId: string): void {
+    for (const guard of this.toolCallGuards) {
+      guard.resetTurn(sessionId)
+    }
+  }
+
+  async checkToolCallGuards(toolId: string, sessionId: string): Promise<import('./guardrails/types').GuardrailVerdict> {
+    for (const guard of this.toolCallGuards) {
+      const verdict = await guard.check(toolId, sessionId)
+      if (verdict.allow !== true) return verdict
+    }
+    return { allow: true }
   }
 }

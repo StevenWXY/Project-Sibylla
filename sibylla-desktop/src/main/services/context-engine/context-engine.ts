@@ -23,6 +23,14 @@ import type { PromptComposer } from './PromptComposer'
 import type { PromptPart } from '../../../shared/types'
 import type { MCPTool } from '../mcp/types'
 import type { MCPRegistry } from '../mcp/mcp-registry'
+import type { UnifiedSearchEngine } from '../unified-search/unified-search-engine'
+import type { SearchSource } from '../unified-search/types'
+import type {
+  AssembledContextV2,
+  ContextAssemblyRequestV2,
+  ContextLayerV2,
+} from './types-v2'
+import { V2_BUDGET_WEIGHTS, V2_DEFAULT_TOKEN_BUDGET } from './types-v2'
 
 export interface ContextAssemblyRequest {
   userMessage: string
@@ -104,6 +112,7 @@ export class ContextEngine {
   private promptComposer: PromptComposer | null = null
   private mcpRegistry: MCPRegistry | null = null
   private mcpEnabled: boolean = false
+  private unifiedSearch?: UnifiedSearchEngine
 
   constructor(
     fileManager: FileManager,
@@ -140,6 +149,19 @@ export class ContextEngine {
   setMcpRegistry(registry: MCPRegistry, enabled: boolean): void {
     this.mcpRegistry = registry
     this.mcpEnabled = enabled
+  }
+
+  setUnifiedSearch(engine: UnifiedSearchEngine): void {
+    this.unifiedSearch = engine
+  }
+
+  hasUnifiedSearch(): boolean {
+    return this.unifiedSearch !== undefined
+  }
+
+  searchViaUnifiedSearch(query: import('../unified-search/types').UnifiedSearchQuery): Promise<import('../unified-search/types').UnifiedSearchResponse> {
+    if (!this.unifiedSearch) throw new Error('UnifiedSearch not initialized')
+    return this.unifiedSearch.search(query)
   }
 
   async assembleContext(request: ContextAssemblyRequest): Promise<AssembledContext> {
@@ -951,5 +973,398 @@ export class ContextEngine {
   private isInExcludedDirectory(filePath: string): boolean {
     const parts = filePath.split('/')
     return parts.some((part) => EXCLUDED_DIRECTORIES.has(part))
+  }
+
+  // ─── V2 Methods ───
+
+  async assembleContextV2(request: ContextAssemblyRequestV2): Promise<AssembledContextV2> {
+    if (!this.unifiedSearch) {
+      return this.assembleContextV2Fallback(request)
+    }
+
+    if (!this.tracer?.isEnabled()) {
+      return this.assembleContextV2Internal(request)
+    }
+    return this.tracer.withSpan('context.assemble.v2', async (span) => {
+      const result = await this.assembleContextV2Internal(request)
+      span.setAttribute('context.v2.layers', result.layers.length)
+      span.setAttribute('context.v2.totalTokens', result.totalTokens)
+      return result
+    }, { kind: 'tool-call' })
+  }
+
+  private async assembleContextV2Internal(request: ContextAssemblyRequestV2): Promise<AssembledContextV2> {
+    const startTime = Date.now()
+    const warnings: string[] = []
+    const layers: ContextLayerV2[] = []
+    const tokenBudget = request.tokenBudget ?? V2_DEFAULT_TOKEN_BUDGET
+    const collectedPaths = new Set<string>()
+
+    const alwaysSources = await this.collectAlwaysLoad({
+      userMessage: request.userMessage,
+      currentFile: request.currentFile,
+      manualRefs: request.manualRefs,
+    })
+    for (const s of alwaysSources) {
+      collectedPaths.add(s.filePath)
+    }
+    const alwaysContent = alwaysSources.map(s => s.content).join('\n\n')
+    const alwaysTokens = this.estimateTokens(alwaysContent)
+    layers.push({
+      type: 'always',
+      priority: 1,
+      content: alwaysContent,
+      tokens: alwaysTokens,
+      sources: alwaysSources.map(s => ({ kind: 'file', id: s.filePath })),
+    })
+
+    if (request.aiMode) {
+      let aiModeContent: string
+      if (this.aiModeRegistry) {
+        aiModeContent = this.aiModeRegistry.buildSystemPromptPrefix(request.aiMode.id, {
+          mode: request.aiMode.label,
+          language: '中文',
+        })
+      } else {
+        aiModeContent = request.aiMode.systemPromptPrefix
+      }
+      if (request.aiMode.outputConstraints) {
+        aiModeContent += '\n\n' + this.formatOutputConstraints(request.aiMode.outputConstraints)
+      }
+      const aiModeTokens = this.estimateTokens(aiModeContent)
+      layers.push({
+        type: 'ai-mode',
+        priority: 2,
+        content: aiModeContent,
+        tokens: aiModeTokens,
+      })
+    }
+
+    const memorySources = await this.collectMemoryContext({
+      userMessage: request.userMessage,
+      currentFile: request.currentFile,
+      manualRefs: request.manualRefs,
+    })
+    const memoryContent = memorySources.map(s => s.content).join('\n\n')
+    const memoryTokens = this.estimateTokens(memoryContent)
+    if (memoryContent) {
+      layers.push({
+        type: 'memory',
+        priority: 3,
+        content: memoryContent,
+        tokens: memoryTokens,
+        sources: memorySources.map(s => ({ kind: 'memory', id: s.filePath })),
+      })
+    }
+
+    const skillSources = await this.collectSkillRefs(request.activeSkills ?? [])
+    const skillContent = skillSources.map(s => s.content).join('\n\n')
+    const skillTokens = this.estimateTokens(skillContent)
+    if (skillContent) {
+      layers.push({
+        type: 'skill',
+        priority: 4,
+        content: skillContent,
+        tokens: skillTokens,
+        sources: skillSources.map(s => ({ kind: 'skill', id: s.filePath })),
+      })
+    }
+
+    try {
+      const keywords = this.extractSearchKeywordsHeuristic(request.userMessage)
+      if (keywords.length > 0 || request.forceReSearch) {
+        const effectiveKeywords = keywords.length > 0 ? keywords : request.userMessage.split(/\s+/).slice(0, 6)
+        const sources = this.selectRelevantSources(request.intent)
+        const query = effectiveKeywords.join(' ')
+        const searchResponse = await this.unifiedSearch!.search({
+          query,
+          sources,
+          limit: request.forceReSearch ? 12 : 8,
+          timeoutMs: 300,
+        })
+
+        const manualSources = await this.collectManualRefs(request.manualRefs)
+        for (const ms of manualSources) {
+          collectedPaths.add(ms.filePath)
+        }
+
+        const deduped = searchResponse.results.filter(r => {
+          if (r.fullPath && collectedPaths.has(r.fullPath)) return false
+          return true
+        })
+        const topResults = deduped.slice(0, 5)
+
+        if (topResults.length > 0) {
+          const crossSourceContent = this.formatCrossSourceResults(topResults)
+          const crossSourceTokens = this.estimateTokens(crossSourceContent)
+          layers.push({
+            type: 'cross-source',
+            priority: 5,
+            content: crossSourceContent,
+            tokens: crossSourceTokens,
+            hits: topResults.length,
+            sources: topResults.map(r => ({ kind: r.source, id: r.id })),
+          })
+        }
+      }
+    } catch (err) {
+      logger.warn('[ContextEngine] L5 cross-source search failed, skipping', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    const manualSourcesLate = await this.collectManualRefs(request.manualRefs)
+    const manualContent = manualSourcesLate.map(s => s.content).join('\n\n')
+    const manualTokens = this.estimateTokens(manualContent)
+    if (manualContent) {
+      layers.push({
+        type: 'manual',
+        priority: 6,
+        content: manualContent,
+        tokens: manualTokens,
+        sources: manualSourcesLate.map(s => ({ kind: 'file', id: s.filePath })),
+      })
+    }
+
+    this.applyV2TokenBudget(layers, tokenBudget, warnings)
+
+    const systemPrompt = await this.assembleV2SystemPromptWithComposer(layers)
+    const totalTokens = layers.reduce((sum, l) => sum + l.tokens, 0)
+    const allSources = layers.flatMap(l => l.sources ?? [])
+
+    logger.info('[ContextEngine] v2 Context assembled', {
+      layers: layers.length,
+      totalTokens,
+      budgetUsed: totalTokens,
+      budgetTotal: tokenBudget,
+      warnings: warnings.length,
+      durationMs: Date.now() - startTime,
+    })
+
+    return {
+      layers,
+      systemPrompt,
+      totalTokens,
+      sources: allSources,
+      warnings,
+    }
+  }
+
+  private async assembleContextV2Fallback(request: ContextAssemblyRequestV2): Promise<AssembledContextV2> {
+    const v1 = await this.assembleContext({
+      userMessage: request.userMessage,
+      currentFile: request.currentFile,
+      manualRefs: request.manualRefs,
+      skillRefs: request.activeSkills,
+    })
+
+    const layers: ContextLayerV2[] = []
+
+    const alwaysSources = v1.sources.filter(s => s.layer === 'always')
+    if (alwaysSources.length > 0) {
+      const content = alwaysSources.map(s => s.content).join('\n\n')
+      layers.push({
+        type: 'always',
+        priority: 1,
+        content,
+        tokens: this.estimateTokens(content),
+        sources: alwaysSources.map(s => ({ kind: 'file', id: s.filePath })),
+      })
+    }
+
+    if (request.aiMode) {
+      let content: string
+      if (this.aiModeRegistry) {
+        content = this.aiModeRegistry.buildSystemPromptPrefix(request.aiMode.id, {
+          mode: request.aiMode.label,
+          language: '中文',
+        })
+      } else {
+        content = request.aiMode.systemPromptPrefix
+      }
+      layers.push({
+        type: 'ai-mode',
+        priority: 2,
+        content,
+        tokens: this.estimateTokens(content),
+      })
+    }
+
+    const memorySources = v1.sources.filter(s => s.layer === 'memory')
+    if (memorySources.length > 0) {
+      const content = memorySources.map(s => s.content).join('\n\n')
+      layers.push({
+        type: 'memory',
+        priority: 3,
+        content,
+        tokens: this.estimateTokens(content),
+        sources: memorySources.map(s => ({ kind: 'memory', id: s.filePath })),
+      })
+    }
+
+    const skillSources = v1.sources.filter(s => s.layer === 'skill')
+    if (skillSources.length > 0) {
+      const content = skillSources.map(s => s.content).join('\n\n')
+      layers.push({
+        type: 'skill',
+        priority: 4,
+        content,
+        tokens: this.estimateTokens(content),
+        sources: skillSources.map(s => ({ kind: 'skill', id: s.filePath })),
+      })
+    }
+
+    const manualSources = v1.sources.filter(s => s.layer === 'manual')
+    if (manualSources.length > 0) {
+      const content = manualSources.map(s => s.content).join('\n\n')
+      layers.push({
+        type: 'manual',
+        priority: 6,
+        content,
+        tokens: this.estimateTokens(content),
+        sources: manualSources.map(s => ({ kind: 'file', id: s.filePath })),
+      })
+    }
+
+    const totalTokens = layers.reduce((sum, l) => sum + l.tokens, 0)
+    const allSources = layers.flatMap(l => l.sources ?? [])
+
+    return {
+      layers,
+      systemPrompt: v1.systemPrompt,
+      totalTokens,
+      sources: allSources,
+      warnings: v1.warnings,
+    }
+  }
+
+  private applyV2TokenBudget(
+    layers: ContextLayerV2[],
+    totalBudget: number,
+    warnings: string[],
+  ): void {
+    const totalTokens = layers.reduce((sum, l) => sum + l.tokens, 0)
+    if (totalTokens <= totalBudget) return
+
+    const crossSourceLayer = layers.find(l => l.type === 'cross-source')
+    if (!crossSourceLayer) return
+
+    const crossSourceBudget = Math.floor(totalBudget * V2_BUDGET_WEIGHTS['cross-source'])
+    const otherTokens = totalTokens - crossSourceLayer.tokens
+
+    if (otherTokens >= totalBudget) {
+      crossSourceLayer.content = ''
+      crossSourceLayer.tokens = 0
+      warnings.push('Cross-source layer removed due to budget constraints')
+      return
+    }
+
+    const availableForCross = totalBudget - otherTokens
+    const maxForCross = Math.min(availableForCross, crossSourceBudget)
+    if (maxForCross <= 0) {
+      crossSourceLayer.content = ''
+      crossSourceLayer.tokens = 0
+      warnings.push('Cross-source layer removed due to budget constraints')
+      return
+    }
+
+    if (crossSourceLayer.tokens > maxForCross) {
+      const sentences = crossSourceLayer.content.split(/(?<=[.!?。\n])\s*/)
+      let tokens = 0
+      const kept: string[] = []
+      for (const sentence of sentences) {
+        const sentenceTokens = this.estimateTokens(sentence)
+        if (tokens + sentenceTokens > maxForCross) break
+        kept.push(sentence)
+        tokens += sentenceTokens
+      }
+      crossSourceLayer.content = kept.join(' ') + TRUNCATION_MARKER
+      crossSourceLayer.tokens = this.estimateTokens(crossSourceLayer.content)
+      warnings.push(
+        `Cross-source layer truncated from ${totalTokens} to ${otherTokens + crossSourceLayer.tokens} tokens`,
+      )
+    }
+  }
+
+  private extractSearchKeywordsHeuristic(message: string): string[] {
+    const STOP_WORDS = new Set([
+      '的', '了', '是', '我', '你', '他', '她', '它', '们', '在', '有', '不',
+      '这', '那', '就', '也', '都', '要', '会', '可以', '怎么', '如何',
+      'what', 'how', 'the', 'is', 'a', 'an', 'do', 'does', 'can', 'are',
+      'was', 'were', 'been', 'have', 'has', 'had', 'will', 'would',
+    ])
+    return message
+      .toLowerCase()
+      .split(/[\s,.;:!?，。；：！？、\n\r\t]+/)
+      .filter(w => w.length > 1 && !STOP_WORDS.has(w))
+      .slice(0, 6)
+  }
+
+  private selectRelevantSources(intent?: string): SearchSource[] {
+    switch (intent) {
+      case 'edit_file':
+        return ['local-files', 'memory']
+      case 'analyze':
+        return ['local-files', 'memory', 'memory-archive', 'mcp:github', 'mcp:slack']
+      case 'plan':
+        return ['local-files', 'memory', 'handbook']
+      default:
+        return ['local-files', 'memory', 'mcp:github', 'mcp:slack', 'handbook']
+    }
+  }
+
+  private formatCrossSourceResults(
+    results: ReadonlyArray<import('../unified-search/types').UnifiedSearchResult>,
+  ): string {
+    const SOURCE_LABELS: Record<string, string> = {
+      memory: '记忆',
+      'memory-archive': '归档记忆',
+      'mcp:github': 'GitHub',
+      'mcp:slack': 'Slack',
+      'local-files': '本地文件',
+      handbook: '系统手册',
+      'plans-archive': '归档计划',
+    }
+    return results.map(r =>
+      `### [${SOURCE_LABELS[r.source] ?? r.source}] ${r.title}\n${r.snippet}\n_引用时请标注：[${r.source}:${r.title}]_`
+    ).join('\n\n')
+  }
+
+  private async assembleV2SystemPromptWithComposer(layers: ContextLayerV2[]): Promise<string> {
+    if (this.promptComposer) {
+      try {
+        const composed = await this.promptComposer.compose({
+          mode: 'default',
+          tools: [],
+          userPreferences: {},
+          workspaceInfo: {
+            name: '',
+            rootPath: this.fileManager.getWorkspaceRoot(),
+            fileCount: 0,
+          },
+          additionalSections: layers.map(l => ({
+            type: l.type,
+            content: l.content,
+            tokens: l.tokens,
+          })),
+        })
+        return composed.text
+      } catch (err) {
+        logger.warn('[ContextEngine] PromptComposer compose failed, falling back to direct assembly', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+    return this.assembleV2SystemPrompt(layers)
+  }
+
+  private assembleV2SystemPrompt(layers: ContextLayerV2[]): string {
+    const segments: string[] = [SYSTEM_PROMPT_BASE]
+    for (const layer of layers) {
+      if (layer.content) {
+        segments.push(`--- ${layer.type} ---\n${layer.content}`)
+      }
+    }
+    return segments.join('\n\n')
   }
 }

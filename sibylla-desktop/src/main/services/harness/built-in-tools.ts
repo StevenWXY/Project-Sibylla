@@ -10,6 +10,7 @@
 
 import type { ToolDefinition, ToolScopeManager } from './tool-scope'
 import { SPAWN_SUB_AGENT_TOOL } from './sub-agent-adapter'
+import { unifiedSearchTool } from './tools/unified-search-tool'
 
 // ─── Tool Definition Constants ───
 
@@ -49,26 +50,6 @@ const DIFF_WRITE_TOOL: ToolDefinition = {
     const { filePath, diffContent } = args as { filePath: string; diffContent: string }
     ctx.logger.info('tool.diff_write', { filePath, diffLength: diffContent.length })
     return { filePath, applied: true }
-  },
-}
-
-const SEARCH_TOOL: ToolDefinition = {
-  id: 'search',
-  name: 'Full-text Search',
-  description: 'Search workspace files for a query string',
-  schema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string', description: 'Search query' },
-      limit: { type: 'number', description: 'Max results (default: 10)' },
-    },
-    required: ['query'],
-  },
-  tags: ['search', 'query'],
-  handler: async (args, ctx) => {
-    const { query, limit = 10 } = args as { query: string; limit?: number }
-    ctx.logger.info('tool.search', { query, limit })
-    return { query, limit }
   },
 }
 
@@ -187,7 +168,7 @@ const GRAPH_TRAVERSE_TOOL: ToolDefinition = {
 export function registerBuiltInTools(manager: ToolScopeManager): void {
   manager.registerTool(REFERENCE_FILE_TOOL)
   manager.registerTool(DIFF_WRITE_TOOL)
-  manager.registerTool(SEARCH_TOOL)
+  manager.registerTool(unifiedSearchTool)
   manager.registerTool(SKILL_ACTIVATE_TOOL)
   manager.registerTool(SPEC_LOOKUP_TOOL)
   manager.registerTool(MEMORY_QUERY_TOOL)
@@ -199,7 +180,7 @@ export function registerBuiltInTools(manager: ToolScopeManager): void {
 export {
   REFERENCE_FILE_TOOL,
   DIFF_WRITE_TOOL,
-  SEARCH_TOOL,
+  unifiedSearchTool as SEARCH_TOOL,
   SKILL_ACTIVATE_TOOL,
   SPEC_LOOKUP_TOOL,
   MEMORY_QUERY_TOOL,

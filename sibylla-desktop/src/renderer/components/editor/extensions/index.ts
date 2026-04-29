@@ -1,3 +1,6 @@
 export { createSlashCommandExtension, SLASH_COMMANDS } from './slash-command'
 export type { SlashCommandItem, SlashCommandCallback } from './slash-command'
 export { CodeBlockWithHighlight } from './code-block-lowlight'
+export { WikiLink } from './wiki-link'
+export { WikiLinkSuggest } from './wiki-link-suggest'
+export { WikiLinkPreview } from './wiki-link-preview'

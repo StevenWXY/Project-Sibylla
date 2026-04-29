@@ -152,6 +152,10 @@ export class MemoryManager {
     this.eventBus = bus
   }
 
+  getEventBus(): MemoryEventBus | undefined {
+    return this.eventBus
+  }
+
   setTracer(tracer: Tracer): void {
     this.tracer = tracer
   }

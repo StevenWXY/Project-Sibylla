@@ -44,6 +44,8 @@ import type {
   SearchResult,
   SearchIndexStatus,
   SearchIndexProgress,
+  UnifiedSearchQueryShared,
+  UnifiedSearchResponseShared,
   MemorySnapshotResponse,
   MemoryUpdateRequest,
   MemoryFlushRequest,
@@ -154,6 +156,7 @@ import type {
   SyncTaskWithStateShared,
   // App config types (TASK044)
   AppConfig,
+  CrossDeviceTaskShared,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -241,6 +244,12 @@ interface ElectronAPI {
     force: () => Promise<IPCResponse<SyncResult>>
     getState: () => Promise<IPCResponse<SyncStatusData>>
     onStatusChange: (callback: (data: SyncStatusData) => void) => () => void
+    memoryEnable: () => Promise<IPCResponse<{ success: boolean }>>
+    memoryDisable: () => Promise<IPCResponse<{ success: boolean }>>
+    memorySetPassword: (password: string) => Promise<IPCResponse<{ success: boolean }>>
+    memoryIsLocked: () => Promise<IPCResponse<{ locked: boolean }>>
+    listCrossDeviceTasks: () => Promise<IPCResponse<CrossDeviceTaskShared[]>>
+    memoryGetConfig: () => Promise<IPCResponse<{ syncMemory: boolean; locked: boolean }>>
   }
 
   // Git conflict operations
@@ -370,6 +379,13 @@ interface ElectronAPI {
     indexStatus: () => Promise<IPCResponse<SearchIndexStatus>>
     reindex: () => Promise<IPCResponse<void>>
     onIndexProgress: (callback: (progress: SearchIndexProgress) => void) => () => void
+    unified: (query: UnifiedSearchQueryShared) => Promise<IPCResponse<UnifiedSearchResponseShared>>
+    listSources: () => Promise<IPCResponse<string[]>>
+    fuzzyFiles: (query: string, options?: { limit?: number }) => Promise<IPCResponse<Array<{ path: string; title: string }>>>
+  }
+
+  contextEngine: {
+    v2Preview: (request: unknown) => Promise<IPCResponse<unknown>>
   }
 
   // Trace operations (TASK029)
@@ -566,6 +582,21 @@ interface ElectronAPI {
     getConfig: () => Promise<IPCResponse<AppConfig>>
     updateConfig: (updates: Partial<AppConfig>) => Promise<IPCResponse<void>>
   }
+
+  // Event bus operations (TASK001-Phase2)
+  events: {
+    subscribe: (types: string[]) => Promise<IPCResponse<{ success: boolean }>>
+    unsubscribe: (types?: string[]) => Promise<IPCResponse<{ success: boolean }>>
+    on: (callback: (event: unknown) => void) => () => void
+  }
+
+  // WikiLinks operations (Phase2-TASK004)
+  wikiLinks: {
+    getBacklinks: (path: string) => Promise<IPCResponse<Array<{ sourcePath: string; linkText: string; position: number; snippet?: string }>>>
+    getOutlinks: (path: string) => Promise<IPCResponse<Array<{ sourcePath: string; targetPath: string; linkText: string; position: number; createdAt: string }>>>
+    getGraphData: (centerPath?: string) => Promise<IPCResponse<{ nodes: Array<{ id: string; label: string; linkCount: number }>; edges: Array<{ source: string; target: string }> }>>
+    rebuildIndex: () => Promise<IPCResponse<{ success: boolean }>>
+  }
 }
 
 // Whitelist of allowed channels for security
@@ -622,6 +653,12 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.SYNC_FORCE,
   IPC_CHANNELS.SYNC_STATUS_CHANGED,
   IPC_CHANNELS.SYNC_GET_STATE,
+  IPC_CHANNELS.SYNC_MEMORY_ENABLE,
+  IPC_CHANNELS.SYNC_MEMORY_DISABLE,
+  IPC_CHANNELS.SYNC_MEMORY_SET_PASSWORD,
+  IPC_CHANNELS.SYNC_MEMORY_IS_LOCKED,
+  IPC_CHANNELS.SYNC_TASK_LIST_CROSS_DEVICE,
+  IPC_CHANNELS.SYNC_MEMORY_GET_CONFIG,
   // Git conflict operations
   IPC_CHANNELS.GIT_GET_CONFLICTS,
   IPC_CHANNELS.GIT_RESOLVE,
@@ -689,6 +726,10 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.SEARCH_INDEX_STATUS,
   IPC_CHANNELS.SEARCH_REINDEX,
   IPC_CHANNELS.SEARCH_INDEX_PROGRESS,
+  // Unified search operations
+  IPC_CHANNELS.SEARCH_UNIFIED_QUERY,
+  IPC_CHANNELS.SEARCH_UNIFIED_LIST_SOURCES,
+  IPC_CHANNELS.SEARCH_FUZZY_FILES,
   // Harness operations
   IPC_CHANNELS.HARNESS_EXECUTE,
   IPC_CHANNELS.HARNESS_SET_MODE,
@@ -839,6 +880,15 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   // App configuration (TASK044)
   IPC_CHANNELS.APP_GET_CONFIG,
   IPC_CHANNELS.APP_UPDATE_CONFIG,
+  // Event bus operations (TASK001-Phase2)
+  IPC_CHANNELS.EVENT_SUBSCRIBE,
+  IPC_CHANNELS.EVENT_UNSUBSCRIBE,
+  IPC_CHANNELS.EVENT_PUSH,
+  // WikiLinks operations (Phase2-TASK004)
+  IPC_CHANNELS.WIKI_LINKS_GET_BACKLINKS,
+  IPC_CHANNELS.WIKI_LINKS_GET_OUTLINKS,
+  IPC_CHANNELS.WIKI_LINKS_GET_GRAPH_DATA,
+  IPC_CHANNELS.WIKI_LINKS_REBUILD_INDEX,
 ]
 
 /**
@@ -1110,6 +1160,30 @@ const api: ElectronAPI = {
     
     onStatusChange: (callback: (data: SyncStatusData) => void) => {
       return api.on(IPC_CHANNELS.SYNC_STATUS_CHANGED, callback as (...args: unknown[]) => void)
+    },
+
+    memoryEnable: async () => {
+      return await safeInvoke<{ success: boolean }>(IPC_CHANNELS.SYNC_MEMORY_ENABLE)
+    },
+
+    memoryDisable: async () => {
+      return await safeInvoke<{ success: boolean }>(IPC_CHANNELS.SYNC_MEMORY_DISABLE)
+    },
+
+    memorySetPassword: async (password: string) => {
+      return await safeInvoke<{ success: boolean }>(IPC_CHANNELS.SYNC_MEMORY_SET_PASSWORD, password)
+    },
+
+    memoryIsLocked: async () => {
+      return await safeInvoke<{ locked: boolean }>(IPC_CHANNELS.SYNC_MEMORY_IS_LOCKED)
+    },
+
+    listCrossDeviceTasks: async () => {
+      return await safeInvoke<CrossDeviceTaskShared[]>(IPC_CHANNELS.SYNC_TASK_LIST_CROSS_DEVICE)
+    },
+
+    memoryGetConfig: async () => {
+      return await safeInvoke<{ syncMemory: boolean; locked: boolean }>(IPC_CHANNELS.SYNC_MEMORY_GET_CONFIG)
     },
   },
 
@@ -1510,6 +1584,24 @@ const api: ElectronAPI = {
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.SEARCH_INDEX_PROGRESS, handler)
       }
+    },
+
+    unified: async (query: UnifiedSearchQueryShared) => {
+      return await safeInvoke<UnifiedSearchResponseShared>(IPC_CHANNELS.SEARCH_UNIFIED_QUERY, query)
+    },
+
+    listSources: async () => {
+      return await safeInvoke<string[]>(IPC_CHANNELS.SEARCH_UNIFIED_LIST_SOURCES)
+    },
+
+    fuzzyFiles: async (query: string, options?: { limit?: number }) => {
+      return await safeInvoke<Array<{ path: string; title: string }>>(IPC_CHANNELS.SEARCH_FUZZY_FILES, query, options)
+    },
+  },
+
+  contextEngine: {
+    v2Preview: async (request: unknown) => {
+      return await safeInvoke<unknown>(IPC_CHANNELS.CONTEXT_ENGINE_V2_PREVIEW, request)
     },
   },
 
@@ -2039,6 +2131,39 @@ const api: ElectronAPI = {
     },
     updateConfig: async (updates: Partial<AppConfig>) => {
       return await safeInvoke<void>(IPC_CHANNELS.APP_UPDATE_CONFIG, updates)
+    },
+  },
+
+  // Event bus operations (TASK001-Phase2)
+  events: {
+    subscribe: async (types: string[]) => {
+      return await safeInvoke<{ success: boolean }>(IPC_CHANNELS.EVENT_SUBSCRIBE, types)
+    },
+    unsubscribe: async (types?: string[]) => {
+      return await safeInvoke<{ success: boolean }>(IPC_CHANNELS.EVENT_UNSUBSCRIBE, types)
+    },
+    on: (callback: (event: unknown) => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.EVENT_PUSH, handler)
+      return () => {
+        ipcRenderer.off(IPC_CHANNELS.EVENT_PUSH, handler)
+      }
+    },
+  },
+
+  // WikiLinks operations (Phase2-TASK004)
+  wikiLinks: {
+    getBacklinks: async (path: string) => {
+      return await safeInvoke<Array<{ sourcePath: string; linkText: string; position: number; snippet?: string }>>(IPC_CHANNELS.WIKI_LINKS_GET_BACKLINKS, path)
+    },
+    getOutlinks: async (path: string) => {
+      return await safeInvoke<Array<{ sourcePath: string; targetPath: string; linkText: string; position: number; createdAt: string }>>(IPC_CHANNELS.WIKI_LINKS_GET_OUTLINKS, path)
+    },
+    getGraphData: async (centerPath?: string) => {
+      return await safeInvoke<{ nodes: Array<{ id: string; label: string; linkCount: number }>; edges: Array<{ source: string; target: string }> }>(IPC_CHANNELS.WIKI_LINKS_GET_GRAPH_DATA, centerPath)
+    },
+    rebuildIndex: async () => {
+      return await safeInvoke<{ success: boolean }>(IPC_CHANNELS.WIKI_LINKS_REBUILD_INDEX)
     },
   },
 }

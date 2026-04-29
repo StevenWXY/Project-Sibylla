@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { ThemeProvider } from './components/providers/ThemeProvider'
 import { AppLayout } from './components/layout/AppLayout'
 import { ComponentShowcase } from './pages/ComponentShowcase'
@@ -17,6 +17,27 @@ import { useHarnessEvents } from './hooks/useHarnessEvents'
 import { GuardrailNotification } from './components/studio/harness/GuardrailNotification'
 import { ResumeTaskDialog } from './components/studio/harness/ResumeTaskDialog'
 import { CommandPalette } from './components/command-palette/CommandPalette'
+import { UnifiedSearchPalette } from './components/search/UnifiedSearchPalette'
+import { useSearchPaletteStore } from './store/searchPaletteStore'
+
+function UnifiedSearchPaletteWrapper() {
+  const isOpen = useSearchPaletteStore(s => s.isOpen)
+  const close = useSearchPaletteStore(s => s.close)
+  const toggle = useSearchPaletteStore(s => s.toggle)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault()
+        toggle()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [toggle])
+
+  return <UnifiedSearchPalette isOpen={isOpen} onClose={close} />
+}
 
 type Page =
   | 'home'
@@ -588,6 +609,9 @@ export default function App() {
 
         {/* TASK032: Global Command Palette overlay */}
         <CommandPalette />
+
+        {/* Phase2-TASK002: Global Unified Search overlay */}
+        <UnifiedSearchPaletteWrapper />
       </AppLayout>
     </ThemeProvider>
   )

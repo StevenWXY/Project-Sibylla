@@ -197,6 +197,18 @@ export const IPC_CHANNELS = {
   SYNC_STATUS_CHANGED: 'sync:status-changed',
   /** Renderer → Main: Get current sync state snapshot */
   SYNC_GET_STATE: 'sync:getState',
+  /** Renderer → Main: Enable encrypted memory sync */
+  SYNC_MEMORY_ENABLE: 'sync:memory:enable',
+  /** Renderer → Main: Disable encrypted memory sync */
+  SYNC_MEMORY_DISABLE: 'sync:memory:disable',
+  /** Renderer → Main: Set encryption password for memory sync */
+  SYNC_MEMORY_SET_PASSWORD: 'sync:memory:setPassword',
+  /** Renderer → Main: Check if memory sync is locked */
+  SYNC_MEMORY_IS_LOCKED: 'sync:memory:isLocked',
+  /** Renderer → Main: List cross-device resumeable tasks */
+  SYNC_TASK_LIST_CROSS_DEVICE: 'sync:task:listCrossDevice',
+  /** Renderer → Main: Get memory sync config state */
+  SYNC_MEMORY_GET_CONFIG: 'sync:memory:getConfig',
 
   // Auth operations
   /** Login with email/password */
@@ -243,6 +255,20 @@ export const IPC_CHANNELS = {
   SEARCH_INDEX_STATUS: 'search:indexStatus',
   SEARCH_REINDEX: 'search:reindex',
   SEARCH_INDEX_PROGRESS: 'search:indexProgress',
+
+  // Unified search operations (Phase2-TASK002)
+  SEARCH_UNIFIED_QUERY: 'search:unified:query',
+  SEARCH_UNIFIED_LIST_SOURCES: 'search:unified:listSources',
+  SEARCH_FUZZY_FILES: 'search:fuzzyFiles',
+
+  // Context Engine v2 operations (Phase2-TASK003)
+  CONTEXT_ENGINE_V2_PREVIEW: 'contextEngine:v2:preview',
+
+  // WikiLinks operations (Phase2-TASK004)
+  WIKI_LINKS_GET_BACKLINKS: 'wikiLinks:getBacklinks',
+  WIKI_LINKS_GET_OUTLINKS: 'wikiLinks:getOutlinks',
+  WIKI_LINKS_GET_GRAPH_DATA: 'wikiLinks:getGraphData',
+  WIKI_LINKS_REBUILD_INDEX: 'wikiLinks:rebuildIndex',
 
   HARNESS_EXECUTE: 'harness:execute',
   HARNESS_SET_MODE: 'harness:setMode',
@@ -479,6 +505,11 @@ export const IPC_CHANNELS = {
   // App configuration (TASK044)
   APP_GET_CONFIG: 'app:getConfig',
   APP_UPDATE_CONFIG: 'app:updateConfig',
+
+  // Event bus operations (TASK001-Phase2)
+  EVENT_SUBSCRIBE: 'event:subscribe',
+  EVENT_UNSUBSCRIBE: 'event:unsubscribe',
+  EVENT_PUSH: 'event:push',
 } as const
 
 /**
@@ -637,10 +668,30 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.SEARCH_REINDEX]: { params: []; return: void }
   [IPC_CHANNELS.SEARCH_INDEX_PROGRESS]: { params: [progress: SearchIndexProgress]; return: void }
 
+  // Unified search operations (Phase2-TASK002)
+  [IPC_CHANNELS.SEARCH_UNIFIED_QUERY]: { params: [query: UnifiedSearchQueryShared]; return: UnifiedSearchResponseShared }
+  [IPC_CHANNELS.SEARCH_UNIFIED_LIST_SOURCES]: { params: []; return: string[] }
+  [IPC_CHANNELS.SEARCH_FUZZY_FILES]: { params: [query: string, options?: { limit?: number }]; return: Array<{ path: string; title: string }> }
+
+  // Context Engine v2 operations
+  [IPC_CHANNELS.CONTEXT_ENGINE_V2_PREVIEW]: { params: [request: unknown]; return: unknown },
+
+  // WikiLinks operations (Phase2-TASK004)
+  [IPC_CHANNELS.WIKI_LINKS_GET_BACKLINKS]: { params: [targetPath: string]; return: import('../main/services/wiki-links/types').Backlink[] },
+  [IPC_CHANNELS.WIKI_LINKS_GET_OUTLINKS]: { params: [sourcePath: string]; return: import('../main/services/wiki-links/types').WikiLink[] },
+  [IPC_CHANNELS.WIKI_LINKS_GET_GRAPH_DATA]: { params: [centerPath?: string]; return: import('../main/services/wiki-links/types').GraphData },
+  [IPC_CHANNELS.WIKI_LINKS_REBUILD_INDEX]: { params: []; return: { success: boolean } },
+
   // Sync operations
   [IPC_CHANNELS.SYNC_FORCE]: { params: []; return: SyncResult }
   [IPC_CHANNELS.SYNC_STATUS_CHANGED]: { params: [data: SyncStatusData]; return: void }
   [IPC_CHANNELS.SYNC_GET_STATE]: { params: []; return: SyncStatusData }
+  [IPC_CHANNELS.SYNC_MEMORY_ENABLE]: { params: []; return: { success: boolean } }
+  [IPC_CHANNELS.SYNC_MEMORY_DISABLE]: { params: []; return: { success: boolean } }
+  [IPC_CHANNELS.SYNC_MEMORY_SET_PASSWORD]: { params: [password: string]; return: { success: boolean } }
+  [IPC_CHANNELS.SYNC_MEMORY_IS_LOCKED]: { params: []; return: { locked: boolean } }
+  [IPC_CHANNELS.SYNC_TASK_LIST_CROSS_DEVICE]: { params: []; return: CrossDeviceTaskShared[] }
+  [IPC_CHANNELS.SYNC_MEMORY_GET_CONFIG]: { params: []; return: { syncMemory: boolean; locked: boolean } }
 
   // Auth operations
   [IPC_CHANNELS.AUTH_LOGIN]: { params: [input: AuthLoginInput]; return: AuthSession }
@@ -822,6 +873,10 @@ export interface IPCChannelMap {
   // App configuration (TASK044)
   [IPC_CHANNELS.APP_GET_CONFIG]: { params: []; return: AppConfig }
   [IPC_CHANNELS.APP_UPDATE_CONFIG]: { params: [updates: Partial<AppConfig>]; return: void }
+
+  // Event bus operations (TASK001-Phase2)
+  [IPC_CHANNELS.EVENT_SUBSCRIBE]: { params: [types: string[]]; return: { success: boolean } }
+  [IPC_CHANNELS.EVENT_UNSUBSCRIBE]: { params: [types?: string[]]; return: { success: boolean } }
 }
 
 /**
@@ -1353,6 +1408,14 @@ export interface SyncResult {
   readonly error?: string
 }
 
+export interface CrossDeviceTaskShared {
+  readonly taskId: string
+  readonly goal: string
+  readonly status: string
+  readonly lastSessionId?: string
+  readonly updatedAt: number
+}
+
 
 /**
  * Auth Types
@@ -1651,6 +1714,71 @@ export interface SearchIndexProgress {
   total: number
   filePath?: string
   error?: string
+}
+
+// ─── Unified Search Types (Phase2-TASK002) ───
+
+export type SearchSourceShared =
+  | 'local-files'
+  | 'memory'
+  | 'memory-archive'
+  | 'handbook'
+  | 'mcp:github'
+  | 'mcp:slack'
+  | 'mcp:notion'
+  | 'plans-archive'
+
+export interface UnifiedSearchQueryShared {
+  query: string
+  sources?: SearchSourceShared[]
+  filters?: {
+    fileTypes?: string[]
+    pathPrefix?: string
+    minConfidence?: number
+    timeRange?: { from: string; to: string }
+  }
+  limit?: number
+  offset?: number
+  rankingWeights?: {
+    vector: number
+    fts: number
+    recency: number
+    sourcePriority: number
+  }
+  timeoutMs?: number
+}
+
+export interface UnifiedSearchResultShared {
+  id: string
+  source: SearchSourceShared
+  type: 'file' | 'memory-entry' | 'handbook-entry' | 'mcp-record'
+  title: string
+  snippet: string
+  fullPath?: string
+  metadata: {
+    score: number
+    vectorScore?: number
+    bm25Score?: number
+    recencyScore?: number
+    confidence?: number
+    updatedAt?: string
+    [key: string]: unknown
+  }
+  navigation:
+    | { kind: 'file'; path: string; line?: number }
+    | { kind: 'memory'; entryId: string }
+    | { kind: 'handbook'; entryId: string }
+    | { kind: 'external'; url: string }
+}
+
+export interface UnifiedSearchResponseShared {
+  results: UnifiedSearchResultShared[]
+  totalCount: number
+  partial: boolean
+  timing: {
+    totalMs: number
+    perSource: Record<string, number>
+  }
 }
 
 // ─── Memory Section Type (v2) ───

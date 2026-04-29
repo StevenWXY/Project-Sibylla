@@ -11,6 +11,7 @@
 import type { AIChatRequest } from '../../../shared/types'
 import type { IntentClassifier, ClassifyResult } from './intent-classifier'
 import type { logger as loggerType } from '../../utils/logger'
+import type { UnifiedSearchEngine } from '../unified-search/unified-search-engine'
 
 // ─── Core Types ───
 
@@ -22,6 +23,7 @@ export interface ToolContext {
   readonly workspaceRoot: string
   readonly sessionId: string
   readonly logger: typeof loggerType
+  readonly unifiedSearch?: UnifiedSearchEngine
 }
 
 /**
@@ -61,11 +63,11 @@ export interface ToolSelection {
 // ─── Intent Profile Configuration ───
 
 export const INTENT_PROFILES: readonly IntentProfile[] = [
-  { intent: 'chat',      tools: ['reference_file', 'search', 'skill_activate'],                       maxTools: 5 },
-  { intent: 'edit_file', tools: ['reference_file', 'diff_write', 'search', 'spec_lookup'],            maxTools: 6 },
-  { intent: 'analyze',   tools: ['reference_file', 'search', 'memory_query', 'graph_traverse'],       maxTools: 6 },
-  { intent: 'plan',      tools: ['reference_file', 'task_create', 'memory_query', 'skill_activate'],  maxTools: 7 },
-  { intent: 'search',    tools: ['search', 'reference_file'],                                          maxTools: 4 },
+  { intent: 'chat',      tools: ['reference_file', 'unified_search', 'skill_activate'],                       maxTools: 5 },
+  { intent: 'edit_file', tools: ['reference_file', 'diff_write', 'unified_search', 'spec_lookup'],            maxTools: 6 },
+  { intent: 'analyze',   tools: ['reference_file', 'unified_search', 'memory_query', 'graph_traverse'],       maxTools: 6 },
+  { intent: 'plan',      tools: ['reference_file', 'unified_search', 'task_create', 'memory_query', 'skill_activate'], maxTools: 7 },
+  { intent: 'search',    tools: ['unified_search', 'reference_file'],                                         maxTools: 4 },
 ] as const
 
 /** Error message template when AI attempts to use an unavailable tool */

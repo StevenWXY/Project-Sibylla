@@ -63,6 +63,10 @@ import { ConversationHandler } from './ipc/handlers/conversation.handler'
 import { logger } from './utils/logger'
 import type { WorkspaceInfo } from '../shared/types'
 import { IPC_CHANNELS } from '../shared/types'
+import { EventLogStore } from './services/event-log-store'
+import { MemoryEventBusBridge } from './services/event-bus-bridges'
+import { MemoryEventBus } from './services/memory/memory-event-bus'
+import { EventIpcHandler } from './ipc/handlers/event'
 
 // Keep reference to main window to prevent garbage collection
 let mainWindow: BrowserWindow | null = null
@@ -75,6 +79,9 @@ let autoSaveManager: AutoSaveManager | null = null
 
 // Keep reference to DatabaseManager for cleanup on quit
 let databaseManager: DatabaseManager | null = null
+
+// Keep reference to WikiLinksIndexer for cleanup on quit
+let wikiLinksIndexer: InstanceType<typeof import('./services/wiki-links/wiki-links-indexer').WikiLinksIndexer> | null = null
 
 // Keep references to TraceStore / Tracer for cleanup on quit
 let traceStore: TraceStore | null = null
@@ -92,6 +99,9 @@ let planCleanup: (() => void) | null = null
 let exportCleanup: (() => void) | null = null
 let modelCleanup: (() => void) | null = null
 let quickSettingsCleanup: (() => void) | null = null
+let eventLogStore: EventLogStore | null = null
+let memoryEventBusBridge: MemoryEventBusBridge | null = null
+let memoryEventBus: MemoryEventBus | null = null
 const appEventBus = new AppEventBus()
 
 // Keep reference to LocalSearchEngine for FileWatcher forwarding
@@ -454,6 +464,21 @@ if (!gotTheLock) {
           sensorFeedbackLoop.setTracer(tracer)
           harnessOrchestrator.setTracer(tracer)
 
+          // ── TASK001-Phase2: Initialize EventLogStore + inject into AppEventBus ──
+          eventLogStore = new EventLogStore(path.join(workspacePath, '.sibylla', 'events'))
+          await eventLogStore.initialize()
+          appEventBus.setEventLogStore(eventLogStore)
+          appEventBus.setTracer(tracer)
+
+          // Create MemoryEventBus and connect to AppEventBus
+          memoryEventBus = new MemoryEventBus()
+          memoryManager.setEventBus(memoryEventBus)
+          memoryEventBusBridge = new MemoryEventBusBridge(memoryEventBus, appEventBus)
+
+          // Register EventIpcHandler for renderer event bridge
+          const eventIpcHandler = new EventIpcHandler(appEventBus)
+          ipcManager.registerHandler(eventIpcHandler)
+
           // ── TASK028: Initialize ProgressLedger for this workspace ──
           progressLedger = new ProgressLedger(
             taskStateMachine,
@@ -623,6 +648,66 @@ if (!gotTheLock) {
           // Re-register handbook commands with handbookService
           registerHandbookCommands(commandRegistry, appEventBus, handbookService)
 
+          // ── Phase2-TASK002: Initialize UnifiedSearchEngine ──
+          const { UnifiedSearchEngine } = await import('./services/unified-search/unified-search-engine')
+          const { UnifiedSearchHandler } = await import('./ipc/handlers/unified-search')
+
+          const memoryIndexer = memoryManager.v2Components?.indexer
+          const unifiedSearchEngine = memoryIndexer
+            ? new UnifiedSearchEngine(
+                localSearchEngineRef,
+                memoryIndexer,
+                handbookService,
+                fileManager,
+                tracer,
+                appEventBus,
+                { currentUser: workspaceInfo.config.name, isAdmin: true },
+              )
+            : null
+
+          if (unifiedSearchEngine) {
+            const unifiedSearchHandler = new UnifiedSearchHandler(
+              () => unifiedSearchEngine,
+              localSearchEngineRef,
+            )
+            ipcManager.registerHandler(unifiedSearchHandler)
+
+            // ── Phase2-TASK003: Inject UnifiedSearchEngine into ContextEngine + ExcessiveSearchGuard ──
+            aiHandler.contextEngine.setUnifiedSearch(unifiedSearchEngine)
+
+            const { ExcessiveSearchGuard } = await import('./services/harness/guardrails/excessive-search')
+            const excessiveSearchGuard = new ExcessiveSearchGuard()
+            harnessOrchestrator.addToolCallGuard(excessiveSearchGuard)
+
+            const { registerContextEngineV2Handlers } = await import('./ipc/handlers/context-engine-v2')
+            registerContextEngineV2Handlers(aiHandler.contextEngine)
+          }
+
+          // ── Phase2-TASK004: Initialize WikiLinks system ──
+          const { WikiLinksIndexer } = await import('./services/wiki-links/wiki-links-indexer')
+          const { WikiLinksStore } = await import('./services/wiki-links/wiki-links-store')
+          const { WikiLinksHandler } = await import('./ipc/handlers/wiki-links')
+
+          const _wikiLinksIndexer = new WikiLinksIndexer(
+            databaseManager.database,
+            fileManager,
+            appEventBus,
+          )
+          wikiLinksIndexer = _wikiLinksIndexer
+          const wikiLinksStore = new WikiLinksStore(databaseManager.database)
+
+          const wikiLinksHandler = new WikiLinksHandler(_wikiLinksIndexer, wikiLinksStore)
+          ipcManager.registerHandler(wikiLinksHandler)
+
+          const linkCountRow = databaseManager.database
+            .prepare('SELECT COUNT(*) as count FROM wiki_links')
+            .get() as { count: number }
+          if (linkCountRow.count === 0) {
+            _wikiLinksIndexer.rebuildAllIndex().catch((err: unknown) => {
+              logger.error('[Main] WikiLinks initial index rebuild failed', { error: String(err) })
+            })
+          }
+
           // ── TASK034: Initialize ConversationExporter + Export/Model/QuickSettings handlers ──
           const { ConversationExporter } = await import('./services/export')
           const { registerExportHandlers } = await import('./ipc/handlers/export')
@@ -747,6 +832,32 @@ if (!gotTheLock) {
             logger.info('[Main] MCP services initialized', { workspace: workspacePath })
           }
 
+          // ── Phase2-TASK005: Initialize MemorySyncManager + TaskStateMachineSync ──
+          const { MemorySyncManager } = await import('./services/sync/memory-sync')
+          const { TaskStateMachineSync } = await import('./services/sync/task-state-machine-sync')
+          const { SyncExtraHandler } = await import('./ipc/handlers/sync-extra')
+
+          const memorySyncManager = new MemorySyncManager(
+            fileManager,
+            appEventBus,
+            { syncMemory: false, workspaceId: workspaceInfo.config.workspaceId },
+          )
+
+          const currentSessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          const taskStateMachineSync = new TaskStateMachineSync(
+            workspacePath,
+            appEventBus,
+            currentSessionId,
+          )
+
+          const syncExtraHandler = new SyncExtraHandler()
+          syncExtraHandler.setDeps({ memorySyncManager, taskStateMachineSync })
+          ipcManager.registerHandler(syncExtraHandler)
+
+          syncManager.addBeforeSyncHook(() => memorySyncManager.beforePush())
+          syncManager.addAfterSyncHook(() => memorySyncManager.afterPull())
+          syncManager.addAfterSyncHook(() => taskStateMachineSync.detectCrossDeviceTasks())
+
           // Register trace/performance event push to renderer
           const forwardToRenderer = (eventName: string, channel: string) => {
             appEventBus.on(eventName, (payload: unknown) => {
@@ -809,6 +920,10 @@ if (!gotTheLock) {
         }
 
         // Cleanup IPC handlers for workspace-scoped services
+        if (wikiLinksIndexer) {
+          wikiLinksIndexer.destroy()
+          wikiLinksIndexer = null
+        }
         if (traceHandler) {
           traceHandler.cleanup()
           traceHandler = null
@@ -837,6 +952,14 @@ if (!gotTheLock) {
           traceStore.close()
           traceStore = null
         }
+
+        // Cleanup MemoryEventBusBridge
+        if (memoryEventBusBridge) {
+          memoryEventBusBridge.dispose()
+          memoryEventBusBridge = null
+        }
+        memoryEventBus = null
+        eventLogStore = null
 
         // Cleanup PerformanceMonitor
         if (performanceMonitor) {
@@ -1006,6 +1129,14 @@ if (!gotTheLock) {
       traceStore.close()
       traceStore = null
     }
+    // Cleanup MemoryEventBusBridge + flush AppEventBus
+    if (memoryEventBusBridge) {
+      memoryEventBusBridge.dispose()
+      memoryEventBusBridge = null
+    }
+    appEventBus.flushAndShutdown(5000).catch((err: unknown) => {
+      console.error('[Main] Error flushing AppEventBus on quit', err)
+    })
     // Cleanup IPC handlers
     ipcManager.cleanup()
   })

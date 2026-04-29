@@ -2,15 +2,18 @@ import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import { CitationRenderer } from '../chat/CitationRenderer'
+import type { Citation } from '../../../shared/citation-parser'
 
 interface MarkdownRendererProps {
   content: string
   onHandbookReference?: (entryId: string) => void
   onFileReference?: (filePath: string) => void
+  onCitationNavigate?: (citation: Citation) => void
 }
 
-export function MarkdownRenderer({ content, onHandbookReference, onFileReference }: MarkdownRendererProps) {
-  const processedContent = useMemo(() => {
+export function MarkdownRenderer({ content, onHandbookReference, onFileReference, onCitationNavigate }: MarkdownRendererProps) {
+  const { processedContent, hasCitations } = useMemo(() => {
     let result = content.replace(
       /\[Handbook:\s*([^\]]+)\]/g,
       (_match, id: string) => `📖 来自用户手册：[📖 ${id}](handbook-ref:${id})`
@@ -19,7 +22,10 @@ export function MarkdownRenderer({ content, onHandbookReference, onFileReference
       /\[([^\]]*\.(?:md|txt|csv|json|yaml|yml|pdf|docx))\]\(([^)]+)\)/g,
       (_match, label: string, href: string) => `[${label}](file-ref:${href})`
     )
-    return result
+    const citationPattern = /\[(?:file|memory|handbook|mcp|plan):[^\]]+\]/g
+    const cites = citationPattern.test(result)
+    citationPattern.lastIndex = 0
+    return { processedContent: result, hasCitations: cites }
   }, [content])
 
   const components = useMemo(
@@ -187,12 +193,31 @@ export function MarkdownRenderer({ content, onHandbookReference, onFileReference
   )
 
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
-      components={components}
-    >
-      {processedContent}
-    </ReactMarkdown>
+    <div>
+      {hasCitations ? (
+        <CitationRenderer
+          content={processedContent}
+          onCitationNavigate={onCitationNavigate}
+        >
+          {(text) => (
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={components}
+            >
+              {text}
+            </ReactMarkdown>
+          )}
+        </CitationRenderer>
+      ) : (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeHighlight]}
+          components={components}
+        >
+          {processedContent}
+        </ReactMarkdown>
+      )}
+    </div>
   )
 }
