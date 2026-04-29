@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import { ThemeProvider } from './components/providers/ThemeProvider'
 import { AppLayout } from './components/layout/AppLayout'
 import { ComponentShowcase } from './pages/ComponentShowcase'

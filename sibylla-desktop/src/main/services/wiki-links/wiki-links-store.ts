@@ -1,6 +1,5 @@
 import type Database from 'better-sqlite3'
 import type { WikiLink, Backlink, GraphData, LinkCount } from './types'
-import { logger } from '../../utils/logger'
 
 const BROKEN_PREFIX = '__broken__:'
 

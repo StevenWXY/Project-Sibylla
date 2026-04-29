@@ -26,8 +26,6 @@ export const CommandPalette: React.FC = () => {
   const toggle = useCommandStore(s => s.toggle)
   const close = useCommandStore(s => s.close)
   const setQuery = useCommandStore(s => s.setQuery)
-  const selectNext = useCommandStore(s => s.selectNext)
-  const selectPrev = useCommandStore(s => s.selectPrev)
   const executeSelected = useCommandStore(s => s.executeSelected)
   const executeById = useCommandStore(s => s.executeById)
   const setSelectedIndex = useCommandStore(s => s.setSelectedIndex)

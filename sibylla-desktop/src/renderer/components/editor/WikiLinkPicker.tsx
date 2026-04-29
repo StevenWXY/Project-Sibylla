@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export interface WikiLinkPickerItem {
   path: string
@@ -12,27 +12,6 @@ export interface WikiLinkPickerProps {
 
 export function WikiLinkPickerElement({ items, command }: WikiLinkPickerProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
-
-  const onKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key === 'ArrowUp') {
-        setSelectedIndex((prev) => (prev + items.length - 1) % items.length)
-        return true
-      }
-      if (event.key === 'ArrowDown') {
-        setSelectedIndex((prev) => (prev + 1) % items.length)
-        return true
-      }
-      if (event.key === 'Enter') {
-        if (items.length > 0) {
-          command(items[selectedIndex])
-        }
-        return true
-      }
-      return false
-    },
-    [items, selectedIndex, command],
-  )
 
   useEffect(() => {
     setSelectedIndex(0)

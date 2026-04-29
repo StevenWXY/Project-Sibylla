@@ -21,7 +21,7 @@ import { LocalRagEngine, type LocalRagSearchHit } from '../../services/local-rag
 import { TokenStorage } from '../../services/token-storage'
 import { WorkspaceManager } from '../../services/workspace-manager'
 import { FileManager } from '../../services/file-manager'
-import { ContextEngine, type ContextAssemblyRequest } from '../../services/context-engine'
+import { ContextEngine } from '../../services/context-engine'
 import type { ContextAssemblyRequestV2 } from '../../services/context-engine/types-v2'
 import { SkillEngine } from '../../services/skill-engine'
 import { SkillRegistry } from '../../services/skill-system/SkillRegistry'
@@ -256,13 +256,6 @@ export class AIHandler extends IpcHandler {
         ],
         tags: ['ai', 'chat', 'input', 'stream'],
       })
-
-      const contextRequest: ContextAssemblyRequest = {
-        userMessage: normalized.message,
-        currentFile: normalized.currentFile,
-        manualRefs: normalized.manualRefs ?? [],
-        skillRefs: normalized.skillRefs ?? [],
-      }
 
       const assembled = await this.assembleContextWithV2Fallback({
         userMessage: normalized.message,
@@ -747,13 +740,6 @@ export class AIHandler extends IpcHandler {
       ],
       tags: ['ai', 'chat', 'input'],
     })
-
-    const contextRequest: ContextAssemblyRequest = {
-      userMessage: request.message,
-      currentFile: request.currentFile,
-      manualRefs: request.manualRefs ?? [],
-      skillRefs: request.skillRefs ?? [],
-    }
 
     const assembled = await this.assembleContextWithV2Fallback({
       userMessage: request.message,

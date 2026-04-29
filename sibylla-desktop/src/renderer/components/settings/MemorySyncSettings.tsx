@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Lock, Unlock, AlertTriangle, Loader2 } from 'lucide-react'
+import { Lock, AlertTriangle, Loader2 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 
 interface MemorySyncSettingsProps {

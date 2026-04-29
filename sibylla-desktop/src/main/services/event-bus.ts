@@ -7,7 +7,6 @@ import type {
   SibyllaEvent,
   SibyllaEventType,
   EventHandler,
-  EVENT_MAP_BRIDGE,
 } from './event-bus-types'
 import type { Tracer } from './trace/tracer'
 

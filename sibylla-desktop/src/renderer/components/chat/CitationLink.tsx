@@ -83,7 +83,7 @@ function getIconForCitation(citation: Citation, broken: boolean): React.ElementT
 
 export function CitationLink({
   citation,
-  raw,
+  raw: _raw,
   broken = false,
   onNavigate,
   onSearch,
