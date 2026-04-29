@@ -1,6 +1,6 @@
 import type { ConversationData, ConversationMessage, ExportOptions } from './types'
-import { extractCitations, citationToMarkdown } from '@shared/citation-parser'
-import type { Citation } from '@shared/citation-parser'
+import { extractCitations, citationToMarkdown } from '../../../shared/citation-parser'
+import type { Citation } from '../../../shared/citation-parser'
 
 const INLINE_CSS = `
 * { box-sizing: border-box; margin: 0; padding: 0; }

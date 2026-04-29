@@ -155,7 +155,7 @@ export function WysiwygEditor({
       WikiLink.configure({
         onNavigate: (target: string) => {
           const fileName = target.split('/').pop() ?? target
-          import('../../../store/tabStore').then(({ useTabStore }) => {
+          import('../../store/tabStore').then(({ useTabStore }) => {
             useTabStore.getState().openTab(target, fileName)
           })
         },
