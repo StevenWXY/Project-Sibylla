@@ -5,6 +5,7 @@ export type ContextLayerTypeV2 =
   | 'skill'
   | 'cross-source'
   | 'manual'
+  | 'collab'
 
 export interface ContextLayerV2 {
   type: ContextLayerTypeV2
@@ -24,6 +25,7 @@ export interface ContextAssemblyRequestV2 {
   intent?: string
   tokenBudget?: number
   forceReSearch?: boolean
+  unresolvedReferences?: string[]
 }
 
 export interface AssembledContextV2 {
@@ -39,8 +41,9 @@ export const V2_BUDGET_WEIGHTS: Record<ContextLayerTypeV2, number> = {
   'ai-mode': 0.10,
   memory: 0.15,
   skill: 0.15,
-  'cross-source': 0.20,
+  'cross-source': 0.15,
   manual: 0.10,
+  collab: 0.05,
 } as const
 
 export const V2_DEFAULT_TOKEN_BUDGET = 50000

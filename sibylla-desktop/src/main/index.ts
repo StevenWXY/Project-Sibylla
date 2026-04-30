@@ -1,5 +1,6 @@
 import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { createMainWindow } from './window'
 import { ipcManager } from './ipc'
 import { TestHandler } from './ipc/handlers/test.handler'
@@ -103,6 +104,11 @@ let eventLogStore: EventLogStore | null = null
 let memoryEventBusBridge: MemoryEventBusBridge | null = null
 let memoryEventBus: MemoryEventBus | null = null
 const appEventBus = new AppEventBus()
+
+let notificationCleanup: (() => void) | null = null
+let proactiveCleanup: (() => void) | null = null
+let presenceCleanup: (() => void) | null = null
+let focusModeCleanup: (() => void) | null = null
 
 // Keep reference to LocalSearchEngine for FileWatcher forwarding
 let localSearchEngineRef: import('./services/local-search-engine').LocalSearchEngine | null = null
@@ -331,6 +337,7 @@ if (!gotTheLock) {
             gitAbstraction,
             undefined,
             networkMonitor,
+            appEventBus,
           )
           
           // Connect SyncHandler to SyncManager for IPC event bridging
@@ -881,6 +888,199 @@ if (!gotTheLock) {
           forwardToRenderer('datasource:rate-limit-exhausted', IPC_CHANNELS.DATASOURCE_RATE_LIMIT_EXHAUSTED)
           forwardToRenderer('datasource:provider-registered', IPC_CHANNELS.DATASOURCE_PROVIDER_REGISTERED)
           forwardToRenderer('model:switched', IPC_CHANNELS.MODEL_SWITCHED)
+
+          // ── Sprint 5: Notification, Proactive, Presence, Focus, Merge, Collab Context ──
+          const { NotificationStore } = await import('./services/notifications/notification-store')
+          const { PreferenceLearner } = await import('./services/notifications/preference-learner')
+          const { NotificationEngine } = await import('./services/notifications/notification-engine')
+          const { registerNotificationHandlers } = await import('./ipc/handlers/notification')
+          const { FocusModeController } = await import('./services/mode/focus-mode-controller')
+          const { registerFocusModeHandlers } = await import('./ipc/handlers/focus-mode')
+          const { registerFocusCommands } = await import('./services/command/builtin-commands/focus-commands')
+          const { TriggerRegistry } = await import('./services/proactive-engine/trigger-registry')
+          const { InterruptPolicy } = await import('./services/proactive-engine/interrupt-policy')
+          const { ProactiveEngine } = await import('./services/proactive-engine')
+          const { DEFAULT_PROACTIVE_CONFIG } = await import('./services/proactive-engine/constants')
+          const { registerProactiveEngineHandlers } = await import('./ipc/handlers/proactive-engine')
+          const { PresenceStore } = await import('./services/presence/presence-store')
+          const { PresenceClient } = await import('./services/presence/presence-client')
+          const { PrivacyFilter } = await import('./services/presence/privacy-filter')
+          const { DEFAULT_PRESENCE_CONFIG } = await import('./services/presence/constants')
+          const { registerPresenceHandlers } = await import('./ipc/handlers/presence')
+          const { MergeAssistant } = await import('./services/sync/merge-assistant')
+          const { SyncMergeHandler } = await import('./ipc/handlers/sync-merge.handler')
+          const { CollabContextProvider } = await import('./services/context-engine/collab-context-provider')
+
+          const notificationStore = new NotificationStore(workspacePath)
+          const preferenceLearner = new PreferenceLearner(notificationStore, workspacePath)
+          preferenceLearner.load()
+
+          const focusModeController = new FocusModeController(
+            aiModeRegistry,
+            appEventBus,
+            notificationStore,
+            preferenceLearner,
+            null,
+            workspacePath,
+          )
+          focusModeController.startScheduledFocusCheck()
+
+          const notificationEngine = new NotificationEngine(
+            appEventBus,
+            notificationStore,
+            preferenceLearner,
+            focusModeController,
+            workspacePath,
+            {
+              currentUserId: cachedUser?.id ?? workspaceInfo.config.workspaceId,
+              getRecentFiles: () => {
+                try {
+                  const recentDir = path.join(workspacePath, '.sibylla', 'recent-files')
+                  if (!fs.existsSync(recentDir)) return []
+                  return JSON.parse(fs.readFileSync(recentDir, 'utf-8')) as string[]
+                } catch { return [] }
+              },
+            },
+          )
+          await notificationEngine.initialize()
+          preferenceLearner.setNotificationEngine(notificationEngine)
+
+          notificationCleanup = registerNotificationHandlers(
+            ipcMain,
+            notificationEngine,
+            notificationStore,
+            preferenceLearner,
+            appEventBus,
+            () => mainWindow,
+          )
+
+          focusModeCleanup = registerFocusModeHandlers(
+            ipcMain,
+            focusModeController,
+            appEventBus,
+            () => mainWindow,
+          )
+
+          registerFocusCommands(commandRegistry, focusModeController, () => 'default')
+
+          const triggerRegistry = new TriggerRegistry({
+            onCooldownChange: async () => {},
+            globalCooldownMinutes: DEFAULT_PROACTIVE_CONFIG.globalCooldownMinutes,
+          })
+          const interruptPolicy = new InterruptPolicy(DEFAULT_PROACTIVE_CONFIG)
+
+          let subAgentRegistry: InstanceType<typeof import('./services/sub-agent/SubAgentRegistry').SubAgentRegistry> | null = null
+          let subAgentExecutor: InstanceType<typeof import('./services/sub-agent/SubAgentExecutor').SubAgentExecutor> | null = null
+          try {
+            const { SubAgentRegistry: SAR } = await import('./services/sub-agent/SubAgentRegistry')
+            const { SubAgentExecutor: SAE } = await import('./services/sub-agent/SubAgentExecutor')
+            const agentsBuiltinDir = app.isPackaged
+              ? path.join(process.resourcesPath, 'resources', 'prompts', 'agents')
+              : path.join(app.getAppPath(), 'resources', 'prompts', 'agents')
+            const agentsWorkspaceDir = path.join(workspacePath, '.sibylla', 'agents')
+            subAgentRegistry = new SAR(agentsBuiltinDir, agentsWorkspaceDir, promptComposer)
+            await subAgentRegistry.initialize()
+            subAgentExecutor = new SAE(
+              aiGatewayClient,
+              'claude-sonnet-4-20250514',
+              subAgentRegistry,
+              tracer,
+              logger,
+              workspacePath,
+            )
+          } catch (err) {
+            logger.warn('[Main] Sub-agent init failed, proactive engine will have limited functionality', {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
+
+          if (subAgentExecutor && subAgentRegistry && unifiedSearchEngine) {
+            const proactiveEngine = new ProactiveEngine(
+              {
+                triggerRegistry,
+                interruptPolicy,
+                subAgentExecutor,
+                subAgentRegistry,
+                eventBus: appEventBus,
+                tracer,
+                triggerDeps: {
+                  searchEngine: unifiedSearchEngine,
+                  memoryStore: {
+                    persistCooldown: async () => {},
+                  },
+                  fileStats: (p: string) => {
+                    try {
+                      const stat = fs.statSync(path.join(workspacePath, p))
+                      return { updatedAt: stat.mtimeMs, size: stat.size }
+                    } catch { return null }
+                  },
+                  knownMemoryPatterns: [],
+                },
+                commandRegistry,
+                sendToRenderer: (channel: string, data: unknown) => {
+                  for (const window of BrowserWindow.getAllWindows()) {
+                    if (!window.isDestroyed()) window.webContents.send(channel, data)
+                  }
+                },
+              },
+              DEFAULT_PROACTIVE_CONFIG,
+            )
+            proactiveEngine.initialize()
+
+            proactiveCleanup = registerProactiveEngineHandlers(
+              ipcMain,
+              proactiveEngine,
+              () => mainWindow,
+            )
+          }
+
+          const presenceStore = new PresenceStore(appEventBus)
+          presenceStore.initialize()
+          const privacyFilter = new PrivacyFilter()
+          const presenceConfig = { ...DEFAULT_PRESENCE_CONFIG }
+
+          const presenceClient = new PresenceClient(
+            presenceConfig,
+            appEventBus,
+            presenceStore,
+            privacyFilter,
+          )
+
+          presenceCleanup = registerPresenceHandlers(
+            ipcMain,
+            presenceStore,
+            presenceClient,
+            privacyFilter,
+            presenceConfig,
+            () => 'member' as const,
+            () => mainWindow,
+          )
+
+          if (subAgentExecutor && subAgentRegistry && unifiedSearchEngine) {
+            const mergeAssistant = new MergeAssistant({
+              subAgentExecutor,
+              registry: subAgentRegistry,
+              searchEngine: unifiedSearchEngine,
+              workspaceDir: workspacePath,
+              tracer: tracer ?? undefined,
+            })
+
+            const syncMergeHandler = new SyncMergeHandler()
+            syncMergeHandler.setMergeAssistant(mergeAssistant)
+            syncMergeHandler.setGitAbstraction(gitAbstraction, workspacePath)
+            ipcManager.registerHandler(syncMergeHandler)
+          }
+
+          const collabContextProvider = new CollabContextProvider(
+            presenceStore,
+            eventLogStore!,
+            async () => [],
+            privacyFilter,
+          )
+          harnessContextEngine.setCollabContextProvider(collabContextProvider)
+          if (aiHandler.contextEngine) {
+            aiHandler.contextEngine.setCollabContextProvider(collabContextProvider)
+          }
         } catch (error) {
           console.error('[Main] Failed to initialize workspace services', error)
           // Non-fatal: workspace can still be used without sync
@@ -908,6 +1108,33 @@ if (!gotTheLock) {
         appEventBus.removeAllListeners('datasource:rate-limit-exhausted')
         appEventBus.removeAllListeners('datasource:provider-registered')
         appEventBus.removeAllListeners('model:switched')
+        appEventBus.removeAllListeners('notification.created')
+        appEventBus.removeAllListeners('notification.clicked')
+        appEventBus.removeAllListeners('notification.dismissed')
+        appEventBus.removeAllListeners('aiMode.focused-changed')
+        appEventBus.removeAllListeners('presence.user-online')
+        appEventBus.removeAllListeners('presence.user-offline')
+        appEventBus.removeAllListeners('presence.user-editing')
+        appEventBus.removeAllListeners('presence.user-viewing')
+        appEventBus.removeAllListeners('git.conflict-detected')
+
+        // Cleanup Sprint 5 services
+        if (notificationCleanup) {
+          notificationCleanup()
+          notificationCleanup = null
+        }
+        if (proactiveCleanup) {
+          proactiveCleanup()
+          proactiveCleanup = null
+        }
+        if (presenceCleanup) {
+          presenceCleanup()
+          presenceCleanup = null
+        }
+        if (focusModeCleanup) {
+          focusModeCleanup()
+          focusModeCleanup = null
+        }
 
         // Cleanup PlanManager
         if (planManager) {

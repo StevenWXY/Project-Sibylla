@@ -20,6 +20,7 @@
  */
 
 import { EventEmitter } from 'events'
+import { ulid } from 'ulid'
 import { logger } from '../utils/logger'
 import type { FileManager } from './file-manager'
 import type { GitAbstraction } from './git-abstraction'
@@ -36,9 +37,10 @@ import {
   DEFAULT_RECONNECT_SYNC_DELAY_MS,
   DEFAULT_INITIAL_SYNC_DELAY_MS,
 } from './types/sync-manager.types'
-import type { SyncStatus, SyncStatusData } from '../../../shared/types'
+import type { SyncStatus, SyncStatusData, ConflictInfo } from '../../../shared/types'
 import type { NetworkMonitor } from './network-monitor'
 import type { AutoSaveManager } from './auto-save-manager'
+import type { AppEventBus } from './event-bus'
 
 /** Log prefix for all SyncManager operations */
 const LOG_PREFIX = '[SyncManager]'
@@ -158,6 +160,9 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
   private beforeSyncHooks: Array<() => Promise<void>> = []
   private afterSyncHooks: Array<() => Promise<void>> = []
 
+  // ─── Event bus (Phase2-TASK009, optional) ────────────────────────────
+  private readonly eventBus: AppEventBus | null
+
   /**
    * Create a new SyncManager instance
    *
@@ -173,6 +178,7 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
     gitAbstraction: GitAbstraction,
     networkProvider?: NetworkStatusProvider,
     networkMonitor?: NetworkMonitor,
+    eventBus?: AppEventBus,
   ) {
     super()
 
@@ -185,6 +191,7 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
     this.gitAbstraction = gitAbstraction
     this.networkProvider = networkProvider ?? new ElectronNetworkProvider()
     this.networkMonitor = networkMonitor ?? null
+    this.eventBus = eventBus ?? null
 
     logger.info(`${LOG_PREFIX} Initialized`, {
       workspaceDir: this.workspaceDir,
@@ -546,6 +553,26 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
         const conflicts = result.conflicts ? [...result.conflicts] : []
         this.emit('sync:conflict', conflicts)
         this.updateStatus('conflict', undefined, conflicts)
+
+        if (this.eventBus) {
+          const conflictsWithId = conflicts.map<ConflictInfo>((c: ConflictInfo) => ({
+            ...c,
+            conflictId: c.conflictId ?? ulid(),
+          }))
+          this.eventBus.emitEvent({
+            type: 'git.conflict-detected',
+            source: 'sync-manager',
+            payload: {
+              conflicts: conflictsWithId.map(c => ({
+                filePath: c.filePath,
+                conflictId: c.conflictId,
+                localPreview: c.localContent?.slice(0, 500),
+                remotePreview: c.remoteContent?.slice(0, 500),
+                basePreview: c.baseContent?.slice(0, 500),
+              })),
+            },
+          })
+        }
       } else {
         const errorMsg = result.error ?? 'Unknown sync error'
         this.emit('sync:error', new Error(errorMsg))

@@ -31,6 +31,8 @@ import type {
   ContextLayerV2,
 } from './types-v2'
 import { V2_BUDGET_WEIGHTS, V2_DEFAULT_TOKEN_BUDGET } from './types-v2'
+import type { CollabContextProvider } from './collab-context-provider'
+import { COLLAB_CONTEXT_BUDGET_RATIO } from '../presence/constants'
 
 export interface ContextAssemblyRequest {
   userMessage: string
@@ -113,6 +115,7 @@ export class ContextEngine {
   private mcpRegistry: MCPRegistry | null = null
   private mcpEnabled: boolean = false
   private unifiedSearch?: UnifiedSearchEngine
+  private collabContextProvider: CollabContextProvider | null = null
 
   constructor(
     fileManager: FileManager,
@@ -153,6 +156,10 @@ export class ContextEngine {
 
   setUnifiedSearch(engine: UnifiedSearchEngine): void {
     this.unifiedSearch = engine
+  }
+
+  setCollabContextProvider(provider: CollabContextProvider): void {
+    this.collabContextProvider = provider
   }
 
   hasUnifiedSearch(): boolean {
@@ -1126,6 +1133,27 @@ export class ContextEngine {
       })
     }
 
+    // L7: Collab Context (Presence + Activity)
+    if (this.collabContextProvider) {
+      try {
+        const shouldInject = await this.collabContextProvider.shouldInject(request.userMessage)
+        if (shouldInject) {
+          const budgetForL7 = Math.floor((request.tokenBudget ?? V2_DEFAULT_TOKEN_BUDGET) * COLLAB_CONTEXT_BUDGET_RATIO)
+          const collabContext = await this.collabContextProvider.collect(request.userMessage, budgetForL7)
+          if (collabContext.layers.length > 0) {
+            layers.push(...collabContext.layers)
+            if (collabContext.unresolvedReferences) {
+              request.unresolvedReferences = collabContext.unresolvedReferences
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn('[ContextEngine] L7 collab context failed, skipping', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+
     this.applyV2TokenBudget(layers, tokenBudget, warnings)
 
     const systemPrompt = await this.assembleV2SystemPromptWithComposer(layers)
@@ -1246,8 +1274,28 @@ export class ContextEngine {
     const totalTokens = layers.reduce((sum, l) => sum + l.tokens, 0)
     if (totalTokens <= totalBudget) return
 
+    const collabLayer = layers.find(l => l.type === 'collab')
+    if (collabLayer && collabLayer.tokens > 0) {
+      const otherTokens = totalTokens - collabLayer.tokens
+      if (otherTokens >= totalBudget) {
+        collabLayer.content = ''
+        collabLayer.tokens = 0
+        warnings.push('Collab layer removed due to budget constraints')
+      }
+    }
+
     const crossSourceLayer = layers.find(l => l.type === 'cross-source')
-    if (!crossSourceLayer) return
+    if (!crossSourceLayer) {
+      if (collabLayer && collabLayer.tokens > 0) {
+        const otherTokens = totalTokens - collabLayer.tokens
+        if (otherTokens >= totalBudget) {
+          collabLayer.content = ''
+          collabLayer.tokens = 0
+          warnings.push('Collab layer removed due to budget constraints')
+        }
+      }
+      return
+    }
 
     const crossSourceBudget = Math.floor(totalBudget * V2_BUDGET_WEIGHTS['cross-source'])
     const otherTokens = totalTokens - crossSourceLayer.tokens

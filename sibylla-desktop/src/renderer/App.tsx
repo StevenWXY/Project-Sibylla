@@ -19,6 +19,12 @@ import { ResumeTaskDialog } from './components/studio/harness/ResumeTaskDialog'
 import { CommandPalette } from './components/command-palette/CommandPalette'
 import { UnifiedSearchPalette } from './components/search/UnifiedSearchPalette'
 import { useSearchPaletteStore } from './store/searchPaletteStore'
+import { SuggestionQueue } from './components/proactive/SuggestionQueue'
+import { initProactiveListener } from './store/proactiveStore'
+import { NotificationCenter } from './components/notifications/NotificationCenter'
+import { TeamPanel } from './components/presence/TeamPanel'
+import { FocusModeIndicator } from './components/focus/FocusModeIndicator'
+import { FocusSummaryCard } from './components/focus/FocusSummaryCard'
 
 function UnifiedSearchPaletteWrapper() {
   const isOpen = useSearchPaletteStore(s => s.isOpen)
@@ -58,9 +64,16 @@ export default function App() {
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null)
   const [isWorkspaceBusy, setIsWorkspaceBusy] = useState(false)
   const [isSyncingNow, setIsSyncingNow] = useState(false)
+  const [notificationCenterOpen, setNotificationCenterOpen] = useState(false)
 
   // TASK021: Subscribe to Harness IPC events
   useHarnessEvents()
+
+  // TASK008-Phase2: Initialize proactive suggestion listener
+  useEffect(() => {
+    const unsub = initProactiveListener()
+    return unsub
+  }, [])
 
   const currentWorkspace = useAppStore((state) => state.currentWorkspace)
   const currentUser = useAppStore((state) => state.currentUser)
@@ -612,6 +625,22 @@ export default function App() {
 
         {/* Phase2-TASK002: Global Unified Search overlay */}
         <UnifiedSearchPaletteWrapper />
+
+        {/* Phase2-TASK008: Global Proactive Suggestion overlay */}
+        <SuggestionQueue />
+
+        {/* Sprint 5: Global Notification Center panel */}
+        <NotificationCenter
+          isOpen={notificationCenterOpen}
+          onClose={() => setNotificationCenterOpen(false)}
+        />
+
+        {/* Sprint 5: Global Team Presence sidebar */}
+        <TeamPanel />
+
+        {/* Sprint 5: Focus mode indicator + summary */}
+        <FocusModeIndicator conversationId="default" />
+        <FocusSummaryCard />
       </AppLayout>
     </ThemeProvider>
   )

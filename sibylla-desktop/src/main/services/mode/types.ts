@@ -46,6 +46,8 @@ export interface ActiveAiModeState {
   aiModeId: AiModeId
   activatedAt: string
   activatedBy: 'user' | 'system' | 'auto-detect'
+  focused?: boolean
+  focusUntil?: string
 }
 
 export interface ModeEvaluationResult {

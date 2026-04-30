@@ -129,6 +129,14 @@ const mockElectronAPI = {
     onResumeableTaskDetected: vi.fn().mockReturnValue(vi.fn()),
     onGuardrailBlocked: vi.fn().mockReturnValue(vi.fn()),
   },
+  proactive: {
+    pushSnapshot: vi.fn(),
+    getConfig: vi.fn().mockResolvedValue({ success: true, data: {} }),
+    updateConfig: vi.fn().mockResolvedValue({ success: true }),
+    dismissSuggestion: vi.fn().mockResolvedValue({ success: true }),
+    acceptSuggestion: vi.fn().mockResolvedValue({ success: true }),
+    onSuggestionShown: vi.fn().mockReturnValue(vi.fn()),
+  },
   on: vi.fn(() => vi.fn()),
   off: vi.fn(),
 }

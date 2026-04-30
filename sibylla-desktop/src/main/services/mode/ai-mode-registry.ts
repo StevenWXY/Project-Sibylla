@@ -155,6 +155,21 @@ export class AiModeRegistry {
     return this.modes.get(modeId) ?? this.modes.get('free')!
   }
 
+  getActiveModeState(conversationId: string): ActiveAiModeState | undefined {
+    return this.activeStates.get(conversationId)
+  }
+
+  setFocused(conversationId: string, focused: boolean, until?: string): void {
+    const state = this.activeStates.get(conversationId)
+    if (!state) {
+      this.log.warn('aiMode.setFocused.no-active-state', { conversationId })
+      return
+    }
+    state.focused = focused
+    state.focusUntil = until
+    this.log.info('aiMode.setFocused', { conversationId, focused, until })
+  }
+
   getActiveModeId(conversationId: string): AiModeId {
     return this.activeStates.get(conversationId)?.aiModeId ?? 'free'
   }

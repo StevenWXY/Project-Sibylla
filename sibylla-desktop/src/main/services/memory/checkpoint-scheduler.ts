@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger'
 import { estimateTokensFromEntries } from './utils'
 import type { MemoryManager } from '../memory-manager'
 import type { MemoryExtractor } from './memory-extractor'
-import type { SimilarityIndexProvider, MemoryConfig, ExtractionReport } from './types'
+import type { SimilarityIndexProvider, MemoryConfig, ExtractionReport, ExtractionPostProcessor, ExtractionInput } from './types'
 import type { CheckpointTrigger, CheckpointRecord } from './types'
 import type { EvolutionLog } from './evolution-log'
 import type { MemoryEventBus } from './memory-event-bus'
@@ -37,6 +37,7 @@ export class CheckpointScheduler {
     private readonly config: MemoryConfig,
     private readonly loggerInstance: typeof logger = logger,
     retryDelays?: number[],
+    private readonly postProcessors?: ExtractionPostProcessor[],
   ) {
     this.workspaceRoot = this.memoryManager.getWorkspacePathOrFail()
     this.retryDelays = retryDelays ?? DEFAULT_RETRY_DELAYS
@@ -167,6 +168,35 @@ export class CheckpointScheduler {
         record.status = 'aborted'
         record.completedAt = new Date().toISOString()
         return
+      }
+
+      if (this.postProcessors?.length) {
+        const extractionContext: ExtractionInput = { logs, existingMemory, workspaceContext }
+        for (const processor of this.postProcessors) {
+          try {
+            const extraCandidates = processor.process(report, extractionContext)
+            for (const candidate of extraCandidates) {
+              const entry: import('./types').MemoryEntry = {
+                id: `mem-pp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                section: candidate.section,
+                content: candidate.content,
+                confidence: candidate.confidence,
+                hits: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                sourceLogIds: candidate.sourceLogIds,
+                locked: false,
+                tags: [],
+              }
+              report.added.push(entry)
+            }
+          } catch (err) {
+            this.loggerInstance.warn('memory.checkpoint.post_processor_failed', {
+              processor: processor.constructor.name,
+              err: err instanceof Error ? err.message : String(err),
+            })
+          }
+        }
       }
 
       await this.memoryManager.applyExtractionReport(report)

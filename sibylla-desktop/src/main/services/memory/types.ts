@@ -93,6 +93,10 @@ export interface ExtractionInput {
   workspaceContext: { name: string; description?: string }
 }
 
+export interface ExtractionPostProcessor {
+  process(report: ExtractionReport, context: ExtractionInput): ExtractionCandidate[]
+}
+
 export interface ExtractionCandidate {
   section: MemorySection
   content: string

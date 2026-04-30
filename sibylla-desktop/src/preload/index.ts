@@ -157,6 +157,11 @@ import type {
   // App config types (TASK044)
   AppConfig,
   CrossDeviceTaskShared,
+  // AI Merge types (TASK009-Phase2)
+  MergeResult,
+  AdoptMergeParams,
+  // Presence types (TASK007-Phase2)
+  FilteredPeerState,
 } from '../shared/types'
 import type { CommitInfo, HistoryOptions, FileDiff } from '../shared/types/git.types'
 import { IPC_CHANNELS, ErrorType } from '../shared/types'
@@ -250,6 +255,8 @@ interface ElectronAPI {
     memoryIsLocked: () => Promise<IPCResponse<{ locked: boolean }>>
     listCrossDeviceTasks: () => Promise<IPCResponse<CrossDeviceTaskShared[]>>
     memoryGetConfig: () => Promise<IPCResponse<{ syncMemory: boolean; locked: boolean }>>
+    proposeAIMerge: (conflict: ConflictInfo) => Promise<IPCResponse<MergeResult>>
+    adoptAIMerge: (params: AdoptMergeParams) => Promise<IPCResponse<{ success: boolean }>>
   }
 
   // Git conflict operations
@@ -597,6 +604,46 @@ interface ElectronAPI {
     getGraphData: (centerPath?: string) => Promise<IPCResponse<{ nodes: Array<{ id: string; label: string; linkCount: number }>; edges: Array<{ source: string; target: string }> }>>
     rebuildIndex: () => Promise<IPCResponse<{ success: boolean }>>
   }
+
+  // Notification operations (Phase2-TASK006)
+  notifications: {
+    list: (options?: { limit?: number; offset?: number }) => Promise<IPCResponse<unknown[]>>
+    markRead: (id: string) => Promise<IPCResponse<void>>
+    dismiss: (id: string) => Promise<IPCResponse<void>>
+    navigate: (id: string) => Promise<IPCResponse<void>>
+    getPreferences: () => Promise<IPCResponse<unknown>>
+    updatePreferences: (updates: Record<string, unknown>) => Promise<IPCResponse<void>>
+    onCreated: (callback: (data: unknown) => void) => () => void
+    onUpdated: (callback: (data: unknown) => void) => () => void
+  }
+
+  // Focus mode operations (Phase2-TASK006)
+  focusMode: {
+    toggle: (conversationId: string, focused: boolean) => Promise<IPCResponse<void>>
+    setUntil: (conversationId: string, until: string) => Promise<IPCResponse<void>>
+    getState: (conversationId: string) => Promise<IPCResponse<{ focused: boolean; focusUntil?: string; queueLength: number }>>
+    getQueuePreview: () => Promise<IPCResponse<unknown[]>>
+    onModeChanged: (callback: (data: unknown) => void) => () => void
+    onSummaryReady: (callback: (data: unknown) => void) => () => void
+  }
+
+  // Presence operations (Phase2-TASK007)
+  presence: {
+    getPeers: () => Promise<IPCResponse<FilteredPeerState[]>>
+    broadcastView: (filePath: string | undefined) => Promise<IPCResponse<void>>
+    toggleBroadcast: (enabled: boolean) => Promise<IPCResponse<void>>
+    onPeersUpdated: (callback: (peers: FilteredPeerState[]) => void) => () => void
+  }
+
+  // Proactive engine operations (Phase2-TASK008)
+  proactive: {
+    pushSnapshot: (snapshot: Record<string, unknown>) => void
+    getConfig: () => Promise<IPCResponse<unknown>>
+    updateConfig: (updates: Record<string, unknown>) => Promise<IPCResponse<void>>
+    dismissSuggestion: (id: string, dwellMs: number) => Promise<IPCResponse<void>>
+    acceptSuggestion: (id: string, dwellMs: number) => Promise<IPCResponse<void>>
+    onSuggestionShown: (callback: (suggestion: Record<string, unknown>) => void) => () => void
+  }
 }
 
 // Whitelist of allowed channels for security
@@ -659,6 +706,8 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.SYNC_MEMORY_IS_LOCKED,
   IPC_CHANNELS.SYNC_TASK_LIST_CROSS_DEVICE,
   IPC_CHANNELS.SYNC_MEMORY_GET_CONFIG,
+  IPC_CHANNELS.SYNC_PROPOSE_AI_MERGE,
+  IPC_CHANNELS.SYNC_ADOPT_AI_MERGE,
   // Git conflict operations
   IPC_CHANNELS.GIT_GET_CONFLICTS,
   IPC_CHANNELS.GIT_RESOLVE,
@@ -889,6 +938,34 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.WIKI_LINKS_GET_OUTLINKS,
   IPC_CHANNELS.WIKI_LINKS_GET_GRAPH_DATA,
   IPC_CHANNELS.WIKI_LINKS_REBUILD_INDEX,
+  // Notification operations (TASK006-Phase2)
+  IPC_CHANNELS.NOTIFICATION_LIST,
+  IPC_CHANNELS.NOTIFICATION_MARK_READ,
+  IPC_CHANNELS.NOTIFICATION_DISMISS,
+  IPC_CHANNELS.NOTIFICATION_NAVIGATE,
+  IPC_CHANNELS.NOTIFICATION_GET_PREFS,
+  IPC_CHANNELS.NOTIFICATION_UPDATE_PREFS,
+  IPC_CHANNELS.NOTIFICATION_CREATED,
+  IPC_CHANNELS.NOTIFICATION_UPDATED,
+  // Focus mode operations (TASK006-Phase2)
+  IPC_CHANNELS.FOCUS_TOGGLE,
+  IPC_CHANNELS.FOCUS_SET_UNTIL,
+  IPC_CHANNELS.FOCUS_GET_STATE,
+  IPC_CHANNELS.FOCUS_GET_QUEUE_PREVIEW,
+  IPC_CHANNELS.FOCUS_MODE_CHANGED,
+  IPC_CHANNELS.FOCUS_SUMMARY_READY,
+  // Presence operations (TASK007-Phase2)
+  IPC_CHANNELS.PRESENCE_GET_PEERS,
+  IPC_CHANNELS.PRESENCE_BROADCAST_VIEW,
+  IPC_CHANNELS.PRESENCE_TOGGLE_BROADCAST,
+  IPC_CHANNELS.PRESENCE_PEERS_UPDATED,
+  // Proactive engine operations (TASK008-Phase2)
+  IPC_CHANNELS.PROACTIVE_EDITOR_SNAPSHOT,
+  IPC_CHANNELS.PROACTIVE_GET_CONFIG,
+  IPC_CHANNELS.PROACTIVE_UPDATE_CONFIG,
+  IPC_CHANNELS.PROACTIVE_DISMISS_SUGGESTION,
+  IPC_CHANNELS.PROACTIVE_ACCEPT_SUGGESTION,
+  IPC_CHANNELS.PROACTIVE_SUGGESTION_SHOWN,
 ]
 
 /**
@@ -1184,6 +1261,14 @@ const api: ElectronAPI = {
 
     memoryGetConfig: async () => {
       return await safeInvoke<{ syncMemory: boolean; locked: boolean }>(IPC_CHANNELS.SYNC_MEMORY_GET_CONFIG)
+    },
+
+    proposeAIMerge: async (conflict: ConflictInfo) => {
+      return await safeInvoke<MergeResult>(IPC_CHANNELS.SYNC_PROPOSE_AI_MERGE, conflict)
+    },
+
+    adoptAIMerge: async (params: AdoptMergeParams) => {
+      return await safeInvoke<{ success: boolean }>(IPC_CHANNELS.SYNC_ADOPT_AI_MERGE, params)
     },
   },
 
@@ -2164,6 +2249,102 @@ const api: ElectronAPI = {
     },
     rebuildIndex: async () => {
       return await safeInvoke<{ success: boolean }>(IPC_CHANNELS.WIKI_LINKS_REBUILD_INDEX)
+    },
+  },
+
+  notifications: {
+    list: async (options?: { limit?: number; offset?: number }) => {
+      return await safeInvoke<unknown[]>(IPC_CHANNELS.NOTIFICATION_LIST, options)
+    },
+    markRead: async (id: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.NOTIFICATION_MARK_READ, { id })
+    },
+    dismiss: async (id: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.NOTIFICATION_DISMISS, { id })
+    },
+    navigate: async (id: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.NOTIFICATION_NAVIGATE, { id })
+    },
+    getPreferences: async () => {
+      return await safeInvoke<unknown>(IPC_CHANNELS.NOTIFICATION_GET_PREFS)
+    },
+    updatePreferences: async (updates: Record<string, unknown>) => {
+      return await safeInvoke<void>(IPC_CHANNELS.NOTIFICATION_UPDATE_PREFS, updates)
+    },
+    onCreated: (callback: (data: unknown) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_CREATED, handler)
+      return () => { ipcRenderer.off(IPC_CHANNELS.NOTIFICATION_CREATED, handler) }
+    },
+    onUpdated: (callback: (data: unknown) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_UPDATED, handler)
+      return () => { ipcRenderer.off(IPC_CHANNELS.NOTIFICATION_UPDATED, handler) }
+    },
+  },
+
+  focusMode: {
+    toggle: async (conversationId: string, focused: boolean) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FOCUS_TOGGLE, { conversationId, focused })
+    },
+    setUntil: async (conversationId: string, until: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FOCUS_SET_UNTIL, { conversationId, until })
+    },
+    getState: async (conversationId: string) => {
+      return await safeInvoke<{ focused: boolean; focusUntil?: string; queueLength: number }>(IPC_CHANNELS.FOCUS_GET_STATE, { conversationId })
+    },
+    getQueuePreview: async () => {
+      return await safeInvoke<unknown[]>(IPC_CHANNELS.FOCUS_GET_QUEUE_PREVIEW)
+    },
+    onModeChanged: (callback: (data: unknown) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.FOCUS_MODE_CHANGED, handler)
+      return () => { ipcRenderer.off(IPC_CHANNELS.FOCUS_MODE_CHANGED, handler) }
+    },
+    onSummaryReady: (callback: (data: unknown) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.FOCUS_SUMMARY_READY, handler)
+      return () => { ipcRenderer.off(IPC_CHANNELS.FOCUS_SUMMARY_READY, handler) }
+    },
+  },
+
+  presence: {
+    getPeers: async () => {
+      return await safeInvoke<FilteredPeerState[]>(IPC_CHANNELS.PRESENCE_GET_PEERS)
+    },
+    broadcastView: async (filePath: string | undefined) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PRESENCE_BROADCAST_VIEW, { filePath })
+    },
+    toggleBroadcast: async (enabled: boolean) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PRESENCE_TOGGLE_BROADCAST, { enabled })
+    },
+    onPeersUpdated: (callback: (peers: FilteredPeerState[]) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, peers: FilteredPeerState[]) => callback(peers)
+      ipcRenderer.on(IPC_CHANNELS.PRESENCE_PEERS_UPDATED, handler)
+      return () => { ipcRenderer.off(IPC_CHANNELS.PRESENCE_PEERS_UPDATED, handler) }
+    },
+  },
+
+  proactive: {
+    pushSnapshot: (snapshot: Record<string, unknown>) => {
+      ipcRenderer.send(IPC_CHANNELS.PROACTIVE_EDITOR_SNAPSHOT, { snapshot })
+    },
+    getConfig: async () => {
+      return await safeInvoke<unknown>(IPC_CHANNELS.PROACTIVE_GET_CONFIG)
+    },
+    updateConfig: async (updates: Record<string, unknown>) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PROACTIVE_UPDATE_CONFIG, { updates })
+    },
+    dismissSuggestion: async (id: string, dwellMs: number) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PROACTIVE_DISMISS_SUGGESTION, { suggestionId: id, dwellMs })
+    },
+    acceptSuggestion: async (id: string, dwellMs: number) => {
+      return await safeInvoke<void>(IPC_CHANNELS.PROACTIVE_ACCEPT_SUGGESTION, { suggestionId: id, dwellMs })
+    },
+    onSuggestionShown: (callback: (suggestion: Record<string, unknown>) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, suggestion: Record<string, unknown>) => callback(suggestion)
+      ipcRenderer.on(IPC_CHANNELS.PROACTIVE_SUGGESTION_SHOWN, handler)
+      return () => { ipcRenderer.off(IPC_CHANNELS.PROACTIVE_SUGGESTION_SHOWN, handler) }
     },
   },
 }

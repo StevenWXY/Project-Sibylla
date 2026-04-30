@@ -126,7 +126,11 @@ export type SibyllaEventType =
   | 'plan.created'             // ← 现有 'plan:created'
   | 'plan.execution-started'   // ← 现有 'plan:execution-started'
   // 后续 Sprint 预留
-  | 'collab.user-joined' | 'collab.conflict-detected'
+  | 'git.conflict-detected'     // Sprint 5:SyncManager 冲突检测
+  | 'presence.user-online'      // Sprint 5:Presence 上线
+  | 'presence.user-offline'     // Sprint 5:Presence 离线
+  | 'presence.user-editing'     // Sprint 5:Presence 编辑中
+  | 'presence.user-viewing'     // Sprint 5:Presence 查看中
   | 'task.created' | 'task.completed'
   | 'notification.created'
 

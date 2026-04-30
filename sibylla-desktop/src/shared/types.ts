@@ -24,6 +24,18 @@ export type {
 } from './types/member.types'
 export { ROLE_PERMISSIONS } from './types/member.types'
 
+export type PresenceStatus = 'online' | 'idle' | 'offline'
+
+export interface FilteredPeerState {
+  userId: string
+  displayName: string
+  avatar: string
+  status: PresenceStatus
+  viewingFile?: string
+  isEditing: boolean
+  lastActiveAt: number
+}
+
 // Re-export git types for convenience
 export type {
   CommitInfo,
@@ -209,6 +221,10 @@ export const IPC_CHANNELS = {
   SYNC_TASK_LIST_CROSS_DEVICE: 'sync:task:listCrossDevice',
   /** Renderer → Main: Get memory sync config state */
   SYNC_MEMORY_GET_CONFIG: 'sync:memory:getConfig',
+  /** Renderer → Main: Propose an AI merge for a conflict */
+  SYNC_PROPOSE_AI_MERGE: 'sync:proposeAIMerge',
+  /** Renderer → Main: Adopt (apply) an AI merge proposal */
+  SYNC_ADOPT_AI_MERGE: 'sync:adoptAIMerge',
 
   // Auth operations
   /** Login with email/password */
@@ -510,6 +526,38 @@ export const IPC_CHANNELS = {
   EVENT_SUBSCRIBE: 'event:subscribe',
   EVENT_UNSUBSCRIBE: 'event:unsubscribe',
   EVENT_PUSH: 'event:push',
+
+  // Notification operations (TASK006-Phase2)
+  NOTIFICATION_LIST: 'notification:list',
+  NOTIFICATION_MARK_READ: 'notification:markRead',
+  NOTIFICATION_DISMISS: 'notification:dismiss',
+  NOTIFICATION_NAVIGATE: 'notification:navigate',
+  NOTIFICATION_GET_PREFS: 'notification:getPreferences',
+  NOTIFICATION_UPDATE_PREFS: 'notification:updatePreferences',
+  NOTIFICATION_CREATED: 'notification:created',
+  NOTIFICATION_UPDATED: 'notification:updated',
+
+  // Focus mode operations (TASK006-Phase2)
+  FOCUS_TOGGLE: 'focus:toggle',
+  FOCUS_SET_UNTIL: 'focus:setUntil',
+  FOCUS_GET_STATE: 'focus:getState',
+  FOCUS_GET_QUEUE_PREVIEW: 'focus:getQueuePreview',
+  FOCUS_MODE_CHANGED: 'focus:modeChanged',
+  FOCUS_SUMMARY_READY: 'focus:summaryReady',
+
+  // Presence operations (TASK007-Phase2)
+  PRESENCE_GET_PEERS: 'presence:getPeers',
+  PRESENCE_BROADCAST_VIEW: 'presence:broadcastView',
+  PRESENCE_TOGGLE_BROADCAST: 'presence:toggleBroadcast',
+  PRESENCE_PEERS_UPDATED: 'presence:peersUpdated',
+
+  // Proactive engine operations (TASK008-Phase2)
+  PROACTIVE_EDITOR_SNAPSHOT: 'proactive:editorSnapshot',
+  PROACTIVE_GET_CONFIG: 'proactive:getConfig',
+  PROACTIVE_UPDATE_CONFIG: 'proactive:updateConfig',
+  PROACTIVE_DISMISS_SUGGESTION: 'proactive:dismissSuggestion',
+  PROACTIVE_ACCEPT_SUGGESTION: 'proactive:acceptSuggestion',
+  PROACTIVE_SUGGESTION_SHOWN: 'proactive:suggestionShown',
 } as const
 
 /**
@@ -692,6 +740,8 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.SYNC_MEMORY_IS_LOCKED]: { params: []; return: { locked: boolean } }
   [IPC_CHANNELS.SYNC_TASK_LIST_CROSS_DEVICE]: { params: []; return: CrossDeviceTaskShared[] }
   [IPC_CHANNELS.SYNC_MEMORY_GET_CONFIG]: { params: []; return: { syncMemory: boolean; locked: boolean } }
+  [IPC_CHANNELS.SYNC_PROPOSE_AI_MERGE]: { params: [conflict: ConflictInfo]; return: MergeResult }
+  [IPC_CHANNELS.SYNC_ADOPT_AI_MERGE]: { params: [params: AdoptMergeParams]; return: { success: boolean } }
 
   // Auth operations
   [IPC_CHANNELS.AUTH_LOGIN]: { params: [input: AuthLoginInput]; return: AuthSession }
@@ -877,6 +927,33 @@ export interface IPCChannelMap {
   // Event bus operations (TASK001-Phase2)
   [IPC_CHANNELS.EVENT_SUBSCRIBE]: { params: [types: string[]]; return: { success: boolean } }
   [IPC_CHANNELS.EVENT_UNSUBSCRIBE]: { params: [types?: string[]]; return: { success: boolean } }
+
+  // Notification operations (TASK006-Phase2)
+  [IPC_CHANNELS.NOTIFICATION_LIST]: { params: [options?: { limit?: number; offset?: number }]; return: unknown[] }
+  [IPC_CHANNELS.NOTIFICATION_MARK_READ]: { params: [{ id: string }]; return: void }
+  [IPC_CHANNELS.NOTIFICATION_DISMISS]: { params: [{ id: string }]; return: void }
+  [IPC_CHANNELS.NOTIFICATION_NAVIGATE]: { params: [{ id: string }]; return: void }
+  [IPC_CHANNELS.NOTIFICATION_GET_PREFS]: { params: []; return: unknown }
+  [IPC_CHANNELS.NOTIFICATION_UPDATE_PREFS]: { params: [updates: Record<string, unknown>]; return: void }
+
+  // Focus mode operations (TASK006-Phase2)
+  [IPC_CHANNELS.FOCUS_TOGGLE]: { params: [{ conversationId: string; focused: boolean }]; return: void }
+  [IPC_CHANNELS.FOCUS_SET_UNTIL]: { params: [{ conversationId: string; until: string }]; return: void }
+  [IPC_CHANNELS.FOCUS_GET_STATE]: { params: [{ conversationId: string }]; return: { focused: boolean; focusUntil?: string; queueLength: number } }
+  [IPC_CHANNELS.FOCUS_GET_QUEUE_PREVIEW]: { params: []; return: unknown[] }
+
+  // Presence operations (TASK007-Phase2)
+  [IPC_CHANNELS.PRESENCE_GET_PEERS]: { params: []; return: unknown[] }
+  [IPC_CHANNELS.PRESENCE_BROADCAST_VIEW]: { params: [{ filePath: string | undefined }]; return: void }
+  [IPC_CHANNELS.PRESENCE_TOGGLE_BROADCAST]: { params: [{ enabled: boolean }]; return: void }
+
+  // Proactive engine operations (TASK008-Phase2)
+  [IPC_CHANNELS.PROACTIVE_GET_CONFIG]: { params: []; return: unknown }
+  [IPC_CHANNELS.PROACTIVE_UPDATE_CONFIG]: { params: [{ updates: Record<string, unknown> }]; return: void }
+  [IPC_CHANNELS.PROACTIVE_DISMISS_SUGGESTION]: { params: [{ suggestionId: string; dwellMs: number }]; return: void }
+  [IPC_CHANNELS.PROACTIVE_ACCEPT_SUGGESTION]: { params: [{ suggestionId: string; dwellMs: number }]; return: void }
+  // PROACTIVE_EDITOR_SNAPSHOT: Renderer → Main push, not in IPCChannelMap
+  // PROACTIVE_SUGGESTION_SHOWN: Main → Renderer push, not in IPCChannelMap
 }
 
 /**
@@ -1593,6 +1670,41 @@ export interface ConflictInfo {
   readonly baseContent: string
   /** Name of the remote author (if available) */
   readonly remoteAuthor?: string
+  /** ULID generated by SyncManager at conflict detection time */
+  readonly conflictId?: string
+  /** Trace ID for audit correlation */
+  readonly traceId?: string
+}
+
+/** AI merge result status */
+export type MergeResultStatus = 'success' | 'sensitive' | 'failed' | 'timeout'
+
+/** Line-range attribution for merged content */
+export interface Attribution {
+  /** Line ranges [startLine, endLine] from local (ours) version */
+  readonly fromMine: readonly [number, number][]
+  /** Line ranges [startLine, endLine] from remote (theirs) version */
+  readonly fromTheirs: readonly [number, number][]
+  /** Line ranges [startLine, endLine] generated or integrated by AI */
+  readonly byAI: readonly [number, number][]
+}
+
+/** Result of an AI merge proposal */
+export interface MergeResult {
+  readonly status: MergeResultStatus
+  readonly mergedContent?: string
+  readonly attribution?: Attribution
+  readonly rationale?: string
+  readonly conflictId?: string
+}
+
+/** Parameters for adopting an AI merge */
+export interface AdoptMergeParams {
+  readonly conflictId: string
+  readonly filePath: string
+  readonly mergedContent: string
+  readonly attribution: Attribution
+  readonly rationale: string
 }
 
 /** Conflict resolution strategy */

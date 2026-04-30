@@ -44,11 +44,18 @@ export type SibyllaEventType =
   | 'datasource.provider-registered'
   | 'conversation.export'
   | 'model.switched'
-  | 'collab.user-joined'
   | 'collab.conflict-detected'
+  | 'git.conflict-detected'
   | 'task.created'
   | 'task.completed'
   | 'notification.created'
+  | 'notification.clicked'
+  | 'notification.dismissed'
+  | 'aiMode.focused-changed'
+  | 'presence.user-online'
+  | 'presence.user-offline'
+  | 'presence.user-editing'
+  | 'presence.user-viewing'
   | 'git.pull-completed'
   | 'memory.sync-locked'
   | 'task.cross-device-resumeable'
@@ -108,11 +115,18 @@ export interface EventPayloadMap {
   'datasource.provider-registered': { id: string; name: string }
   'conversation.export': { format: string; conversationId: string }
   'model.switched': { conversationId: string; oldModel: string; newModel: string }
-  'collab.user-joined': { userId: string }
   'collab.conflict-detected': { path: string }
+  'git.conflict-detected': { path: string; conflictType?: string }
   'task.created': { taskId: string }
   'task.completed': { taskId: string }
   'notification.created': { notificationId: string }
+  'notification.clicked': { notificationId: string }
+  'notification.dismissed': { notificationId: string }
+  'aiMode.focused-changed': { conversationId: string; focused: boolean; focusUntil?: string }
+  'presence.user-online': { userId: string; userName?: string }
+  'presence.user-offline': { userId: string }
+  'presence.user-editing': { userId: string; userName?: string; filePath: string }
+  'presence.user-viewing': { userId: string; userName?: string; filePath: string }
   'git.pull-completed': { commitCount: number }
   'memory.sync-locked': { reason: string }
   'task.cross-device-resumeable': { taskId: string; lastSessionId?: string }

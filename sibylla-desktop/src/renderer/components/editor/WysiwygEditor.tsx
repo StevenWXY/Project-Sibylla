@@ -24,6 +24,9 @@ import { CodeBlockWithHighlight } from './extensions/code-block-lowlight'
 import { WikiLink } from './extensions/wiki-link'
 import { WikiLinkSuggest } from './extensions/wiki-link-suggest'
 import { WikiLinkPreview } from './extensions/wiki-link-preview'
+import { PeerPresenceBadge } from '../presence/PeerPresenceBadge'
+import { useEditingPresence } from './useEditingPresence'
+import { useEditorSnapshotCollector } from '../proactive/useEditorSnapshotCollector'
 import { cn } from '../../utils/cn'
 import type { SaveFailedPayload } from '../../../shared/types'
 import { SaveFailureBanner } from './SaveFailureBanner'
@@ -197,6 +200,19 @@ export function WysiwygEditor({
 
   flushRef.current = flush
 
+  useEditingPresence(editor)
+
+  useEditorSnapshotCollector(editor)
+
+  useEffect(() => {
+    if (filePath) {
+      window.electronAPI.presence.broadcastView(filePath).catch(() => {})
+    }
+    return () => {
+      window.electronAPI.presence.broadcastView(undefined).catch(() => {})
+    }
+  }, [filePath])
+
   useEffect(() => {
     const cleanup = window.electronAPI.file.onSaveFailed((data) => {
       const relevant = data.files.filter(f => f.path === filePath)
@@ -296,7 +312,7 @@ export function WysiwygEditor({
   }
 
   return (
-    <div className={cn('editor-container', className)}>
+    <div className={cn('editor-container relative', className)}>
       {!readOnly && <EditorToolbar editor={editor} />}
       {saveFailures.length > 0 && (
         <SaveFailureBanner
@@ -316,6 +332,7 @@ export function WysiwygEditor({
           position={slashPosition}
         />
       )}
+      <PeerPresenceBadge filePath={filePath} />
     </div>
   )
 }
