@@ -12,8 +12,9 @@ describe('V2 Budget Weights', () => {
     expect(V2_BUDGET_WEIGHTS['ai-mode']).toBe(0.10)
     expect(V2_BUDGET_WEIGHTS.memory).toBe(0.15)
     expect(V2_BUDGET_WEIGHTS.skill).toBe(0.15)
-    expect(V2_BUDGET_WEIGHTS['cross-source']).toBe(0.20)
+    expect(V2_BUDGET_WEIGHTS['cross-source']).toBe(0.15)
     expect(V2_BUDGET_WEIGHTS.manual).toBe(0.10)
+    expect(V2_BUDGET_WEIGHTS.collab).toBe(0.05)
   })
 
   it('should have default token budget', () => {
