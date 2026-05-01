@@ -3,7 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import yaml from 'yaml'
 
-const RESOURCES_DIR = path.resolve(__dirname, '../../../../../../sibylla-desktop/resources')
+const RESOURCES_DIR = path.resolve(__dirname, '../../../../resources')
 
 describe('Workflow YAML 结构', () => {
   describe('daily-personal-report.yaml', () => {

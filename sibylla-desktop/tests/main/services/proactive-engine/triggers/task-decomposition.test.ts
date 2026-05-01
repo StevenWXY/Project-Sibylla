@@ -57,7 +57,7 @@ describe('taskDecompositionTrigger', () => {
     expect(draft).not.toBeNull()
     expect(draft!.triggerId).toBe('task-decomposition')
     expect(draft!.priority).toBe('normal')
-    expect(draft!.previewTitle).toBe('想要拆解任务吗？')
+    expect(draft!.previewTitle).toBe('检测到可能的待办任务')
   })
 
   it('matches various goal keywords', () => {

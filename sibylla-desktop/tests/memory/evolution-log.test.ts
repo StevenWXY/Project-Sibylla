@@ -94,7 +94,7 @@ describe('EvolutionLog', () => {
         timestamp: '2026-04-21T10:00:00.000Z',
       }))
 
-      const rotatedPath = path.join(tmpDir, '.sibylla', 'memory', 'CHANGELOG-2026-04.md')
+      const rotatedPath = path.join(tmpDir, '.sibylla', 'memory', 'CHANGELOG-2026-05.md')
       const rotatedExists = await fs.access(rotatedPath).then(() => true, () => false)
       expect(rotatedExists).toBe(true)
 

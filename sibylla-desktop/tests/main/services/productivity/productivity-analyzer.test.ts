@@ -22,6 +22,7 @@ function createMockAnalyzer(extra: Record<string, unknown> = {}) {
   const members: MemberInfo[] = [
     { userId: 'user1', role: 'admin', displayName: 'Admin' },
     { userId: 'user2', role: 'member', displayName: 'Member' },
+    { userId: 'user3', role: 'member', displayName: 'Member3' },
   ]
 
   const getMember = vi.fn().mockImplementation((id: string) => members.find((m) => m.userId === id))
@@ -153,7 +154,7 @@ describe('ProductivityAnalyzer', () => {
 
       await mocks.analyzer.analyze(opts)
 
-      globalThis.Date = originalDate
+      globalThis.Date = globalDate
 
       expect(mocks.parseTasksMd).toHaveBeenCalledTimes(2)
     })
@@ -193,7 +194,7 @@ describe('ProductivityAnalyzer', () => {
       const report = await mocks.analyzer.analyze({
         period: 'week',
         memberId: 'user2',
-        viewerId: 'user1',
+        viewerId: 'user3',
       })
 
       expect(report.isAnonymized).toBe(true)

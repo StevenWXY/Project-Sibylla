@@ -67,8 +67,8 @@ describe('Report IPC Handler', () => {
     const result = await handler!()
 
     expect(result).toHaveLength(3)
-    expect(result[0].type).toBe('daily')
-    expect(result[2].type).toBe('weekly')
+    expect(result[0].type).toBe('weekly')
+    expect(result[2].type).toBe('daily')
   })
 
   it('report:get 读取报告内容', async () => {

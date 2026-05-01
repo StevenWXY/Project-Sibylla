@@ -90,10 +90,10 @@ describe('PersonalSpaceGuard', () => {
     expect(verdict.allow).toBe(true)
   })
 
-  it('should allow admin writing to any personal space', async () => {
+  it('should block admin writing to another member personal space', async () => {
     const op: FileOperation = { type: 'write', path: 'personal/alice/notes.md', content: 'updated' }
     const verdict = await guard.check(op, ctx('admin-user', 'admin'))
-    expect(verdict.allow).toBe(true)
+    expect(verdict.allow).toBe(false)
   })
 
   it('should allow access to non-personal paths', async () => {

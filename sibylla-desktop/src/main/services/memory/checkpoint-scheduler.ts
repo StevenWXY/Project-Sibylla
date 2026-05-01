@@ -174,7 +174,7 @@ export class CheckpointScheduler {
         const extractionContext: ExtractionInput = { logs, existingMemory, workspaceContext }
         for (const processor of this.postProcessors) {
           try {
-            const extraCandidates = processor.process(report, extractionContext)
+            const extraCandidates = await processor.process(report, extractionContext)
             for (const candidate of extraCandidates) {
               const entry: import('./types').MemoryEntry = {
                 id: `mem-pp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

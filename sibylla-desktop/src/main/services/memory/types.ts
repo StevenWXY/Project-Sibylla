@@ -94,7 +94,7 @@ export interface ExtractionInput {
 }
 
 export interface ExtractionPostProcessor {
-  process(report: ExtractionReport, context: ExtractionInput): ExtractionCandidate[]
+  process(report: ExtractionReport, context: ExtractionInput): ExtractionCandidate[] | Promise<ExtractionCandidate[]>
 }
 
 export interface ExtractionCandidate {

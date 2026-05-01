@@ -79,10 +79,10 @@ PostgreSQL 提供更好的 JSON 支持和扩展性，适合长期发展。
 性能表现优秀，满足预期。
 `
 
-  it('projects a new complete decision with correct confidence', () => {
+  it('projects a new complete decision with correct confidence', async () => {
     writeDecisionFile(memoryDir, '2026-05-01-database.md', fullDecisionContent)
 
-    const candidates = processor.process(makeReport(), makeContext())
+    const candidates = await processor.process(makeReport(), makeContext())
 
     expect(candidates).toHaveLength(1)
     expect(candidates[0]?.section).toBe('technical_decision')
@@ -91,7 +91,7 @@ PostgreSQL 提供更好的 JSON 支持和扩展性，适合长期发展。
     expect(candidates[0]?.content).toContain('选择主数据库')
   })
 
-  it('calculates lower confidence when sections are missing', () => {
+  it('calculates lower confidence when sections are missing', async () => {
     const partialContent = `---
 id: dec_2026_05_01_partial
 title: 部分决策
@@ -112,13 +112,13 @@ related_files: []
 `
     writeDecisionFile(memoryDir, '2026-05-01-partial.md', partialContent)
 
-    const candidates = processor.process(makeReport(), makeContext())
+    const candidates = await processor.process(makeReport(), makeContext())
 
     expect(candidates).toHaveLength(1)
     expect(candidates[0]?.confidence).toBeCloseTo(0.5, 1)
   })
 
-  it('calculates very low confidence when only title exists', () => {
+  it('calculates very low confidence when only title exists', async () => {
     const minimalContent = `---
 id: dec_2026_05_01_minimal
 title: 最小决策
@@ -133,43 +133,43 @@ related_files: []
 `
     writeDecisionFile(memoryDir, '2026-05-01-minimal.md', minimalContent)
 
-    const candidates = processor.process(makeReport(), makeContext())
+    const candidates = await processor.process(makeReport(), makeContext())
 
     expect(candidates).toHaveLength(1)
     expect(candidates[0]?.confidence).toBe(0.1)
   })
 
-  it('skips files with broken frontmatter', () => {
+  it('skips files with broken frontmatter', async () => {
     writeDecisionFile(
       memoryDir,
       '2026-05-01-broken.md',
       'This file has no frontmatter at all.',
     )
 
-    const candidates = processor.process(makeReport(), makeContext())
+    const candidates = await processor.process(makeReport(), makeContext())
 
     expect(candidates).toHaveLength(0)
   })
 
-  it('returns empty for empty directories', () => {
-    const candidates = processor.process(makeReport(), makeContext())
+  it('returns empty for empty directories', async () => {
+    const candidates = await processor.process(makeReport(), makeContext())
     expect(candidates).toHaveLength(0)
   })
 
-  it('skips already processed files on second call', () => {
+  it('skips already processed files on second call', async () => {
     writeDecisionFile(memoryDir, '2026-05-01-db.md', fullDecisionContent)
 
-    const first = processor.process(makeReport(), makeContext())
+    const first = await processor.process(makeReport(), makeContext())
     expect(first).toHaveLength(1)
 
-    const second = processor.process(makeReport(), makeContext())
+    const second = await processor.process(makeReport(), makeContext())
     expect(second).toHaveLength(0)
   })
 
-  it('re-processes updated files', () => {
+  it('re-processes updated files', async () => {
     writeDecisionFile(memoryDir, '2026-05-01-db.md', fullDecisionContent)
 
-    const first = processor.process(makeReport(), makeContext())
+    const first = await processor.process(makeReport(), makeContext())
     expect(first).toHaveLength(1)
 
     fs.writeFileSync(
@@ -178,23 +178,23 @@ related_files: []
       'utf-8',
     )
 
-    const updated = processor.process(makeReport(), makeContext())
+    const updated = await processor.process(makeReport(), makeContext())
     expect(updated).toHaveLength(1)
   })
 
-  it('scans both memory and docs directories', () => {
+  it('scans both memory and docs directories', async () => {
     writeDecisionFile(memoryDir, '2026-05-01-mem.md', fullDecisionContent)
     writeDecisionFile(docsDir, '2026-05-01-docs.md', fullDecisionContent)
 
-    const candidates = processor.process(makeReport(), makeContext())
+    const candidates = await processor.process(makeReport(), makeContext())
 
     expect(candidates).toHaveLength(2)
   })
 
-  it('includes back-link in content', () => {
+  it('includes back-link in content', async () => {
     writeDecisionFile(memoryDir, '2026-05-01-db.md', fullDecisionContent)
 
-    const candidates = processor.process(makeReport(), makeContext())
+    const candidates = await processor.process(makeReport(), makeContext())
 
     expect(candidates[0]?.content).toMatch(/source: .+\.md/)
   })

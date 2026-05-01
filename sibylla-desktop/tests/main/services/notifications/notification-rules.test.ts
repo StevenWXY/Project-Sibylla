@@ -9,8 +9,8 @@ describe('notification-rules', () => {
 
   const rules = createBuiltinRules(deps)
 
-  it('should create 8 rules', () => {
-    expect(rules).toHaveLength(8)
+  it('should create 10 rules', () => {
+    expect(rules).toHaveLength(10)
   })
 
   it('all rules should have required fields', () => {

@@ -27,7 +27,7 @@ export class DecisionProjectionProcessor implements ExtractionPostProcessor {
     private readonly workspaceRoot: string,
   ) {}
 
-  process(_report: ExtractionReport, _context: ExtractionInput): ExtractionCandidate[] {
+  async process(_report: ExtractionReport, _context: ExtractionInput): Promise<ExtractionCandidate[]> {
     const candidates: ExtractionCandidate[] = []
 
     const dirs = [
