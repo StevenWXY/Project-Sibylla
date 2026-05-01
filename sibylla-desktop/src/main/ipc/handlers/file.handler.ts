@@ -19,7 +19,9 @@ import { AutoSaveManager } from '../../services/auto-save-manager'
 import { GuardrailEngine } from '../../services/harness/guardrails/engine'
 import { isBlockedVerdict, isConditionalVerdict } from '../../services/harness/guardrails/types'
 import type { FileOperation, OperationContext, OperationSource } from '../../services/harness/guardrails/types'
+import type { AppEventBus } from '../../services/event-bus'
 import { logger } from '../../utils/logger'
+import { extractPersonalUser } from '../../utils/personal-path'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
   AuthUser,
@@ -55,6 +57,10 @@ interface AuthUserProvider {
   getCachedUser(): AuthUser | null
 }
 
+interface RoleResolverProvider {
+  getMemberRole(userId: string): MemberRole | undefined
+}
+
 /**
  * FileHandler class
  * 
@@ -69,6 +75,8 @@ export class FileHandler extends IpcHandler {
   private autoSaveManager: AutoSaveManager | null = null
   private guardrailEngine: GuardrailEngine | null = null
   private authUserProvider: AuthUserProvider | null = null
+  private eventBus: AppEventBus | null = null
+  private roleResolver: RoleResolverProvider | null = null
   
   /**
    * Set FileManager instance
@@ -135,6 +143,16 @@ export class FileHandler extends IpcHandler {
   setAuthUserProvider(provider: AuthUserProvider): void {
     this.authUserProvider = provider
     logger.info('[FileHandler] AuthUserProvider instance set')
+  }
+
+  setEventBus(eventBus: AppEventBus): void {
+    this.eventBus = eventBus
+    logger.info('[FileHandler] AppEventBus instance set')
+  }
+
+  setRoleResolver(resolver: RoleResolverProvider): void {
+    this.roleResolver = resolver
+    logger.info('[FileHandler] RoleResolver instance set')
   }
   
   /**
@@ -230,7 +248,9 @@ export class FileHandler extends IpcHandler {
     }
     
     const result = await this.fileManager.readFile(path, managerOptions)
-    
+
+    this.emitAdminAccessEventIfApplicable(path)
+
     return result
   }
   
@@ -530,14 +550,53 @@ export class FileHandler extends IpcHandler {
    *
    * @param source - Operation source ('user' | 'ai' | 'sync')
    */
+  private emitAdminAccessEventIfApplicable(filePath: string): void {
+    try {
+      const targetUser = extractPersonalUser(filePath)
+      if (!targetUser) return
+
+      const cachedUser = this.authUserProvider?.getCachedUser()
+      const currentUser = cachedUser?.id ?? 'anonymous'
+      if (targetUser === currentUser) return
+
+      const resolvedRole = currentUser !== 'anonymous' && this.roleResolver
+        ? this.roleResolver.getMemberRole(currentUser)
+        : undefined
+      if (resolvedRole !== 'admin') return
+
+      if (!this.eventBus) return
+
+      this.eventBus.emitEvent({
+        type: 'admin.access-personal-space',
+        source: 'file-handler',
+        payload: {
+          adminId: currentUser,
+          targetUser,
+          timestamp: Date.now(),
+        },
+        persist: true,
+      })
+
+      this.broadcastToAllWindows(
+        IPC_CHANNELS.ADMIN_ACCESS_PERSONAL_SPACE,
+        { adminId: currentUser, targetUser, timestamp: Date.now() },
+      )
+    } catch {
+      // Non-blocking: event emission failure must not affect file read
+    }
+  }
+
   private buildOperationContext(source: OperationSource): OperationContext {
     const cachedUser = this.authUserProvider?.getCachedUser()
+    const userId = cachedUser?.id ?? 'anonymous'
+    const resolvedRole = userId !== 'anonymous' && this.roleResolver
+      ? this.roleResolver.getMemberRole(userId) ?? ('viewer' as MemberRole)
+      : ('viewer' as MemberRole)
 
     return {
       source,
-      userId: cachedUser?.id ?? 'anonymous',
-      // TODO(W2): Resolve actual MemberRole from WorkspaceManager once available
-      userRole: 'viewer' as MemberRole,
+      userId,
+      userRole: resolvedRole,
       workspaceRoot: this.fileManager?.getWorkspaceRoot() ?? '',
     }
   }

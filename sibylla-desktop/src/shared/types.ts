@@ -558,6 +558,38 @@ export const IPC_CHANNELS = {
   PROACTIVE_DISMISS_SUGGESTION: 'proactive:dismissSuggestion',
   PROACTIVE_ACCEPT_SUGGESTION: 'proactive:acceptSuggestion',
   PROACTIVE_SUGGESTION_SHOWN: 'proactive:suggestionShown',
+
+  // Kanban operations (Phase2-TASK010)
+  KANBAN_PARSE: 'kanban:parse',
+  KANBAN_CREATE: 'kanban:create',
+  KANBAN_UPDATE_STATUS: 'kanban:updateStatus',
+  KANBAN_DISPATCH_AI: 'kanban:dispatchAI',
+  KANBAN_PROMOTE: 'kanban:promote',
+  KANBAN_AI_SIDEBAR: 'kanban:aiSidebar',
+  KANBAN_DISMISS_SUGGESTION: 'kanban:dismissSuggestion',
+  KANBAN_ACCEPT_SUGGESTION: 'kanban:acceptSuggestion',
+
+  // Decision log operations (Phase2-TASK011)
+  DECISION_LIST: 'decision:list',
+  DECISION_GET: 'decision:get',
+  DECISION_CREATE: 'decision:create',
+  DECISION_UPDATE_OUTCOME: 'decision:updateOutcome',
+  DECISION_DETECT: 'decision:detect',
+
+  // Report operations (Phase2-TASK012)
+  REPORT_GENERATE: 'report:generate',
+  REPORT_LIST: 'report:list',
+  REPORT_GET: 'report:get',
+
+  // Productivity operations (Phase2-TASK012)
+  PRODUCTIVITY_ANALYZE: 'productivity:analyze',
+  PRODUCTIVITY_QUERY: 'productivity:query',
+
+  // Dashboard operations (Phase2-TASK013)
+  DASHBOARD_OVERVIEW: 'dashboard:overview',
+
+  // Admin access push events (Phase2-TASK014)
+  ADMIN_ACCESS_PERSONAL_SPACE: 'admin:accessPersonalSpace',
 } as const
 
 /**
@@ -600,6 +632,17 @@ export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
  * ): Promise<IPCResponse<IPCChannelMap[C]['return']>>
  * ```
  */
+export interface DashboardOverviewData {
+  taskStats: { pending: number; inProgress: number; completed: number }
+  members: Array<{ userId: string; displayName: string; status: string; commits24h: number }>
+  productivityScore: number | null
+  commits7d: Array<{ author: string; date: string; count: number }>
+  unreadSuggestionCount: number
+  overdueTasks: Array<{ id: string; title: string; assignee?: string; daysOverdue: number }>
+  memberCount: number
+  fetchedAt: number
+}
+
 export interface IPCChannelMap {
   // Test channels
   [IPC_CHANNELS.TEST_PING]: { params: []; return: string }
@@ -954,6 +997,26 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.PROACTIVE_ACCEPT_SUGGESTION]: { params: [{ suggestionId: string; dwellMs: number }]; return: void }
   // PROACTIVE_EDITOR_SNAPSHOT: Renderer → Main push, not in IPCChannelMap
   // PROACTIVE_SUGGESTION_SHOWN: Main → Renderer push, not in IPCChannelMap
+
+  // Kanban operations (Phase2-TASK010)
+  [IPC_CHANNELS.KANBAN_PARSE]: { params: [workspacePath: string]; return: import('../main/services/kanban/types').KanbanModel }
+  [IPC_CHANNELS.KANBAN_CREATE]: { params: [input: import('../main/services/kanban/types').CreateTaskInput]; return: import('../main/services/kanban/types').KanbanTask }
+  [IPC_CHANNELS.KANBAN_UPDATE_STATUS]: { params: [taskId: string, newStatus: import('../main/services/kanban/types').KanbanColumn, trigger?: string]; return: void }
+  [IPC_CHANNELS.KANBAN_DISPATCH_AI]: { params: [taskId: string]; return: string }
+  [IPC_CHANNELS.KANBAN_PROMOTE]: { params: [ledgerTaskId: string]; return: string }
+  [IPC_CHANNELS.KANBAN_AI_SIDEBAR]: { params: []; return: import('../main/services/progress/types').TaskRecord[] }
+  [IPC_CHANNELS.KANBAN_DISMISS_SUGGESTION]: { params: [taskId: string, suggestedStatus: string]; return: void }
+  [IPC_CHANNELS.KANBAN_ACCEPT_SUGGESTION]: { params: [taskId: string, suggestedStatus: string]; return: void }
+
+  // Decision log operations (Phase2-TASK011)
+  [IPC_CHANNELS.DECISION_LIST]: { params: [filters?: import('../main/services/decision/types').DecisionListFilters]; return: import('../main/services/decision/types').DecisionLog[] }
+  [IPC_CHANNELS.DECISION_GET]: { params: [decisionId: string]; return: import('../main/services/decision/types').DecisionLog | null }
+  [IPC_CHANNELS.DECISION_CREATE]: { params: [input: import('../main/services/decision/types').CreateDecisionInput]; return: import('../main/services/decision/types').DecisionLog }
+  [IPC_CHANNELS.DECISION_UPDATE_OUTCOME]: { params: [decisionId: string, actualResult: string]; return: void }
+  [IPC_CHANNELS.DECISION_DETECT]: { params: [conversation: string]; return: { detected: boolean; title?: string; problem?: string; options?: Array<{ name: string; pros?: string; cons?: string }>; chosen?: string; reason?: string; sourceQuote?: string } }
+
+  // Dashboard operations (Phase2-TASK013)
+  [IPC_CHANNELS.DASHBOARD_OVERVIEW]: { params: [viewerId: string, viewerRole: string]; return: DashboardOverviewData }
 }
 
 /**

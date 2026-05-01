@@ -16,7 +16,11 @@ export const taskDecompositionTrigger: Trigger = {
   buildDraft: (snapshot: EditorSnapshot, _deps: TriggerDeps): SuggestionDraft => ({
     triggerId: 'task-decomposition',
     priority: 'normal',
-    context: { filePath: snapshot.filePath, contentLength: snapshot.contentSummary.length },
-    previewTitle: '想要拆解任务吗？',
+    context: {
+      filePath: snapshot.filePath,
+      contentLength: snapshot.contentSummary.length,
+      conversationSnippet: snapshot.contentSummary.recentText,
+    },
+    previewTitle: '检测到可能的待办任务',
   }),
 }

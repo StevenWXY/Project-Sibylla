@@ -109,6 +109,7 @@ let notificationCleanup: (() => void) | null = null
 let proactiveCleanup: (() => void) | null = null
 let presenceCleanup: (() => void) | null = null
 let focusModeCleanup: (() => void) | null = null
+let dashboardCleanups: Array<() => void> = []
 
 // Keep reference to LocalSearchEngine for FileWatcher forwarding
 let localSearchEngineRef: import('./services/local-search-engine').LocalSearchEngine | null = null
@@ -172,6 +173,9 @@ if (!gotTheLock) {
 
       // Inject AuthHandler as user provider for GuardrailEngine context (TASK017)
       fileHandler.setAuthUserProvider(authHandler)
+
+      // Inject AppEventBus for admin.access-personal-space event emission (TASK014)
+      fileHandler.setEventBus(appEventBus)
 
       // Create AI infrastructure
       const memoryManager = new MemoryManager()
@@ -1022,6 +1026,7 @@ if (!gotTheLock) {
                     if (!window.isDestroyed()) window.webContents.send(channel, data)
                   }
                 },
+                notificationEngine,
               },
               DEFAULT_PROACTIVE_CONFIG,
             )
@@ -1032,6 +1037,50 @@ if (!gotTheLock) {
               proactiveEngine,
               () => mainWindow,
             )
+
+          const memberDirectory = {
+            getAllMembers: () => {
+              try {
+                const membersPath = path.join(workspacePath, '.sibylla', 'members.json')
+                if (!fs.existsSync(membersPath)) return []
+                return JSON.parse(fs.readFileSync(membersPath, 'utf-8')) as Array<{ userId: string; role: string; displayName: string }>
+              } catch { return [] }
+            },
+            getMember: (userId: string) => {
+              const members = memberDirectory.getAllMembers()
+              return members.find((m) => m.userId === userId)
+            },
+          }
+
+          try {
+            const { createRiskTaskDelayTrigger } = await import('./services/proactive-engine/triggers/risk-task-delay')
+            const { createWorkloadImbalanceTrigger } = await import('./services/proactive-engine/triggers/workload-imbalance')
+            const { createDecisionContradictionTrigger } = await import('./services/proactive-engine/triggers/decision-contradiction')
+
+            const { KanbanService } = await import('./services/kanban/kanban-service')
+            const sharedKanbanService = new KanbanService(
+              fileManager,
+              progressLedger!,
+              taskStateMachine!,
+              appEventBus,
+            )
+
+            const { DecisionLogger } = await import('./services/decision/decision-logger')
+            const decisionLogger = new DecisionLogger(appEventBus, workspacePath)
+
+            const riskTrigger = createRiskTaskDelayTrigger(sharedKanbanService, workspacePath)
+            const workloadTrigger = createWorkloadImbalanceTrigger(gitAbstraction, memberDirectory)
+            const decisionTrigger = createDecisionContradictionTrigger(decisionLogger)
+
+              proactiveEngine.registerPatrolTrigger(riskTrigger)
+              proactiveEngine.registerPatrolTrigger(workloadTrigger)
+              proactiveEngine.registerPatrolTrigger(decisionTrigger)
+              proactiveEngine.startPatrol(30 * 60 * 1000)
+            } catch (err) {
+              logger.warn('[Main] PatrolTrigger registration failed', {
+                error: err instanceof Error ? err.message : String(err),
+              })
+            }
           }
 
           const presenceStore = new PresenceStore(appEventBus)
@@ -1080,6 +1129,44 @@ if (!gotTheLock) {
           harnessContextEngine.setCollabContextProvider(collabContextProvider)
           if (aiHandler.contextEngine) {
             aiHandler.contextEngine.setCollabContextProvider(collabContextProvider)
+          }
+
+          try {
+            const { registerDashboardHandlers } = await import('./ipc/handlers/dashboard')
+
+            fileHandler.setRoleResolver({
+              getMemberRole: (userId: string) => {
+                const member = memberDirectory.getMember(userId)
+                return member?.role as import('../shared/types').MemberRole | undefined
+              },
+            })
+
+            const { ProductivityAnalyzer } = await import('./services/productivity/productivity-analyzer')
+            const { WikiLinksStore } = await import('./services/wiki-links/wiki-links-store')
+
+            const dashboardCleanup = registerDashboardHandlers(ipcMain, {
+              kanbanService: sharedKanbanService,
+              presenceStore,
+              productivityAnalyzer: new ProductivityAnalyzer(
+                sharedKanbanService,
+                gitAbstraction,
+                eventLogStore!,
+                new WikiLinksStore(databaseManager!.database),
+                memberDirectory,
+                privacyFilter,
+                workspacePath,
+              ),
+              gitAbstraction,
+              notificationStore,
+              memberDirectory,
+              workspaceRoot: workspacePath,
+              eventBus: appEventBus,
+            })
+            dashboardCleanups.push(dashboardCleanup)
+          } catch (err) {
+            logger.warn('[Main] Dashboard handler registration failed', {
+              error: err instanceof Error ? err.message : String(err),
+            })
           }
         } catch (error) {
           console.error('[Main] Failed to initialize workspace services', error)
@@ -1135,6 +1222,10 @@ if (!gotTheLock) {
           focusModeCleanup()
           focusModeCleanup = null
         }
+        for (const cleanup of dashboardCleanups) {
+          cleanup()
+        }
+        dashboardCleanups = []
 
         // Cleanup PlanManager
         if (planManager) {

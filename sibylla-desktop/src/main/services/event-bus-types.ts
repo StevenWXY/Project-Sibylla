@@ -59,6 +59,15 @@ export type SibyllaEventType =
   | 'git.pull-completed'
   | 'memory.sync-locked'
   | 'task.cross-device-resumeable'
+  | 'kanban.task-created'
+  | 'kanban.task-status-changed'
+  | 'kanban.task-completed'
+  | 'kanban.task-dispatched'
+  | 'kanban.task-risk-detected'
+  | 'decision.recorded'
+  | 'decision.outcome-updated'
+  | 'report.generated'
+  | 'admin.access-personal-space'
 
 export interface SibyllaEvent<T = unknown> {
   readonly id: string
@@ -130,6 +139,15 @@ export interface EventPayloadMap {
   'git.pull-completed': { commitCount: number }
   'memory.sync-locked': { reason: string }
   'task.cross-device-resumeable': { taskId: string; lastSessionId?: string }
+  'kanban.task-created': { taskId: string; title: string; assignee?: string; source: 'user' | 'ai-suggest' }
+  'kanban.task-status-changed': { taskId: string; from: string; to: string; trigger: 'drag' | 'ai-auto' | 'dispatch' }
+  'kanban.task-completed': { taskId: string; completedBy: 'user' | 'ai-auto' }
+  'kanban.task-dispatched': { taskId: string; ledgerTaskId: string }
+  'kanban.task-risk-detected': { taskId: string; riskType: string; confidence: number; signals: string[] }
+  'decision.recorded': { decisionId: string; title: string; filePath: string }
+  'decision.outcome-updated': { decisionId: string; newOutcome: string }
+  'report.generated': { reportType: 'daily-personal' | 'weekly-team'; filePath: string; date: string }
+  'admin.access-personal-space': { adminId: string; targetUser: string; timestamp: number }
 }
 
 export const EVENT_MAP_BRIDGE: ReadonlyMap<string, SibyllaEventType> = new Map([

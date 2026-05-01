@@ -4,6 +4,7 @@ import type { EventLogStore } from '../event-log-store'
 import type { SibyllaEvent } from '../event-bus-types'
 import type { ContextLayerV2 } from './types-v2'
 import type { WorkspaceMember } from '../../../shared/types/member.types'
+import type { KanbanService } from '../kanban/kanban-service'
 import { estimateTokens } from './token-utils'
 import { COLLAB_KEYWORDS, ACTIVITY_WINDOW_MS } from '../presence/constants'
 import { logger } from '../../utils/logger'
@@ -18,6 +19,7 @@ export class CollabContextProvider {
   private readonly eventLogStore: EventLogStore
   private readonly getMembers: () => Promise<WorkspaceMember[]>
   private readonly privacyFilter: PrivacyFilter
+  private readonly kanbanService?: KanbanService
   private cachedMembers: WorkspaceMember[] = []
   private membersCacheTime = 0
   private static readonly MEMBERS_CACHE_TTL = 60000
@@ -25,20 +27,25 @@ export class CollabContextProvider {
     Array.from(COLLAB_KEYWORDS).join('|'),
   )
 
+  private static readonly taskKeywordPattern = /(任务|待办|进度|看板|todo|task)/i
+
   constructor(
     presenceStore: PresenceStore,
     eventLogStore: EventLogStore,
     getMembers: () => Promise<WorkspaceMember[]>,
     privacyFilter: PrivacyFilter,
+    kanbanService?: KanbanService,
   ) {
     this.presenceStore = presenceStore
     this.eventLogStore = eventLogStore
     this.getMembers = getMembers
     this.privacyFilter = privacyFilter
+    this.kanbanService = kanbanService
   }
 
   async shouldInject(userMessage: string): Promise<boolean> {
     if (CollabContextProvider.collabKeywordPattern.test(userMessage)) return true
+    if (CollabContextProvider.taskKeywordPattern.test(userMessage)) return true
 
     const members = await this.getFreshMembers()
     for (const member of members) {
@@ -86,11 +93,23 @@ export class CollabContextProvider {
 
       const allActivityLines = filteredActivity.map(e => e.content)
 
-      let content = this.buildCollabContent(memberLines, allActivityLines)
+      let taskOverview: string | null = null
+      if (this.kanbanService) {
+        try {
+          const model = await this.kanbanService.parseTasksMd('')
+          if (model.tasks.length > 0) {
+            taskOverview = this.buildTaskOverview(model)
+          }
+        } catch { /* graceful degradation */ }
+      }
 
-      while (estimateTokens(content) > budget && allActivityLines.length > 1) {
+      while (estimateTokens(this.buildCollabContent(memberLines, allActivityLines) + (taskOverview ? '\n' + taskOverview : '')) > budget && allActivityLines.length > 1) {
         allActivityLines.shift()
-        content = this.buildCollabContent(memberLines, allActivityLines)
+      }
+
+      let content = this.buildCollabContent(memberLines, allActivityLines)
+      if (taskOverview && estimateTokens(content + '\n' + taskOverview) <= budget) {
+        content = content + '\n' + taskOverview
       }
 
       const memberNames = members.map(m => m.name)
@@ -186,6 +205,22 @@ export class CollabContextProvider {
       sections.push(...activityLines)
     }
     return sections.join('\n')
+  }
+
+  private buildTaskOverview(model: import('../kanban/types').KanbanModel): string {
+    const columns = model.columns
+    const todo = columns['待开始'].length
+    const inProgress = columns['进行中'].length
+    const done = columns['已完成'].length
+    const lines = [
+      '### 任务概览',
+      `- 待开始: ${todo}, 进行中: ${inProgress}, 已完成: ${done}`,
+    ]
+    const myTasks = model.tasks.filter(t => t.status !== '已完成' && t.assignee).slice(0, 5)
+    if (myTasks.length > 0) {
+      lines.push('- 你负责的任务: ' + myTasks.map(t => `[${t.title}](${t.status})`).join(', '))
+    }
+    return lines.join('\n')
   }
 
   extractMentionedNames(text: string): string[] {

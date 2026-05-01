@@ -1,16 +1,17 @@
 /**
- * PersonalSpaceGuard — Prevents non-admin users from accessing other members' personal spaces
+ * PersonalSpaceGuard — Prevents unauthorized access to other members' personal spaces
  *
  * Rules:
  * - Paths not under `personal/` are always allowed
- * - Admin users can access any personal space
+ * - Admin users can READ any personal space (with audit trail)
+ * - Admin users CANNOT WRITE to other members' personal space
  * - Non-admin users can only access `personal/{ownUserId}/...`
  * - For rename operations, both source and target paths are checked
  *
  * References CLAUDE.md §七: "个人空间 personal/[name]/ 的内容不得出现在其他成员的 AI 上下文中（Admin 除外）"
  */
 
-import type { GuardrailRule, FileOperation, OperationContext, GuardrailVerdict } from './types'
+import type { GuardrailRule, FileOperation, FileOperationType, OperationContext, GuardrailVerdict } from './types'
 
 const PERSONAL_PREFIX = 'personal/'
 
@@ -61,36 +62,36 @@ function extractPersonalMember(normalizedPath: string): string | null {
  * Check if a path violates personal space access for the given context.
  * Returns the blocked member name, or null if access is allowed.
  */
-function checkPersonalAccess(normalizedPath: string, ctx: OperationContext): string | null {
+function checkPersonalAccess(normalizedPath: string, ctx: OperationContext, opType: FileOperationType): string | null {
   const memberName = extractPersonalMember(normalizedPath)
 
-  // Not under personal/ or bare personal/ root → allow
   if (memberName === null) {
     return null
   }
 
-  // Admin can access any personal space
   if (ctx.userRole === 'admin') {
+    if (opType === 'write' || opType === 'delete' || opType === 'rename') {
+      if (memberName !== ctx.userId) {
+        return memberName
+      }
+    }
     return null
   }
 
-  // Non-admin accessing their own space → allow
   if (memberName === ctx.userId) {
     return null
   }
 
-  // Non-admin accessing someone else's space → block
   return memberName
 }
 
 export class PersonalSpaceGuard implements GuardrailRule {
   readonly id = 'personal-space'
-  readonly description = 'Prevents non-admin users from accessing other members\' personal spaces'
+  readonly description = 'Prevents unauthorized access to other members\' personal spaces'
 
   async check(op: FileOperation, ctx: OperationContext): Promise<GuardrailVerdict> {
-    // Check primary path
     const normalizedPath = normalizePath(op.path)
-    const blockedMember = checkPersonalAccess(normalizedPath, ctx)
+    const blockedMember = checkPersonalAccess(normalizedPath, ctx, op.type)
 
     if (blockedMember) {
       return {
@@ -101,10 +102,9 @@ export class PersonalSpaceGuard implements GuardrailRule {
       }
     }
 
-    // For rename operations, also check the target path
     if (op.type === 'rename' && op.newPath) {
       const normalizedNewPath = normalizePath(op.newPath)
-      const blockedNewMember = checkPersonalAccess(normalizedNewPath, ctx)
+      const blockedNewMember = checkPersonalAccess(normalizedNewPath, ctx, op.type)
 
       if (blockedNewMember) {
         return {

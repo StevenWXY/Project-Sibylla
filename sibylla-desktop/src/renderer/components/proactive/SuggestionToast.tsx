@@ -16,15 +16,38 @@ interface SuggestionToastProps {
   suggestion: Suggestion
   onDismiss: () => void
   onAccept: () => void
+  onAcceptWithEdits?: (edits: Record<string, string>) => void
 }
 
 const AUTO_DISMISS_MS = 15000
 const HOVER_RESET_MS = 5000
 
-export function SuggestionToast({ suggestion, onDismiss, onAccept }: SuggestionToastProps) {
+const TASK_EDITABLE_FIELDS = [
+  { key: 'title', label: '标题' },
+  { key: 'assignee', label: '负责人' },
+  { key: 'priority', label: '优先级' },
+  { key: 'deadline', label: '截止日期' },
+] as const
+
+function extractTaskFields(args: Record<string, unknown>): Record<string, string> {
+  const fields: Record<string, string> = {}
+  if (typeof args.title === 'string') fields.title = args.title
+  if (typeof args.assignee === 'string') fields.assignee = args.assignee
+  if (typeof args.priority === 'string') fields.priority = args.priority
+  if (typeof args.deadline === 'string') fields.deadline = args.deadline
+  return fields
+}
+
+export function SuggestionToast({ suggestion, onDismiss, onAccept, onAcceptWithEdits }: SuggestionToastProps) {
   const [expanded, setExpanded] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editFields, setEditFields] = useState<Record<string, string>>(() =>
+    extractTaskFields(suggestion.acceptAction.args),
+  )
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hoverRef = useRef(false)
+
+  const isTaskSuggestion = suggestion.triggerId === 'task-decomposition'
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -67,7 +90,15 @@ export function SuggestionToast({ suggestion, onDismiss, onAccept }: SuggestionT
   }
 
   const handleAccept = () => {
-    onAccept()
+    if (editing && onAcceptWithEdits) {
+      onAcceptWithEdits(editFields)
+    } else {
+      onAccept()
+    }
+  }
+
+  const handleEditChange = (key: string, value: string) => {
+    setEditFields((prev) => ({ ...prev, [key]: value }))
   }
 
   return (
@@ -89,7 +120,7 @@ export function SuggestionToast({ suggestion, onDismiss, onAccept }: SuggestionT
           <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
             {suggestion.title}
           </p>
-          {!expanded && (
+          {!expanded && !editing && (
             <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
               {suggestion.body}
             </p>
@@ -107,7 +138,7 @@ export function SuggestionToast({ suggestion, onDismiss, onAccept }: SuggestionT
       </div>
 
       <AnimatePresence>
-        {expanded && (
+        {expanded && !editing && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -122,18 +153,80 @@ export function SuggestionToast({ suggestion, onDismiss, onAccept }: SuggestionT
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {editing && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-2 flex flex-col gap-1.5">
+              {TASK_EDITABLE_FIELDS.map(({ key, label }) => (
+                <div key={key} className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-400 w-14 shrink-0">{label}</span>
+                  {key === 'priority' ? (
+                    <select
+                      value={editFields[key] ?? ''}
+                      onChange={(e) => handleEditChange(key, e.target.value)}
+                      className="flex-1 text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 outline-none"
+                    >
+                      <option value="">-</option>
+                      <option value="P0">P0</option>
+                      <option value="P1">P1</option>
+                      <option value="P2">P2</option>
+                    </select>
+                  ) : (
+                    <input
+                      type={key === 'deadline' ? 'date' : 'text'}
+                      value={editFields[key] ?? ''}
+                      onChange={(e) => handleEditChange(key, e.target.value)}
+                      placeholder={label}
+                      className="flex-1 text-xs border border-gray-200 rounded px-1.5 py-0.5 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-center gap-2 border-t border-gray-100 px-3 py-2 dark:border-gray-700">
         <button
           className="rounded bg-indigo-500 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-600"
           onClick={handleAccept}
         >
-          Accept
+          采纳
         </button>
+        {isTaskSuggestion && !editing && (
+          <button
+            className="rounded px-3 py-1 text-xs text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
+            onClick={() => {
+              setEditing(true)
+              setExpanded(false)
+            }}
+          >
+            修改
+          </button>
+        )}
+        {editing && (
+          <button
+            className="rounded px-3 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+            onClick={() => {
+              setEditing(false)
+              setExpanded(true)
+            }}
+          >
+            取消编辑
+          </button>
+        )}
         <button
           className="rounded px-3 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
           onClick={onDismiss}
         >
-          Later
+          忽略
         </button>
       </div>
     </motion.div>

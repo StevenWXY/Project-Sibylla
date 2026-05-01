@@ -1,4 +1,4 @@
-import type { ProactiveConfig, TriggerId } from './types'
+import type { ProactiveConfig, TriggerId, PatrolTriggerId } from './types'
 
 export const DEFAULT_PROACTIVE_CONFIG: ProactiveConfig = {
   enabled: true,
@@ -25,3 +25,12 @@ export const DEFAULT_TRIGGER_COOLDOWNS: Record<TriggerId, number> = {
   'memory-promote': 60,
   'review-stale': 60,
 }
+
+export const PATROL_TRIGGER_COOLDOWNS: Record<PatrolTriggerId, number> = {
+  'risk-task-delay': 4 * 60 * 60 * 1000,
+  'workload-imbalance': 8 * 60 * 60 * 1000,
+  'decision-contradiction': 24 * 60 * 60 * 1000,
+}
+
+export const DEFAULT_PATROL_INTERVAL_MS = 30 * 60 * 1000
+export const PATROL_MIN_COOLDOWN_RATIO = 0.5

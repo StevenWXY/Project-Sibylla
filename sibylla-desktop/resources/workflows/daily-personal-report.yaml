@@ -1,0 +1,45 @@
+id: daily-personal-report
+version: 1.0.0
+name: 每日个人工作日报
+description: 傍晚自动生成包含任务进展、提交记录、明日计划的结构化日报
+scope: personal
+
+triggers:
+  - type: schedule
+    cron: "0 18 * * *"
+  - type: manual
+    name: 手动生成今日日报
+
+params:
+  - name: date
+    type: string
+    required: false
+    description: "日报日期，默认为今日"
+
+steps:
+  - id: collect-data
+    name: 收集工作数据
+    sub_agent: doc-summarizer
+    input:
+      task: "收集今日个人工作数据(任务变更、文件修改、AI 对话摘要)"
+      source: "daily-personal"
+    on_failure: stop
+
+  - id: generate
+    name: 生成日报
+    skill: daily-report
+    input:
+      data: ${{ steps.collect-data.output }}
+
+  - id: save
+    name: 保存日报并通知
+    action: internal_notification
+    input:
+      title: "今日日报已生成"
+      body: ${{ steps.generate.output.summary }}
+      channel: personal
+    requires_user_confirm: false
+
+on_workflow_failure:
+  notify_user: true
+  rollback: false

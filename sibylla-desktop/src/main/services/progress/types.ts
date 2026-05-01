@@ -28,6 +28,7 @@ export interface TaskRecord {
   resultSummary?: string
   failureReason?: string
   userNotes?: string
+  kanbanTaskId?: string
 }
 
 export interface ProgressSnapshot {
@@ -43,6 +44,7 @@ export interface DeclareInput {
   traceId?: string
   conversationId?: string
   plannedChecklist?: string[]
+  kanbanTaskId?: string
 }
 
 export interface UpdatePatch {

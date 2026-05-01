@@ -3,6 +3,7 @@ import type {
   TriggerId,
   CooldownRecord,
   TriggerRegistryDeps,
+  PatrolTriggerId,
 } from './types'
 import {
   MIN_COOLDOWN_MINUTES,
@@ -10,6 +11,8 @@ import {
   DISMISS_ADJUST_COUNT,
   ADJUST_WINDOW_HOURS,
   DEFAULT_TRIGGER_COOLDOWNS,
+  PATROL_TRIGGER_COOLDOWNS,
+  PATROL_MIN_COOLDOWN_RATIO,
 } from './constants'
 
 interface AdjustWindow {
@@ -23,6 +26,10 @@ export class TriggerRegistry {
   private readonly dismissCounts = new Map<TriggerId, AdjustWindow>()
   private readonly acceptCounts = new Map<TriggerId, AdjustWindow>()
   private lastGlobalSuggestionAt: number | null = null
+
+  private readonly patrolCooldowns = new Map<PatrolTriggerId, CooldownRecord>()
+  private readonly patrolDismissCounts = new Map<PatrolTriggerId, AdjustWindow>()
+  private readonly patrolAcceptCounts = new Map<PatrolTriggerId, AdjustWindow>()
 
   constructor(private readonly deps: TriggerRegistryDeps) {}
 
@@ -125,5 +132,69 @@ export class TriggerRegistry {
     record.currentMinutes = newMinutes
     this.acceptCounts.delete(triggerId)
     await this.deps.onCooldownChange(triggerId, newMinutes)
+  }
+
+  registerPatrol(trigger: { id: PatrolTriggerId; cooldownMs: number }): void {
+    this.patrolCooldowns.set(trigger.id, {
+      currentMinutes: trigger.cooldownMs / 60000,
+      lastFiredAt: null,
+    })
+  }
+
+  isPatrolOnCooldown(triggerId: PatrolTriggerId): boolean {
+    const record = this.patrolCooldowns.get(triggerId)
+    if (!record || record.lastFiredAt === null) return false
+    const elapsed = Date.now() - record.lastFiredAt
+    return elapsed < record.currentMinutes * 60 * 1000
+  }
+
+  markPatrolFired(triggerId: PatrolTriggerId): void {
+    const record = this.patrolCooldowns.get(triggerId)
+    if (record) {
+      record.lastFiredAt = Date.now()
+    }
+  }
+
+  recordPatrolDismiss(triggerId: PatrolTriggerId): void {
+    this.patrolDismissCounts.set(triggerId, this._updateWindow(this.patrolDismissCounts.get(triggerId)))
+    this.patrolAcceptCounts.delete(triggerId)
+
+    const window = this.patrolDismissCounts.get(triggerId)
+    if (window && window.count >= DISMISS_ADJUST_COUNT) {
+      this._doublePatrolCooldown(triggerId)
+    }
+  }
+
+  recordPatrolAccept(triggerId: PatrolTriggerId): void {
+    this.patrolAcceptCounts.set(triggerId, this._updateWindow(this.patrolAcceptCounts.get(triggerId)))
+    this.patrolDismissCounts.delete(triggerId)
+
+    const window = this.patrolAcceptCounts.get(triggerId)
+    if (window && window.count >= DISMISS_ADJUST_COUNT) {
+      this._halvePatrolCooldown(triggerId)
+    }
+  }
+
+  getPatrolCooldownMs(triggerId: PatrolTriggerId): number {
+    const record = this.patrolCooldowns.get(triggerId)
+    return record ? record.currentMinutes * 60 * 1000 : (PATROL_TRIGGER_COOLDOWNS[triggerId] ?? 0)
+  }
+
+  private _doublePatrolCooldown(triggerId: PatrolTriggerId): void {
+    const record = this.patrolCooldowns.get(triggerId)
+    if (!record) return
+    const newMinutes = Math.min(record.currentMinutes * 2, MAX_COOLDOWN_MINUTES)
+    record.currentMinutes = newMinutes
+    this.patrolDismissCounts.delete(triggerId)
+  }
+
+  private _halvePatrolCooldown(triggerId: PatrolTriggerId): void {
+    const record = this.patrolCooldowns.get(triggerId)
+    if (!record) return
+    const originalMinutes = (PATROL_TRIGGER_COOLDOWNS[triggerId] ?? 0) / 60000
+    const minMinutes = originalMinutes * PATROL_MIN_COOLDOWN_RATIO
+    const newMinutes = Math.max(Math.floor(record.currentMinutes / 2), minMinutes)
+    record.currentMinutes = newMinutes
+    this.patrolAcceptCounts.delete(triggerId)
   }
 }

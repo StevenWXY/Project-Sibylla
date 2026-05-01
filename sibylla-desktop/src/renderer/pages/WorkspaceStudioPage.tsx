@@ -4,6 +4,7 @@ import type { AIStreamEnd, AIStreamError } from '../../shared/types'
 import {
   useAppStore,
   selectCurrentWorkspace,
+  selectCurrentUser,
 } from '../store/appStore'
 import type { FileInfo } from '../store/appStore'
 import {
@@ -53,6 +54,7 @@ import type {
   TaskItem,
   ChatMessage,
 } from '../components/studio/types'
+import { PersonalSpaceWarningBanner } from '../components/common/PersonalSpaceWarningBanner'
 
 const AUTOSAVE_DELAY_MS = 900
 const MAX_NOTIFICATIONS = 60
@@ -216,6 +218,26 @@ export function WorkspaceStudioPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
 
   const syncStatusValue = useSyncStatusStore(selectStatus)
+
+  const currentUser = useAppStore(selectCurrentUser)
+  const [warningTargetUser, setWarningTargetUser] = useState<string | null>(null)
+
+  useEffect(() => {
+    const unsub = window.electronAPI.onAccessPersonalSpace((payload) => {
+      setWarningTargetUser(payload.targetUser)
+    })
+    return unsub
+  }, [])
+
+  const shouldShowPersonalWarning = useMemo(() => {
+    if (!warningTargetUser) return false
+    const currentUserId = currentUser?.id ?? ''
+    return warningTargetUser !== currentUserId && currentUserId !== ''
+  }, [warningTargetUser, currentUser])
+
+  const handleDismissWarning = useCallback(() => {
+    setWarningTargetUser(null)
+  }, [])
 
   const messages = useAIChatStore(selectMessages)
   const isStreaming = useAIChatStore(selectIsStreaming)
@@ -1237,6 +1259,13 @@ export function WorkspaceStudioPage() {
         }}
         onClearNotifications={() => setNotifications([])}
       />
+
+      {shouldShowPersonalWarning && (
+        <PersonalSpaceWarningBanner
+          targetUser={warningTargetUser!}
+          onDismiss={handleDismissWarning}
+        />
+      )}
 
       <StudioEditorPanel
         editorMode={editorMode}

@@ -7,6 +7,9 @@ import type {
   TriggerDeps,
   TriggerId,
   InterruptContext,
+  PatrolTrigger,
+  PatrolTriggerId,
+  PatrolResult,
 } from './types'
 import type { TriggerRegistry } from './trigger-registry'
 import type { InterruptPolicy } from './interrupt-policy'
@@ -14,7 +17,8 @@ import type { SubAgentExecutor } from '../sub-agent/SubAgentExecutor'
 import type { SubAgentRegistry } from '../sub-agent/SubAgentRegistry'
 import type { AppEventBus } from '../event-bus'
 import type { Tracer } from '../trace/tracer'
-import { SUB_AGENT_TIMEOUT_MS } from './constants'
+import type { NotificationDraft } from '../notifications/types'
+import { SUB_AGENT_TIMEOUT_MS, DEFAULT_PATROL_INTERVAL_MS } from './constants'
 import { taskDecompositionTrigger } from './triggers/task-decomposition'
 import { relatedContentTrigger } from './triggers/related-content'
 import { memoryPromoteTrigger } from './triggers/memory-promote'
@@ -30,6 +34,9 @@ interface ProactiveEngineDeps {
   triggerDeps: TriggerDeps
   commandRegistry: { execute: (id: string) => Promise<void> }
   sendToRenderer: (channel: string, data: unknown) => void
+  notificationEngine: {
+    store: { create(draft: NotificationDraft): { id: string } }
+  }
 }
 
 interface PendingSuggestion {
@@ -44,6 +51,10 @@ export class ProactiveEngine {
   private _initialized = false
   private _unsubscribers: Array<() => void> = []
   private _pendingSuggestions = new Map<string, PendingSuggestion>()
+
+  private patrolTriggers = new Map<PatrolTriggerId, PatrolTrigger>()
+  private patrolTimer: ReturnType<typeof setInterval> | null = null
+  private patrolRunning = false
 
   private config: ProactiveConfig
 
@@ -132,12 +143,84 @@ export class ProactiveEngine {
   }
 
   shutdown(): void {
+    this.stopPatrol()
     for (const unsub of this._unsubscribers) {
       unsub()
     }
     this._unsubscribers = []
     this._pendingSuggestions.clear()
     this._initialized = false
+  }
+
+  registerPatrolTrigger(trigger: PatrolTrigger): void {
+    this.patrolTriggers.set(trigger.id, trigger)
+    this.deps.triggerRegistry.registerPatrol(trigger)
+  }
+
+  startPatrol(intervalMs: number = DEFAULT_PATROL_INTERVAL_MS): void {
+    if (this.patrolRunning) return
+    this.patrolRunning = true
+    this.patrolTimer = setInterval(() => {
+      this._runPatrolCycle().catch(() => {})
+    }, intervalMs)
+    this._runPatrolCycle().catch(() => {})
+  }
+
+  stopPatrol(): void {
+    if (this.patrolTimer) {
+      clearInterval(this.patrolTimer)
+      this.patrolTimer = null
+    }
+    this.patrolRunning = false
+  }
+
+  private async _runPatrolCycle(): Promise<void> {
+    for (const trigger of this.patrolTriggers.values()) {
+      if (!trigger.enabled) continue
+      if (this.deps.triggerRegistry.isPatrolOnCooldown(trigger.id)) continue
+
+      try {
+        const result = await trigger.evaluate()
+        if (result !== null) {
+          this._createPatrolNotification(trigger.id, result)
+          this.deps.triggerRegistry.markPatrolFired(trigger.id)
+
+          if (this.deps.tracer?.isEnabled()) {
+            this.deps.tracer.startSpan(`patrol.${trigger.id}.evaluate`, {
+              kind: 'system',
+              attributes: { result: 'fired' },
+            }).setStatus('ok').end()
+          }
+
+          this.deps.eventBus.emitEvent({
+            type: 'notification.created',
+            source: 'patrol-engine',
+            payload: { patrolTriggerId: trigger.id },
+          })
+        }
+      } catch {
+        if (this.deps.tracer?.isEnabled()) {
+          this.deps.tracer.startSpan(`patrol.${trigger.id}.evaluate`, {
+            kind: 'system',
+            attributes: { result: 'error' },
+          }).setStatus('error').end()
+        }
+      }
+    }
+  }
+
+  private _createPatrolNotification(triggerId: PatrolTriggerId, result: PatrolResult): void {
+    const draft: NotificationDraft = {
+      type: 'system.suggestion',
+      priority: result.priority,
+      source: { provider: `patrol:${triggerId}` },
+      title: result.title,
+      body: result.detail,
+      groupKey: result.groupKey,
+      actions: result.actions.map(a => ({ label: a.label, action: a.id })),
+      metadata: { audience: result.audience, patrolTriggerId: triggerId },
+    }
+    this.deps.notificationEngine.store.create(draft)
   }
 
   private async _evaluate(): Promise<void> {

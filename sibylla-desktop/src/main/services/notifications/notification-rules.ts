@@ -237,5 +237,46 @@ export function createBuiltinRules(deps: RuleDeps): NotificationRule[] {
         }
       },
     },
+    {
+      id: 'kanban-status-suggestion',
+      eventType: 'kanban.task-status-changed',
+      description: 'AI suggested task status update',
+      enabled: true,
+      condition: (event: SibyllaEvent) => {
+        const payload = event.payload as { trigger: string }
+        return payload.trigger === 'ai-auto'
+      },
+      build: (event: SibyllaEvent) => {
+        const payload = event.payload as { taskId: string; from: string; to: string }
+        return {
+          type: 'kanban.status-suggestion' as const,
+          priority: 'normal' as const,
+          source: { provider: 'kanban' },
+          title: 'AI 建议更新任务状态',
+          body: `任务 ${payload.taskId}: ${payload.from} → ${payload.to}`,
+          groupKey: `kanban-status:${payload.taskId}`,
+          metadata: {},
+        }
+      },
+    },
+    {
+      id: 'kanban-task-risk',
+      eventType: 'kanban.task-risk-detected',
+      description: 'Task risk detected by status tracker',
+      enabled: true,
+      condition: () => true,
+      build: (event: SibyllaEvent) => {
+        const payload = event.payload as { taskId: string; riskType: string; signals: string[] }
+        return {
+          type: 'kanban.task-risk' as const,
+          priority: 'high' as const,
+          source: { provider: 'kanban' },
+          title: '任务风险预警',
+          body: `${payload.riskType}: ${payload.signals.join(', ')}`,
+          groupKey: `kanban-risk:${payload.taskId}`,
+          metadata: {},
+        }
+      },
+    },
   ]
 }

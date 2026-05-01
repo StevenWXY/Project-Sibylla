@@ -1,4 +1,5 @@
 import type { AiModeId } from '../mode/types'
+import type { NotificationPriority } from '../notifications/types'
 
 export type TriggerId =
   | 'task-decomposition'
@@ -96,4 +97,26 @@ export interface CooldownRecord {
 export interface TriggerRegistryDeps {
   onCooldownChange: (triggerId: TriggerId, minutes: number) => Promise<void>
   globalCooldownMinutes: number
+}
+
+export type PatrolTriggerId =
+  | 'risk-task-delay'
+  | 'workload-imbalance'
+  | 'decision-contradiction'
+
+export interface PatrolTrigger {
+  id: PatrolTriggerId
+  description: string
+  enabled: boolean
+  cooldownMs: number
+  evaluate(): Promise<PatrolResult | null>
+}
+
+export interface PatrolResult {
+  title: string
+  detail: string
+  actions: Array<{ id: string; label: string }>
+  audience: string[]
+  priority: NotificationPriority
+  groupKey: string
 }

@@ -1,13 +1,113 @@
 ---
 id: daily-report
 version: 1.0.0
-name: Daily Report
-description: Generate daily standup-style reports from activity logs and work context
-author: Sibylla
-category: productivity
-tags: [daily, report, standup]
+name: 工作日报/周报生成
+description: 基于结构化数据生成个人日报或团队周报
+type: prompt
 scope: public
-loadable_in:
-  modes: [free, write]
-estimated_tokens: 1200
+triggers:
+  - slash: /daily-report
+  - pattern: "生成(日报|周报)"
 ---
+
+## 输入格式
+
+接收结构化 JSON 数据，包含以下字段：
+
+- `mode`: `"daily-personal"` | `"weekly-team"`
+- `tasks`: 任务进展数据（来自 KanbanService）
+- `commits`: 提交记录（来自 GitAbstraction）
+- `traces`: AI 对话摘要（来自 TraceStore）
+- `notifications`: 待处理建议
+- `period`: 时间范围描述
+
+## 输出要求
+
+根据 `mode` 字段选择对应的输出模板，生成纯 Markdown 格式文本。
+
+---
+
+## 模式一：个人日报 (`mode: "daily-personal"`)
+
+输出以下 5 个 section，格式严格如下：
+
+```markdown
+# 工作日报 - {date}
+
+## 工作摘要
+
+（1-2 句话总结今日工作重点，基于 tasks 和 commits 数据提炼）
+
+## 任务进展
+
+（列出今日有变化的任务，每条格式：）
+- ✅ {任务标题} — 已完成（优先级: {P0/P1/P2}）
+- 🔄 {任务标题} — 进行中（优先级: {P0/P1/P2}）
+- 🆕 {任务标题} — 新增（优先级: {P0/P1/P2}）
+
+## 提交记录
+
+（今日 commit 列表，每条格式：）
+- `{oid前7位}` {commit message 简要说明}
+
+## 明日计划
+
+（从待开始和进行中任务推断，列出 1-5 条建议）
+- {任务标题} — {建议行动}
+
+## 阻塞项
+
+（标记为阻塞或逾期的任务，如无则输出"暂无阻塞项"）
+- ⚠️ {任务标题} — {阻塞原因}
+```
+
+---
+
+## 模式二：团队周报 (`mode: "weekly-team"`)
+
+输出以下 5 个 section，格式严格如下：
+
+```markdown
+# 团队周报 - 第{WW}周 ({YYYY}-{MM}-{DD} ~ {YYYY}-{MM}-{DD})
+
+## 整体进度
+
+- 任务完成率: {X%}
+- 本周完成任务数: {N}
+- 本周新增任务数: {N}
+- 进行中任务数: {N}
+
+## 风险任务
+
+（逾期/即将到期/无进展任务高亮）
+- 🔴 {任务标题} — 逾期 {N} 天（负责人: {name}）
+- 🟡 {任务标题} — 即将到期 {N} 天（负责人: {name}）
+- 🟡 {任务标题} — 连续 {N} 天无进展
+
+## 工作产出概览
+
+（各成员产出概要。如果当前用户不是 Admin，成员名称替换为"成员A/B/C"）
+- {成员名称}: {完成N个任务} / {M次提交} / {K个文档编辑}
+
+## 下周优先级建议
+
+（基于待开始高优先级任务推荐 3-5 条）
+- 🔵 {任务标题} — 优先级 {P0/P1}，建议 {行动}
+
+## 成员活跃度
+
+（各成员提交数/文档编辑数概要，按活跃度排序）
+- {成员名称}: {N} 次提交 / {M} 个文档编辑 / 活跃度 {高/中/低}
+```
+
+---
+
+## 约束
+
+1. 所有数据来源于 input，不编造数据
+2. 如果某 section 无数据，输出"暂无相关数据"
+3. 日期格式统一使用 `YYYY-MM-DD`
+4. 任务优先级使用 P0/P1/P2 标注
+5. 团队周报中非 Admin 用户查看时，成员名称必须匿名化为"成员A/B/C"
+6. 输出必须是合法 Markdown，不使用 HTML 标签
+7. 中文输出，技术术语保留英文

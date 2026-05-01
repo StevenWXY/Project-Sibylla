@@ -1,0 +1,40 @@
+id: weekly-team-report
+version: 1.0.0
+name: 每周团队工作周报
+description: 每周日为管理员自动生成团队工作周报
+scope: admin
+
+triggers:
+  - type: schedule
+    cron: "0 17 * * 0"
+  - type: manual
+    name: 手动生成本周周报
+
+steps:
+  - id: collect-team-data
+    name: 收集团队数据
+    sub_agent: team-report-curator
+    input:
+      task: "收集本周全体成员的工作数据(任务进展、文档贡献、协作活跃度)"
+      source: "weekly-team"
+    on_failure: stop
+
+  - id: generate-team-report
+    name: 生成团队周报
+    skill: daily-report
+    input:
+      data: ${{ steps.collect-team-data.output }}
+      mode: "weekly-team"
+
+  - id: save-team-report
+    name: 保存周报并通知管理员
+    action: internal_notification
+    input:
+      title: "本周团队周报已生成"
+      body: ${{ steps.generate-team-report.output.summary }}
+      channel: admin
+    requires_user_confirm: false
+
+on_workflow_failure:
+  notify_user: true
+  rollback: false

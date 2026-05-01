@@ -644,6 +644,49 @@ interface ElectronAPI {
     acceptSuggestion: (id: string, dwellMs: number) => Promise<IPCResponse<void>>
     onSuggestionShown: (callback: (suggestion: Record<string, unknown>) => void) => () => void
   }
+
+  // Kanban operations (Phase2-TASK010)
+  kanban: {
+    parse: () => Promise<IPCResponse<unknown>>
+    create: (input: Record<string, unknown>) => Promise<IPCResponse<unknown>>
+    updateStatus: (taskId: string, newStatus: string, trigger?: string) => Promise<IPCResponse<void>>
+    dispatchAI: (taskId: string) => Promise<IPCResponse<string>>
+    promote: (ledgerTaskId: string) => Promise<IPCResponse<string>>
+    aiSidebar: () => Promise<IPCResponse<unknown[]>>
+    dismissSuggestion: (taskId: string, suggestedStatus: string) => Promise<IPCResponse<void>>
+    acceptSuggestion: (taskId: string, suggestedStatus: string) => Promise<IPCResponse<void>>
+    onTaskCreated: (callback: (data: Record<string, unknown>) => void) => () => void
+    onStatusChanged: (callback: (data: Record<string, unknown>) => void) => () => void
+  }
+
+  // Decision log operations (Phase2-TASK011)
+  decision: {
+    list: (filters?: Record<string, unknown>) => Promise<IPCResponse<unknown[]>>
+    get: (decisionId: string) => Promise<IPCResponse<unknown | null>>
+    create: (input: Record<string, unknown>) => Promise<IPCResponse<unknown>>
+    updateOutcome: (decisionId: string, actualResult: string) => Promise<IPCResponse<void>>
+    detect: (conversation: string) => Promise<IPCResponse<unknown>>
+  }
+
+  // Report operations (Phase2-TASK012)
+  report: {
+    generate: (reportType: 'daily-personal' | 'weekly-team', params?: Record<string, unknown>) => Promise<IPCResponse<{ runId: string }>>
+    list: () => Promise<IPCResponse<Array<{ type: 'daily' | 'weekly'; date: string; filePath: string }>>>
+    get: (filePath: string) => Promise<IPCResponse<string>>
+  }
+
+  // Productivity operations (Phase2-TASK012)
+  productivity: {
+    analyze: (period: 'week' | 'month' | 'quarter', memberId?: string, viewerId?: string) => Promise<IPCResponse<unknown>>
+    query: (period: 'week' | 'month' | 'quarter', memberId?: string, viewerId?: string) => Promise<IPCResponse<unknown | null>>
+  }
+
+  // Dashboard operations (Phase2-TASK013)
+  dashboard: {
+    overview: (viewerId: string, viewerRole: string) => Promise<IPCResponse<import('../shared/types').DashboardOverviewData>>
+  }
+
+  onAccessPersonalSpace: (callback: (payload: { adminId: string; targetUser: string; timestamp: number }) => void) => () => void
 }
 
 // Whitelist of allowed channels for security
@@ -966,6 +1009,32 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.PROACTIVE_DISMISS_SUGGESTION,
   IPC_CHANNELS.PROACTIVE_ACCEPT_SUGGESTION,
   IPC_CHANNELS.PROACTIVE_SUGGESTION_SHOWN,
+  // Kanban operations (Phase2-TASK010)
+  IPC_CHANNELS.KANBAN_PARSE,
+  IPC_CHANNELS.KANBAN_CREATE,
+  IPC_CHANNELS.KANBAN_UPDATE_STATUS,
+  IPC_CHANNELS.KANBAN_DISPATCH_AI,
+  IPC_CHANNELS.KANBAN_PROMOTE,
+  IPC_CHANNELS.KANBAN_AI_SIDEBAR,
+  IPC_CHANNELS.KANBAN_DISMISS_SUGGESTION,
+  IPC_CHANNELS.KANBAN_ACCEPT_SUGGESTION,
+  // Decision log operations (Phase2-TASK011)
+  IPC_CHANNELS.DECISION_LIST,
+  IPC_CHANNELS.DECISION_GET,
+  IPC_CHANNELS.DECISION_CREATE,
+  IPC_CHANNELS.DECISION_UPDATE_OUTCOME,
+  IPC_CHANNELS.DECISION_DETECT,
+  // Report operations (Phase2-TASK012)
+  IPC_CHANNELS.REPORT_GENERATE,
+  IPC_CHANNELS.REPORT_LIST,
+  IPC_CHANNELS.REPORT_GET,
+  // Productivity operations (Phase2-TASK012)
+  IPC_CHANNELS.PRODUCTIVITY_ANALYZE,
+  IPC_CHANNELS.PRODUCTIVITY_QUERY,
+  // Dashboard operations (Phase2-TASK013)
+  IPC_CHANNELS.DASHBOARD_OVERVIEW,
+  // Admin access push events (Phase2-TASK014)
+  IPC_CHANNELS.ADMIN_ACCESS_PERSONAL_SPACE,
 ]
 
 /**
@@ -2346,6 +2415,96 @@ const api: ElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.PROACTIVE_SUGGESTION_SHOWN, handler)
       return () => { ipcRenderer.off(IPC_CHANNELS.PROACTIVE_SUGGESTION_SHOWN, handler) }
     },
+  },
+
+  kanban: {
+    parse: async () => {
+      return await safeInvoke<unknown>(IPC_CHANNELS.KANBAN_PARSE, '')
+    },
+    create: async (input: Record<string, unknown>) => {
+      return await safeInvoke<unknown>(IPC_CHANNELS.KANBAN_CREATE, input)
+    },
+    updateStatus: async (taskId: string, newStatus: string, trigger?: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.KANBAN_UPDATE_STATUS, taskId, newStatus, trigger)
+    },
+    dispatchAI: async (taskId: string) => {
+      return await safeInvoke<string>(IPC_CHANNELS.KANBAN_DISPATCH_AI, taskId)
+    },
+    promote: async (ledgerTaskId: string) => {
+      return await safeInvoke<string>(IPC_CHANNELS.KANBAN_PROMOTE, ledgerTaskId)
+    },
+    aiSidebar: async () => {
+      return await safeInvoke<unknown[]>(IPC_CHANNELS.KANBAN_AI_SIDEBAR)
+    },
+    dismissSuggestion: async (taskId: string, suggestedStatus: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.KANBAN_DISMISS_SUGGESTION, taskId, suggestedStatus)
+    },
+    acceptSuggestion: async (taskId: string, suggestedStatus: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.KANBAN_ACCEPT_SUGGESTION, taskId, suggestedStatus)
+    },
+    onTaskCreated: (callback: (data: Record<string, unknown>) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data as Record<string, unknown>)
+      ipcRenderer.on(IPC_CHANNELS.EVENT_PUSH, handler)
+      return () => { ipcRenderer.off(IPC_CHANNELS.EVENT_PUSH, handler) }
+    },
+    onStatusChanged: (callback: (data: Record<string, unknown>) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, data: unknown) => callback(data as Record<string, unknown>)
+      ipcRenderer.on(IPC_CHANNELS.EVENT_PUSH, handler)
+      return () => { ipcRenderer.off(IPC_CHANNELS.EVENT_PUSH, handler) }
+    },
+  },
+
+  decision: {
+    list: async (filters?: Record<string, unknown>) => {
+      return await safeInvoke<unknown[]>(IPC_CHANNELS.DECISION_LIST, filters)
+    },
+    get: async (decisionId: string) => {
+      return await safeInvoke<unknown | null>(IPC_CHANNELS.DECISION_GET, decisionId)
+    },
+    create: async (input: Record<string, unknown>) => {
+      return await safeInvoke<unknown>(IPC_CHANNELS.DECISION_CREATE, input)
+    },
+    updateOutcome: async (decisionId: string, actualResult: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.DECISION_UPDATE_OUTCOME, decisionId, actualResult)
+    },
+    detect: async (conversation: string) => {
+      return await safeInvoke<unknown>(IPC_CHANNELS.DECISION_DETECT, conversation)
+    },
+  },
+
+  report: {
+    generate: async (reportType: 'daily-personal' | 'weekly-team', params?: Record<string, unknown>) => {
+      return await safeInvoke<{ runId: string }>(IPC_CHANNELS.REPORT_GENERATE, reportType, params)
+    },
+    list: async () => {
+      return await safeInvoke<Array<{ type: 'daily' | 'weekly'; date: string; filePath: string }>>(IPC_CHANNELS.REPORT_LIST)
+    },
+    get: async (filePath: string) => {
+      return await safeInvoke<string>(IPC_CHANNELS.REPORT_GET, filePath)
+    },
+  },
+
+  productivity: {
+    analyze: async (period: 'week' | 'month' | 'quarter', memberId?: string, viewerId?: string) => {
+      return await safeInvoke<unknown>(IPC_CHANNELS.PRODUCTIVITY_ANALYZE, period, memberId, viewerId)
+    },
+    query: async (period: 'week' | 'month' | 'quarter', memberId?: string, viewerId?: string) => {
+      return await safeInvoke<unknown | null>(IPC_CHANNELS.PRODUCTIVITY_QUERY, period, memberId, viewerId)
+    },
+  },
+
+  dashboard: {
+    overview: async (viewerId: string, viewerRole: string) => {
+      return await safeInvoke<import('../shared/types').DashboardOverviewData>(IPC_CHANNELS.DASHBOARD_OVERVIEW, viewerId, viewerRole)
+    },
+  },
+
+  onAccessPersonalSpace: (callback: (payload: { adminId: string; targetUser: string; timestamp: number }) => void) => {
+    const handler = (_event: IpcRendererEvent, payload: { adminId: string; targetUser: string; timestamp: number }) => callback(payload)
+    ipcRenderer.on(IPC_CHANNELS.ADMIN_ACCESS_PERSONAL_SPACE, handler)
+    return () => {
+      ipcRenderer.off(IPC_CHANNELS.ADMIN_ACCESS_PERSONAL_SPACE, handler)
+    }
   },
 }
 
