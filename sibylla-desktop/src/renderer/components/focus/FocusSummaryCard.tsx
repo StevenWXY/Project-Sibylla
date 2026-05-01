@@ -16,16 +16,6 @@ export function FocusSummaryCard() {
     }
   }, [summary, dismissed])
 
-  useEffect(() => {
-    if (!visible) return
-
-    const timer = setTimeout(() => {
-      handleClose()
-    }, 15000)
-
-    return () => clearTimeout(timer)
-  }, [visible])
-
   const handleClose = useCallback(() => {
     setVisible(false)
     setDismissed(true)
@@ -34,6 +24,16 @@ export function FocusSummaryCard() {
       setDismissed(false)
     }, 300)
   }, [setSummary])
+
+  useEffect(() => {
+    if (!visible) return
+
+    const timer = setTimeout(() => {
+      handleClose()
+    }, 15000)
+
+    return () => clearTimeout(timer)
+  }, [visible, handleClose])
 
   if (!summary) return null
 

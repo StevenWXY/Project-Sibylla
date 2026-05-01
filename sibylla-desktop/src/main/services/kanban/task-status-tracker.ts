@@ -174,7 +174,7 @@ export class TaskStatusTracker {
     }
   }
 
-  private detectStaleRisk(deadline: string, taskId: string): StatusSignal | null {
+  private detectStaleRisk(deadline: string, _taskId: string): StatusSignal | null {
     const deadlineDate = new Date(deadline)
     const now = Date.now()
     const msUntilDeadline = deadlineDate.getTime() - now

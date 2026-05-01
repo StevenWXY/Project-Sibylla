@@ -5,13 +5,6 @@ interface ReportViewerProps {
   filePath?: string
 }
 
-const DIMENSION_COLORS: Record<string, string> = {
-  taskCompletion: '#6366F1',
-  docContribution: '#8B5CF6',
-  collabResponsiveness: '#EC4899',
-  knowledgeContribution: '#F59E0B',
-}
-
 export const ReportViewer: React.FC<ReportViewerProps> = ({ filePath }) => {
   const reports = useReportStore((s) => s.reports)
   const currentReport = useReportStore((s) => s.currentReport)

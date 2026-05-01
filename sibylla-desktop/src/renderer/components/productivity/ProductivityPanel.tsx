@@ -30,7 +30,6 @@ export const ProductivityPanel: React.FC = () => {
   const error = useProductivityStore((s) => s.error)
   const analyze = useProductivityStore((s) => s.analyze)
   const setPeriod = useProductivityStore((s) => s.setPeriod)
-  const selectMember = useProductivityStore((s) => s.selectMember)
 
   useEffect(() => {
     analyze(period, selectedMemberId ?? undefined)

@@ -11,7 +11,6 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useKanbanStore } from '../../store/kanbanStore'
 import { KanbanTaskCard } from './KanbanTaskCard'
 import { KanbanCreateForm } from './KanbanCreateForm'
-import type { KanbanTask } from '../../store/kanbanStore'
 
 const COLUMN_CONFIG: Array<{
   id: '待开始' | '进行中' | '已完成'

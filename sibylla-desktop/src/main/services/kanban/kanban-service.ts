@@ -16,8 +16,6 @@ const TASK_ID_RE = /<!--\s*task-id:\s*(\S+)(?:\s+(ai-linked))?\s*-->/
 const AI_SUGGESTED_RE = /<!--\s*ai-suggested\s*-->/
 const METADATA_RE = /^\s+-\s+(负责人|优先级|截止日期|关联文件|完成时间)\s*:\s*(.+)/
 
-const COLUMNS: KanbanColumn[] = ['待开始', '进行中', '已完成']
-
 export class KanbanService {
   private modelCache: KanbanModel | null = null
   private unsubscribeFns: Array<() => void> = []
@@ -142,7 +140,7 @@ export class KanbanService {
         const idMatch = TASK_ID_RE.exec(restOfLine)
         const hasAiSuggested = AI_SUGGESTED_RE.test(restOfLine)
 
-        let title = restOfLine
+        const title = restOfLine
           .replace(TASK_ID_RE, '')
           .replace(AI_SUGGESTED_RE, '')
           .trim()
@@ -234,7 +232,7 @@ export class KanbanService {
       throw new Error(`Task ${taskId} not found in tasks.md`)
     }
 
-    const { modifiedContent, from, to } = this.moveTaskInContent(
+    const { modifiedContent, from } = this.moveTaskInContent(
       lines,
       taskId,
       oldStatus,

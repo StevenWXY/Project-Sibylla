@@ -212,14 +212,17 @@ export class DecisionLogger {
     let fileName = `${baseName}.md`
     let counter = 2
 
-    while (true) {
-      const exists = await this
+    let exists = await this
+      .safeAccess(path.join(dir, fileName))
+      .then(() => true)
+      .catch(() => false)
+    while (exists) {
+      fileName = `${baseName}-${counter}.md`
+      counter++
+      exists = await this
         .safeAccess(path.join(dir, fileName))
         .then(() => true)
         .catch(() => false)
-      if (!exists) break
-      fileName = `${baseName}-${counter}.md`
-      counter++
     }
 
     return fileName

@@ -470,7 +470,7 @@ export class ProductivityAnalyzer {
 
   private computeTeamMaxKnowledge(authorFiles: Map<string, Set<string>>): number {
     let max = 0
-    for (const [_author, files] of authorFiles) {
+    for (const [, files] of authorFiles) {
       let score = 0
       for (const filePath of files) {
         const linkCount = this.wikiLinksStore.getLinkCount(filePath)
