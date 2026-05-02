@@ -110,6 +110,7 @@ export const IPC_CHANNELS = {
   FILE_LIST: 'file:list',
   FILE_INFO: 'file:info',
   FILE_EXISTS: 'file:exists',
+  FILE_SHOW_IN_MANAGER: 'file:show-in-manager',
   
   // Directory operations
   DIR_CREATE: 'dir:create',
@@ -668,6 +669,7 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.FILE_LIST]: { params: [path: string, options?: ListFilesOptions]; return: FileInfo[] }
   [IPC_CHANNELS.FILE_INFO]: { params: [path: string]; return: FileInfo }
   [IPC_CHANNELS.FILE_EXISTS]: { params: [path: string]; return: boolean }
+  [IPC_CHANNELS.FILE_SHOW_IN_MANAGER]: { params: [path: string]; return: void }
 
   // Directory operations
   [IPC_CHANNELS.DIR_CREATE]: { params: [path: string, recursive?: boolean]; return: void }

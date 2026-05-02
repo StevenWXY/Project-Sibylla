@@ -739,6 +739,21 @@ export function WorkspaceStudioPage() {
     [openFile, pushNotification]
   )
 
+  const addToAIContext = useCallback((filePath: string) => {
+    const mention = `@${filePath}`
+    setChatInput((previous) => {
+      const trimmed = previous.trim()
+      if (!trimmed) {
+        return mention
+      }
+      if (trimmed.includes(mention)) {
+        return previous
+      }
+      return `${mention}\n${previous}`
+    })
+    setFocusComposerSignal((value) => value + 1)
+  }, [])
+
   const quickStartAIPrompt = useCallback(() => {
     setChatInput((previous) => {
       const trimmed = previous.trim()
@@ -1234,6 +1249,12 @@ export function WorkspaceStudioPage() {
           if (node.type === 'file') {
             void openFile(node.path)
           }
+        }}
+        onAddToAIContext={addToAIContext}
+        onRevealInManager={async (path: string) => {
+          try {
+            await window.electronAPI.file.showInManager(path)
+          } catch { /* ignore */ }
         }}
         activeTool={activeTool}
         onChangeTool={setActiveTool}

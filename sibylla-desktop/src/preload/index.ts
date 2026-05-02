@@ -204,6 +204,7 @@ interface ElectronAPI {
     list: (path: string, options?: ListFilesOptions) => Promise<IPCResponse<FileInfo[]>>
     getInfo: (path: string) => Promise<IPCResponse<FileInfo>>
     exists: (path: string) => Promise<IPCResponse<boolean>>
+    showInManager: (path: string) => Promise<IPCResponse<void>>
     
     // Directory operations
     createDir: (path: string, recursive?: boolean) => Promise<IPCResponse<void>>
@@ -709,6 +710,7 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.FILE_LIST,
   IPC_CHANNELS.FILE_INFO,
   IPC_CHANNELS.FILE_EXISTS,
+  IPC_CHANNELS.FILE_SHOW_IN_MANAGER,
   // Directory operations
   IPC_CHANNELS.DIR_CREATE,
   IPC_CHANNELS.DIR_DELETE,
@@ -1180,6 +1182,10 @@ const api: ElectronAPI = {
     
     exists: async (path: string) => {
       return await safeInvoke<boolean>(IPC_CHANNELS.FILE_EXISTS, path)
+    },
+    
+    showInManager: async (path: string) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_SHOW_IN_MANAGER, path)
     },
     
     createDir: async (path: string, recursive?: boolean) => {

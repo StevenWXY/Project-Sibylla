@@ -1,9 +1,12 @@
 import { useEffect, useMemo } from 'react'
 import {
+  Clipboard,
   Copy,
   FilePlus2,
   FolderPlus,
+  FolderOpen,
   History,
+  MessageSquarePlus,
   Pencil,
   Trash2,
 } from 'lucide-react'
@@ -16,10 +19,13 @@ interface TreeContextMenuProps {
   node: FileTreeNode
   onClose: () => void
   onRename: () => void
-  onCopyPath: () => void
+  onCopyRelativePath: () => void
+  onCopyAbsolutePath: () => void
   onDelete: () => void
   onCreateFile: () => void
   onCreateFolder: () => void
+  onRevealInManager: () => void
+  onAddToAIContext: () => void
   onViewHistory?: () => void
 }
 
@@ -30,6 +36,7 @@ interface MenuItem {
   action: () => void
   danger?: boolean
   separator?: boolean
+  shortcut?: string
 }
 
 export function TreeContextMenu({
@@ -38,10 +45,13 @@ export function TreeContextMenu({
   node,
   onClose,
   onRename,
-  onCopyPath,
+  onCopyRelativePath,
+  onCopyAbsolutePath,
   onDelete,
   onCreateFile,
   onCreateFolder,
+  onRevealInManager,
+  onAddToAIContext,
   onViewHistory,
 }: TreeContextMenuProps) {
   const isFolder = node.type === 'folder'
@@ -73,19 +83,45 @@ export function TreeContextMenu({
         label: '重命名',
         icon: <Pencil className="h-3.5 w-3.5" />,
         action: onRename,
+        shortcut: 'F2',
+      },
+      { key: 'sep-copy', label: '', icon: null, action: () => undefined, separator: true },
+      {
+        key: 'copy-relative',
+        label: '复制相对路径',
+        icon: <Copy className="h-3.5 w-3.5" />,
+        action: onCopyRelativePath,
+        shortcut: '⌥⇧C',
       },
       {
-        key: 'copy',
-        label: '复制路径',
-        icon: <Copy className="h-3.5 w-3.5" />,
-        action: onCopyPath,
+        key: 'copy-absolute',
+        label: '复制绝对路径',
+        icon: <Clipboard className="h-3.5 w-3.5" />,
+        action: onCopyAbsolutePath,
+        shortcut: '⌥⇧⌘C',
+      },
+    )
+
+    baseItems.push(
+      { key: 'sep-actions', label: '', icon: null, action: () => undefined, separator: true },
+      {
+        key: 'reveal',
+        label: '在文件管理器中显示',
+        icon: <FolderOpen className="h-3.5 w-3.5" />,
+        action: onRevealInManager,
+      },
+      {
+        key: 'add-context',
+        label: '添加至 AI 对话上下文',
+        icon: <MessageSquarePlus className="h-3.5 w-3.5" />,
+        action: onAddToAIContext,
       },
     )
 
     if (!isFolder && onViewHistory) {
       baseItems.push({
         key: 'view-history',
-        label: '查看历史',
+        label: '查看历史版本',
         icon: <History className="h-3.5 w-3.5" />,
         action: onViewHistory,
       })
@@ -103,7 +139,18 @@ export function TreeContextMenu({
     )
 
     return baseItems
-  }, [isFolder, onCopyPath, onCreateFile, onCreateFolder, onDelete, onRename, onViewHistory])
+  }, [
+    isFolder,
+    onCopyRelativePath,
+    onCopyAbsolutePath,
+    onCreateFile,
+    onCreateFolder,
+    onDelete,
+    onRename,
+    onRevealInManager,
+    onAddToAIContext,
+    onViewHistory,
+  ])
 
   useEffect(() => {
     const handleClickOutside = () => onClose()
@@ -123,14 +170,14 @@ export function TreeContextMenu({
     }
   }, [onClose])
 
-  const maxWidth = 220
-  const maxHeight = 280
+  const maxWidth = 260
+  const maxHeight = 380
   const nextLeft = Math.min(x, Math.max(0, window.innerWidth - maxWidth - 12))
   const nextTop = Math.min(y, Math.max(0, window.innerHeight - maxHeight - 12))
 
   return (
     <div
-      className="fixed z-50 w-52 rounded-lg border border-gray-200 bg-white/95 p-1 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-sys-black/95"
+      className="fixed z-50 w-64 rounded-lg border border-gray-200 bg-white/95 p-1 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-sys-black/95"
       style={{ left: nextLeft, top: nextTop }}
       role="menu"
       aria-label="文件树操作菜单"
@@ -155,8 +202,13 @@ export function TreeContextMenu({
             }}
             role="menuitem"
           >
-            {item.icon}
-            <span>{item.label}</span>
+            <span className="shrink-0">{item.icon}</span>
+            <span className="flex-1">{item.label}</span>
+            {item.shortcut && (
+              <span className="ml-auto text-[10px] text-gray-400 dark:text-sys-darkMuted">
+                {item.shortcut}
+              </span>
+            )}
           </button>
         )
       )}

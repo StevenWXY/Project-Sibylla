@@ -7,14 +7,18 @@ import {
   ClipboardList,
   Code2,
   Circle,
+  Copy,
   FilePlus2,
   FileText,
   Folder,
   FolderOpen,
   FolderPlus,
   Loader2,
+  MessageSquarePlus,
+  Pencil,
   RefreshCw,
   Search,
+  Trash2,
 } from 'lucide-react'
 import React from 'react'
 import {
@@ -49,6 +53,8 @@ interface StudioLeftPanelProps {
   onMove: (sourcePath: string, targetFolderPath: string) => Promise<void> | void
   onCopyPath: (path: string) => Promise<void> | void
   onSelect: (node: FileTreeNode) => void
+  onAddToAIContext?: (path: string) => void
+  onRevealInManager?: (path: string) => Promise<void> | void
 
   activeTool: LeftToolMode
   onChangeTool: (mode: LeftToolMode) => void
@@ -112,7 +118,12 @@ export function StudioLeftPanel({
   onRefresh,
   onCreateFile,
   onCreateFolder,
+  onRename,
+  onDelete,
+  onCopyPath,
   onSelect,
+  onAddToAIContext,
+  onRevealInManager,
   activeTool,
   onChangeTool,
   searchQuery,
@@ -139,6 +150,11 @@ export function StudioLeftPanel({
     }
     return initial
   })
+  const [contextMenu, setContextMenu] = React.useState<{
+    x: number
+    y: number
+    node: FileTreeNode
+  } | null>(null)
   const sortedTree = React.useMemo(() => sortNodesForSidebar(treeNodes), [treeNodes])
 
   React.useEffect(() => {
@@ -239,6 +255,11 @@ export function StudioLeftPanel({
             } else {
               onSelect(node)
             }
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            setContextMenu({ x: event.clientX, y: event.clientY, node })
           }}
           className={cn(
             'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-[13px] transition-colors',
@@ -514,6 +535,145 @@ export function StudioLeftPanel({
           <span className="font-medium text-sm">倒入你的大脑</span>
         </button>
       )}
+      {contextMenu && (
+        <StudioFileContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          node={contextMenu.node}
+          onClose={() => setContextMenu(null)}
+          onRename={() => {
+            const name = window.prompt('New name', contextMenu.node.name)?.trim()
+            if (!name) return
+            const parentPath = getParentPath(contextMenu.node.path)
+            const newPath = joinPath(parentPath, name)
+            void onRename(contextMenu.node.path, newPath)
+          }}
+          onCopyPath={() => {
+            void onCopyPath(contextMenu.node.path)
+          }}
+          onDelete={() => {
+            if (window.confirm(contextMenu.node.type === 'folder'
+              ? `Delete folder "${contextMenu.node.name}"?`
+              : `Delete file "${contextMenu.node.name}"?`
+            )) {
+              void onDelete(contextMenu.node)
+            }
+          }}
+          onRevealInManager={onRevealInManager
+            ? () => void onRevealInManager(contextMenu.node.path)
+            : () => void window.electronAPI.file.showInManager(contextMenu.node.path)
+          }
+          onAddToAIContext={onAddToAIContext
+            ? () => onAddToAIContext(contextMenu.node.path)
+            : undefined
+          }
+        />
+      )}
     </aside>
   )
 }
+
+function StudioFileContextMenu({
+  x,
+  y,
+  node,
+  onClose,
+  onRename,
+  onCopyPath,
+  onDelete,
+  onRevealInManager,
+  onAddToAIContext,
+}: {
+  x: number
+  y: number
+  node: FileTreeNode
+  onClose: () => void
+  onRename: () => void
+  onCopyPath: () => void
+  onDelete: () => void
+  onRevealInManager?: () => void
+  onAddToAIContext?: () => void
+}) {
+  const isFolder = node.type === 'folder'
+
+  React.useEffect(() => {
+    const handleClickOutside = () => onClose()
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('click', handleClickOutside)
+    window.addEventListener('contextmenu', handleClickOutside)
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      window.removeEventListener('click', handleClickOutside)
+      window.removeEventListener('contextmenu', handleClickOutside)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [onClose])
+
+  const maxWidth = 260
+  const maxHeight = 300
+  const nextLeft = Math.min(x, Math.max(0, window.innerWidth - maxWidth - 12))
+  const nextTop = Math.min(y, Math.max(0, window.innerHeight - maxHeight - 12))
+
+  return (
+    <div
+      className="fixed z-50 w-60 rounded-lg border border-white/10 bg-[#0A0A0A]/95 p-1 shadow-2xl backdrop-blur"
+      style={{ left: nextLeft, top: nextTop }}
+      role="menu"
+    >
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-gray-400 transition-colors hover:bg-white/5 hover:text-gray-200"
+        onClick={() => { onRename(); onClose() }}
+        role="menuitem"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+        <span>重命名</span>
+        <span className="ml-auto text-[10px] text-gray-600">F2</span>
+      </button>
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-gray-400 transition-colors hover:bg-white/5 hover:text-gray-200"
+        onClick={() => { onCopyPath(); onClose() }}
+        role="menuitem"
+      >
+        <Copy className="h-3.5 w-3.5" />
+        <span>复制路径</span>
+      </button>
+      {onRevealInManager && (
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-gray-400 transition-colors hover:bg-white/5 hover:text-gray-200"
+          onClick={() => { onRevealInManager(); onClose() }}
+          role="menuitem"
+        >
+          <FolderOpen className="h-3.5 w-3.5" />
+          <span>在文件管理器中显示</span>
+        </button>
+      )}
+      {onAddToAIContext && (
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-gray-400 transition-colors hover:bg-white/5 hover:text-gray-200"
+          onClick={() => { onAddToAIContext(); onClose() }}
+          role="menuitem"
+        >
+          <MessageSquarePlus className="h-3.5 w-3.5" />
+          <span>添加至 AI 上下文</span>
+        </button>
+      )}
+      <div className="my-1 h-px bg-white/10" />
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-red-400 transition-colors hover:bg-red-900/30 hover:text-red-300"
+        onClick={() => { onDelete(); onClose() }}
+        role="menuitem"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        <span>{isFolder ? '删除文件夹' : '删除文件'}</span>
+      </button>
+    </div>
+  )
+}
+

@@ -48,6 +48,10 @@ export function getDirectoryStructure(_workspacePath: string): DirectoryNode[] {
     { path: WORKSPACE_STRUCTURE.SYSTEM_MEMORY_DAILY_DIR, type: 'directory' },
     { path: WORKSPACE_STRUCTURE.SYSTEM_MEMORY_ARCHIVES_DIR, type: 'directory' },
     
+    // Specs directories
+    { path: WORKSPACE_STRUCTURE.SPECS_DIR, type: 'directory' },
+    { path: WORKSPACE_STRUCTURE.PLANS_DIR, type: 'directory' },
+    
     // Main directories
     { path: WORKSPACE_STRUCTURE.SKILLS_DIR, type: 'directory' },
     { path: WORKSPACE_STRUCTURE.DOCS_DIR, type: 'directory' },
@@ -166,10 +170,10 @@ export function generateMemoryTemplate(options: CreateWorkspaceOptions): string 
 
 ## 常用参考
 
-- [CLAUDE.md](./CLAUDE.md) - 项目宪法
-- [requirements.md](./requirements.md) - 需求文档
-- [design.md](./design.md) - 方案设计
-- [tasks.md](./tasks.md) - 任务清单
+- [CLAUDE.md](../CLAUDE.md) - 项目宪法
+- [requirements.md](../specs/requirements.md) - 需求文档
+- [design.md](../specs/design.md) - 方案设计
+- [tasks.md](../specs/tasks.md) - 任务清单
 
 ---
 
@@ -490,11 +494,14 @@ export function generateInitialDocuments(
   // Root documents
   documents.set(WORKSPACE_STRUCTURE.ROOT_CLAUDE, generateClaudeTemplate(options))
   documents.set(WORKSPACE_STRUCTURE.ROOT_MEMORY, generateMemoryTemplate(options))
-  documents.set(WORKSPACE_STRUCTURE.ROOT_REQUIREMENTS, generateRequirementsTemplate(options))
-  documents.set(WORKSPACE_STRUCTURE.ROOT_DESIGN, generateDesignTemplate(options))
-  documents.set(WORKSPACE_STRUCTURE.ROOT_TASKS, generateTasksTemplate(options))
   documents.set(WORKSPACE_STRUCTURE.ROOT_CHANGELOG, generateChangelogTemplate(options))
   documents.set(WORKSPACE_STRUCTURE.ROOT_TOKENOMICS, generateTokenomicsTemplate(options))
+  documents.set(WORKSPACE_STRUCTURE.ROOT_README, generateReadmeTemplate(options))
+  
+  // Specs documents (consolidated)
+  documents.set(WORKSPACE_STRUCTURE.SPECS_REQUIREMENTS, generateRequirementsTemplate(options))
+  documents.set(WORKSPACE_STRUCTURE.SPECS_DESIGN, generateDesignTemplate(options))
+  documents.set(WORKSPACE_STRUCTURE.SPECS_TASKS, generateTasksTemplate(options))
   
   // Skills index
   documents.set(WORKSPACE_STRUCTURE.SKILLS_INDEX, generateSkillsIndexTemplate(options))
@@ -506,6 +513,65 @@ export function generateInitialDocuments(
   }
   
   return documents
+}
+
+/**
+ * Generate README.md template
+ * 
+ * @param options - Workspace creation options
+ * @returns README.md content
+ */
+export function generateReadmeTemplate(options: CreateWorkspaceOptions): string {
+  const today = new Date().toISOString().split('T')[0]
+  
+  return `# ${options.name}
+
+${options.description}
+
+## 目录结构
+
+\`\`\`
+.
+├── .sibylla/          # 系统配置（自动管理）
+├── specs/             # 项目规格文档
+│   ├── requirements.md  # 需求文档
+│   ├── design.md        # 方案设计
+│   ├── tasks.md         # 任务清单
+│   └── plans/           # Plan 模式自动生成的规划文件
+├── skills/            # 可复用的 AI Skill 模块
+├── docs/              # 项目文档
+├── personal/          # 个人空间（按成员隔离）
+├── data/              # 数据文件
+├── assets/            # 静态资源
+├── CLAUDE.md          # 项目宪法（AI 最高优先级上下文）
+├── MEMORY.md          # 团队共享记忆
+├── changelog.md       # 变更日志
+├── tokenomics.md      # 积分经济模型
+└── README.md          # 本文件
+\`\`\`
+
+## 快速开始
+
+1. 在 Sibylla 中打开此工作区
+2. 在 AI 对话中输入 \`#skill-name\` 触发预设 Skill
+3. 查看 \`specs/\` 目录了解需求和设计
+4. 查看 \`skills/_index.md\` 了解可用 Skill
+
+## 关键文件
+
+| 文件 | 用途 |
+|------|------|
+| [CLAUDE.md](./CLAUDE.md) | 项目宪法，AI 每次会话必读 |
+| [MEMORY.md](./MEMORY.md) | 团队共享记忆，自动维护 |
+| [specs/requirements.md](./specs/requirements.md) | 需求规格 |
+| [specs/design.md](./specs/design.md) | 技术方案 |
+| [specs/tasks.md](./specs/tasks.md) | 任务清单 |
+
+---
+
+**创建时间：** ${today}  
+**创建人：** ${options.owner.name}
+`.trim()
 }
 
 /**

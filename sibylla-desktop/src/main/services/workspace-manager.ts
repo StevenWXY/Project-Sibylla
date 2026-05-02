@@ -481,15 +481,15 @@ export class WorkspaceManager {
         content: generateMemoryTemplate(options),
       },
       {
-        path: WORKSPACE_STRUCTURE.ROOT_REQUIREMENTS,
+        path: WORKSPACE_STRUCTURE.SPECS_REQUIREMENTS,
         content: generateRequirementsTemplate(options),
       },
       {
-        path: WORKSPACE_STRUCTURE.ROOT_DESIGN,
+        path: WORKSPACE_STRUCTURE.SPECS_DESIGN,
         content: generateDesignTemplate(options),
       },
       {
-        path: WORKSPACE_STRUCTURE.ROOT_TASKS,
+        path: WORKSPACE_STRUCTURE.SPECS_TASKS,
         content: generateTasksTemplate(options),
       },
       {

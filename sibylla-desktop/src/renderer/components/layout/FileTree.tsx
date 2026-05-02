@@ -35,6 +35,7 @@ interface FileTreeProps {
   onRefresh?: () => Promise<void> | void
   onCopyPath?: (path: string) => Promise<void> | void
   onFolderExpand?: (folderPath: string) => Promise<void> | void
+  onAddToAIContext?: (path: string) => void
   openPaths?: string[]
   dirtyPaths?: string[]
   className?: string
@@ -78,6 +79,7 @@ export function FileTree({
   onRefresh,
   onCopyPath,
   onFolderExpand,
+  onAddToAIContext,
   openPaths = [],
   dirtyPaths = [],
   className,
@@ -245,15 +247,21 @@ export function FileTree({
     const targetPath = joinPath(pendingCreate.parentPath, nextName.trim())
     try {
       if (pendingCreate.type === 'file') {
-        if (!onCreateFile) {
+        if (onCreateFile) {
+          await onCreateFile(targetPath)
+        } else if (useStore) {
+          await useFileTreeStore.getState().createFile(targetPath)
+        } else {
           throw new Error('当前不支持新建文件')
         }
-        await onCreateFile(targetPath)
       } else {
-        if (!onCreateFolder) {
+        if (onCreateFolder) {
+          await onCreateFolder(targetPath)
+        } else if (useStore) {
+          await useFileTreeStore.getState().createFolder(targetPath)
+        } else {
           throw new Error('当前不支持新建文件夹')
         }
-        await onCreateFolder(targetPath)
       }
       setPendingCreate(null)
       setActionError(null)
@@ -332,7 +340,7 @@ export function FileTree({
     }
   }, [deleteTarget, onDelete, useStore, storeSelectNode, effectiveSelectedId])
 
-  const handleCopyPath = useCallback(async (path: string): Promise<void> => {
+  const handleCopyRelativePath = useCallback(async (path: string): Promise<void> => {
     try {
       if (onCopyPath) {
         await onCopyPath(path)
@@ -344,6 +352,31 @@ export function FileTree({
       setActionError(error instanceof Error ? error.message : '复制路径失败')
     }
   }, [onCopyPath])
+
+  const handleCopyAbsolutePath = useCallback(async (path: string): Promise<void> => {
+    try {
+      const response = await window.electronAPI.workspace.getCurrent()
+      const workspacePath = response.success && response.data?.metadata?.path
+        ? response.data.metadata.path
+        : ''
+      const absolutePath = workspacePath ? `${workspacePath}/${path}` : path
+      await copyToClipboard(absolutePath)
+      setActionError(null)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '复制路径失败')
+    }
+  }, [])
+
+  const handleRevealInManager = useCallback(async (path: string): Promise<void> => {
+    try {
+      const response = await window.electronAPI.file.showInManager(path)
+      if (!response.success) {
+        setActionError(response.error?.message ?? '无法在文件管理器中显示')
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '无法在文件管理器中显示')
+    }
+  }, [])
 
   const handleKeyNavigation = useCallback(async (event: React.KeyboardEvent): Promise<void> => {
     if (effectiveRenamingPath || pendingCreate) {
@@ -617,10 +650,13 @@ export function FileTree({
           node={contextMenu.node}
           onClose={closeContextMenu}
           onRename={() => beginRename(contextMenu.node.path)}
-          onCopyPath={() => void handleCopyPath(contextMenu.node.path)}
+          onCopyRelativePath={() => void handleCopyRelativePath(contextMenu.node.path)}
+          onCopyAbsolutePath={() => void handleCopyAbsolutePath(contextMenu.node.path)}
           onDelete={() => setDeleteTarget(contextMenu.node)}
           onCreateFile={() => beginCreate('file', contextMenu.node.type === 'folder' ? contextMenu.node.path : getParentPath(contextMenu.node.path))}
           onCreateFolder={() => beginCreate('folder', contextMenu.node.type === 'folder' ? contextMenu.node.path : getParentPath(contextMenu.node.path))}
+          onRevealInManager={() => void handleRevealInManager(contextMenu.node.path)}
+          onAddToAIContext={() => onAddToAIContext?.(contextMenu.node.path)}
           onViewHistory={contextMenu.node.type === 'file' ? () => useVersionHistoryStore.getState().openPanel(contextMenu.node.path) : undefined}
         />
       )}

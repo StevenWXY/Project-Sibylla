@@ -11,7 +11,7 @@
  * and may block or require confirmation before the actual file operation proceeds.
  */
 
-import { BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, ipcMain, IpcMainInvokeEvent, shell } from 'electron'
 import { IpcHandler } from '../handler'
 import { FileManager } from '../../services/file-manager'
 import { ImportManager } from '../../services/import-manager'
@@ -170,6 +170,7 @@ export class FileHandler extends IpcHandler {
     ipcMain.handle(IPC_CHANNELS.FILE_INFO, this.safeHandle(this.getFileInfo.bind(this)))
     ipcMain.handle(IPC_CHANNELS.FILE_EXISTS, this.safeHandle(this.exists.bind(this)))
     ipcMain.handle(IPC_CHANNELS.FILE_LIST, this.safeHandle(this.listFiles.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.FILE_SHOW_IN_MANAGER, this.safeHandle(this.showInFileManager.bind(this)))
     
     // Directory operations
     ipcMain.handle(IPC_CHANNELS.DIR_CREATE, this.safeHandle(this.createDirectory.bind(this)))
@@ -210,6 +211,7 @@ export class FileHandler extends IpcHandler {
     ipcMain.removeHandler(IPC_CHANNELS.FILE_INFO)
     ipcMain.removeHandler(IPC_CHANNELS.FILE_EXISTS)
     ipcMain.removeHandler(IPC_CHANNELS.FILE_LIST)
+    ipcMain.removeHandler(IPC_CHANNELS.FILE_SHOW_IN_MANAGER)
     ipcMain.removeHandler(IPC_CHANNELS.DIR_CREATE)
     ipcMain.removeHandler(IPC_CHANNELS.DIR_DELETE)
     ipcMain.removeHandler(IPC_CHANNELS.FILE_WATCH_START)
@@ -402,6 +404,21 @@ export class FileHandler extends IpcHandler {
     
     // Convert Date objects to ISO 8601 strings
     return files.map(file => this.convertFileInfo(file))
+  }
+  
+  /**
+   * Show file/folder in system file manager (Finder/Explorer)
+   */
+  private async showInFileManager(
+    _event: IpcMainInvokeEvent,
+    relativePath: string
+  ): Promise<void> {
+    if (!this.fileManager) {
+      throw new Error('Workspace not initialized. Please open or create a workspace first.')
+    }
+    
+    const absolutePath = this.fileManager.resolvePath(relativePath)
+    await shell.showItemInFolder(absolutePath)
   }
   
   /**

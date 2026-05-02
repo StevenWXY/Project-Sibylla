@@ -182,11 +182,16 @@ export const WORKSPACE_STRUCTURE = {
   // Root documents
   ROOT_CLAUDE: 'CLAUDE.md',
   ROOT_MEMORY: 'MEMORY.md',
-  ROOT_REQUIREMENTS: 'requirements.md',
-  ROOT_DESIGN: 'design.md',
-  ROOT_TASKS: 'tasks.md',
   ROOT_CHANGELOG: 'changelog.md',
   ROOT_TOKENOMICS: 'tokenomics.md',
+  ROOT_README: 'README.md',
+  
+  // Specs directory (consolidated requirements/design/tasks)
+  SPECS_DIR: 'specs',
+  SPECS_REQUIREMENTS: 'specs/requirements.md',
+  SPECS_DESIGN: 'specs/design.md',
+  SPECS_TASKS: 'specs/tasks.md',
+  PLANS_DIR: 'specs/plans',
   
   // Main directories
   SKILLS_DIR: 'skills',
