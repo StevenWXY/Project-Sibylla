@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto'
-
 import type { FileManager } from '../file-manager'
 import type { ProgressLedger } from '../progress/progress-ledger'
 import type { TaskStateMachine } from '../harness/task-state-machine'
@@ -15,6 +13,12 @@ const CHECKBOX_RE = /^(\s*)-\s*\[([xX ])\]\s*(.+)/
 const TASK_ID_RE = /<!--\s*task-id:\s*(\S+)(?:\s+(ai-linked))?\s*-->/
 const AI_SUGGESTED_RE = /<!--\s*ai-suggested\s*-->/
 const METADATA_RE = /^\s+-\s+(负责人|优先级|截止日期|关联文件|完成时间)\s*:\s*(.+)/
+
+function generateHexId(bytes: number): string {
+  const buf = new Uint8Array(bytes)
+  crypto.getRandomValues(buf)
+  return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('')
+}
 
 export class KanbanService {
   private modelCache: KanbanModel | null = null
@@ -360,7 +364,7 @@ export class KanbanService {
   }
 
   async createTask(input: CreateTaskInput): Promise<KanbanTask> {
-    const taskId = `tsk_${randomBytes(3).toString('hex')}`
+    const taskId = `tsk_${generateHexId(3)}`
     const targetColumn: KanbanColumn = input.status ?? '待开始'
 
     const metaLines: string[] = []
