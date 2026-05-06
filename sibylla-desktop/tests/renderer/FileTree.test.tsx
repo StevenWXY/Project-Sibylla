@@ -191,7 +191,7 @@ describe('FileTree', () => {
       fireEvent.contextMenu(item)
       expect(screen.getByText('重命名')).toBeInTheDocument()
       expect(screen.getByText('删除')).toBeInTheDocument()
-      expect(screen.getByText('复制路径')).toBeInTheDocument()
+      expect(screen.getByText('复制相对路径')).toBeInTheDocument()
     })
 
     it('shows folder-specific menu items on folder right-click', () => {
@@ -447,7 +447,7 @@ describe('FileTree', () => {
 
       const item = screen.getByText('readme.md').closest('[data-path]')!
       fireEvent.contextMenu(item)
-      await userEvent.click(screen.getByText('复制路径'))
+      await userEvent.click(screen.getByText('复制相对路径'))
 
       expect(onCopyPath).toHaveBeenCalledWith('docs/readme.md')
     })

@@ -11,10 +11,13 @@ function makeNode(path: string, type: 'file' | 'folder'): FileTreeNode {
 describe('TreeContextMenu', () => {
   const onClose = vi.fn()
   const onRename = vi.fn()
-  const onCopyPath = vi.fn()
+  const onCopyRelativePath = vi.fn()
+  const onCopyAbsolutePath = vi.fn()
   const onDelete = vi.fn()
   const onCreateFile = vi.fn()
   const onCreateFolder = vi.fn()
+  const onRevealInManager = vi.fn()
+  const onAddToAIContext = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -29,14 +32,17 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     expect(screen.getByText('重命名')).toBeInTheDocument()
-    expect(screen.getByText('复制路径')).toBeInTheDocument()
+    expect(screen.getByText('复制相对路径')).toBeInTheDocument()
     expect(screen.getByText('删除')).toBeInTheDocument()
   })
 
@@ -49,10 +55,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     expect(screen.getByText('新建文件')).toBeInTheDocument()
@@ -70,10 +79,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     expect(screen.queryByText('新建文件')).not.toBeInTheDocument()
@@ -89,10 +101,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     fireEvent.click(screen.getByText('重命名'))
@@ -109,10 +124,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     fireEvent.click(screen.getByText('删除'))
@@ -120,7 +138,7 @@ describe('TreeContextMenu', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('calls onCopyPath and onClose when copy path is clicked', () => {
+  it('calls onCopyRelativePath and onClose when copy relative path is clicked', () => {
     const node = makeNode('readme.md', 'file')
     render(
       <TreeContextMenu
@@ -129,14 +147,17 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
-    fireEvent.click(screen.getByText('复制路径'))
-    expect(onCopyPath).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByText('复制相对路径'))
+    expect(onCopyRelativePath).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
@@ -149,10 +170,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     fireEvent.click(screen.getByText('新建文件'))
@@ -169,10 +193,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     fireEvent.click(screen.getByText('新建子文件夹'))
@@ -189,10 +216,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     const menu = screen.getByRole('menu')
@@ -211,10 +241,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     const menu = screen.getByRole('menu')
@@ -235,10 +268,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     const menu = screen.getByRole('menu')
@@ -257,10 +293,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -276,10 +315,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     fireEvent.click(window)
@@ -295,10 +337,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     const deleteButton = screen.getByText('删除').closest('button')
@@ -314,10 +359,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     const menu = screen.getByRole('menu')
@@ -333,10 +381,13 @@ describe('TreeContextMenu', () => {
         node={node}
         onClose={onClose}
         onRename={onRename}
-        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onCopyAbsolutePath={onCopyAbsolutePath}
         onDelete={onDelete}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        onRevealInManager={onRevealInManager}
+        onAddToAIContext={onAddToAIContext}
       />
     )
     const separators = container.querySelectorAll('.bg-gray-200')
