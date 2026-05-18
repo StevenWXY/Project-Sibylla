@@ -33,7 +33,7 @@ export const AgentLibrary: React.FC<AgentLibraryProps> = ({ className }) => {
   const fetchAgents = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await window.electronAPI.safeInvoke('sub-agent:list')
+      const result = await window.electronAPI.subAgent.list()
       if (result.success && result.data) {
         setAgents(result.data as AgentSummary[])
       }

@@ -40,6 +40,13 @@ export { MemoryEventBus } from './memory-event-bus'
 export { CheckpointScheduler } from './checkpoint-scheduler'
 export { MemoryCompressor } from './memory-compressor'
 export { MemoryIndexer } from './memory-indexer'
-export { LocalEmbeddingProvider, CloudEmbeddingProvider } from './embedding-provider'
+export {
+  LocalEmbeddingProvider,
+  CloudEmbeddingProvider,
+  createEmbeddingProvider,
+  MEMORY_EMBEDDING_DIMENSION,
+  CLOUD_EMBEDDING_MODEL,
+} from './embedding-provider'
+export { initializeMemoryV2ForWorkspace } from './memory-workspace-bootstrap'
 export { estimateTokens, estimateTokensFromEntries, textSimilarity, cosineSimilarity } from './utils'
 export { DecisionProjectionProcessor } from './decision-projection-processor'

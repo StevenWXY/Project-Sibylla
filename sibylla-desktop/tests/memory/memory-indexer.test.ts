@@ -34,6 +34,7 @@ function createMockEmbeddingProvider(available = false): EmbeddingProvider {
     embed: vi.fn().mockResolvedValue([[...Array(384)].map(() => Math.random())]),
     isAvailable: vi.fn().mockReturnValue(available),
     initialize: vi.fn().mockResolvedValue(undefined),
+    ensureInitialized: vi.fn().mockResolvedValue(undefined),
   }
 }
 

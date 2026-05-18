@@ -454,13 +454,16 @@ export function generateWorkspaceConfig(
  * @param options - Workspace creation options
  * @returns MembersConfig object
  */
-export function generateMembersConfig(options: CreateWorkspaceOptions): MembersConfig {
+export function generateMembersConfig(
+  options: CreateWorkspaceOptions,
+  ownerUserId?: string,
+): MembersConfig {
   const now = new Date().toISOString()
   
   return {
     members: [
       {
-        id: 'owner', // Will be replaced with actual user ID after cloud sync
+        id: ownerUserId ?? 'owner',
         name: options.owner.name,
         email: options.owner.email,
         role: 'admin',

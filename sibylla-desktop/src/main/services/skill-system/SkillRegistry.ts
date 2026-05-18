@@ -3,6 +3,7 @@ import type { FileManager } from '../file-manager'
 import { SkillEngine } from '../skill-engine'
 import { SkillLoader } from './SkillLoader'
 import type { SkillSource } from './types'
+import { listTrashedSkillDirs } from './skill-trash'
 import { logger } from '../../utils/logger'
 
 const PRIORITY_ORDER: Record<SkillSource, number> = {
@@ -13,6 +14,7 @@ const PRIORITY_ORDER: Record<SkillSource, number> = {
 
 export class SkillRegistry {
   private skills = new Map<string, SkillV2>()
+  private trashedSkills = new Map<string, { skill: SkillV2; trashedAt: number }>()
   private triggerIndex = new Map<string, SkillV2>()
   private legacyEngine: SkillEngine
   private teamSyncEnabled: boolean = false
@@ -36,6 +38,7 @@ export class SkillRegistry {
 
   async discoverAll(): Promise<SkillV2[]> {
     this.skills.clear()
+    this.trashedSkills.clear()
     this.triggerIndex.clear()
 
     try {
@@ -80,10 +83,16 @@ export class SkillRegistry {
       }
     }
 
+    const trashed = await this.scanTrashed()
+    for (const entry of trashed) {
+      this.trashedSkills.set(entry.skill.id, entry)
+    }
+
     this.buildTriggerIndex()
 
     logger.info('[SkillRegistry] Discovery complete', {
       totalSkills: this.skills.size,
+      trashed: this.trashedSkills.size,
       builtin: builtinSkills.length,
       workspace: workspaceSkills.length,
       personal: personalSkills.length,
@@ -94,7 +103,7 @@ export class SkillRegistry {
   }
 
   get(id: string): SkillV2 | undefined {
-    const skill = this.skills.get(id)
+    const skill = this.skills.get(id) ?? this.trashedSkills.get(id)?.skill
     if (!skill) return undefined
 
     if (skill.source === 'personal' && skill.scope === 'personal') {
@@ -226,12 +235,51 @@ export class SkillRegistry {
   }
 
   getSkillSummaries(): SkillSummary[] {
-    return this.getAll().map((skill) => ({
+    const active = this.getAll().map((skill) => this.toSummary(skill))
+    const trashed = Array.from(this.trashedSkills.values()).map(({ skill, trashedAt }) => ({
+      ...this.toSummary(skill),
+      trashedAt,
+    }))
+    return [...active, ...trashed]
+  }
+
+  isTrashed(skillId: string): boolean {
+    return this.trashedSkills.has(skillId)
+  }
+
+  private toSummary(skill: SkillV2): SkillSummary {
+    return {
       id: skill.id,
       name: skill.name,
       description: skill.description,
       scenarios: skill.scenarios,
-    }))
+      category: skill.category,
+      tags: skill.tags,
+      source: skill.source,
+      version: skill.version,
+    }
+  }
+
+  private async scanTrashed(): Promise<Array<{ skill: SkillV2; trashedAt: number }>> {
+    const workspaceRoot = this.fileManager.getWorkspaceRoot()
+    const dirs = await listTrashedSkillDirs(workspaceRoot)
+    const loaded: Array<{ skill: SkillV2; trashedAt: number }> = []
+
+    for (const { dirPath, meta } of dirs) {
+      try {
+        if (!(await this.loader.isV2Directory(dirPath))) continue
+        const source: SkillSource = dirPath.includes('personal/') ? 'personal' : 'workspace'
+        const skill = await this.loader.loadV2(dirPath, source)
+        loaded.push({ skill, trashedAt: meta.trashedAt })
+      } catch (error) {
+        logger.warn('[SkillRegistry] Failed to load trashed skill', {
+          dirPath,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return loaded
   }
 
   handleFileChange(event: { type: string; path: string }): void {

@@ -18,6 +18,8 @@ import { AppHandler } from './ipc/handlers/app.handler'
 import { FileManager } from './services/file-manager'
 import { ImportManager } from './services/import-manager'
 import { WorkspaceManager } from './services/workspace-manager'
+import { CloudWorkspaceClient } from './services/cloud-workspace-client'
+import { WorkspaceError, WorkspaceErrorCode } from './services/types/workspace.types'
 import { GitAbstraction } from './services/git-abstraction'
 import { SyncManager } from './services/sync-manager'
 import { ConflictResolver } from './services/conflict-resolver'
@@ -103,6 +105,7 @@ let quickSettingsCleanup: (() => void) | null = null
 let eventLogStore: EventLogStore | null = null
 let memoryEventBusBridge: MemoryEventBusBridge | null = null
 let memoryEventBus: MemoryEventBus | null = null
+let memoryV2Cleanup: (() => Promise<void>) | null = null
 const appEventBus = new AppEventBus()
 
 let notificationCleanup: (() => void) | null = null
@@ -110,6 +113,8 @@ let proactiveCleanup: (() => void) | null = null
 let presenceCleanup: (() => void) | null = null
 let focusModeCleanup: (() => void) | null = null
 let dashboardCleanups: Array<() => void> = []
+let workflowCleanup: (() => void) | null = null
+let promptPerformanceCleanup: (() => void) | null = null
 
 // Keep reference to LocalSearchEngine for FileWatcher forwarding
 let localSearchEngineRef: import('./services/local-search-engine').LocalSearchEngine | null = null
@@ -159,6 +164,8 @@ if (!gotTheLock) {
       // Create WorkspaceHandler and set WorkspaceManager
       const workspaceHandler = new WorkspaceHandler()
       workspaceHandler.setWorkspaceManager(workspaceManager)
+
+      const cloudWorkspaceClient = new CloudWorkspaceClient()
       
       // Create SyncHandler
       const syncHandler = new SyncHandler()
@@ -170,6 +177,28 @@ if (!gotTheLock) {
       const authClient = new AuthClient()
       const tokenStorage = new TokenStorage()
       const authHandler = new AuthHandler(authClient, tokenStorage)
+      workspaceHandler.setTokenStorage(tokenStorage)
+
+      workspaceManager.setCloudSyncAdapter({
+        createRemoteWorkspace: async (options) => {
+          const token = tokenStorage.getAccessToken()
+          if (!token) {
+            throw new WorkspaceError(
+              WorkspaceErrorCode.CLOUD_AUTH_REQUIRED,
+              '请先登录 Sibylla Cloud 后再启用云端同步',
+            )
+          }
+
+          const remote = await cloudWorkspaceClient.createWorkspace(token, options)
+          const cachedUser = authHandler.getCachedUser()
+
+          return {
+            workspaceId: remote.id,
+            gitRemoteUrl: remote.gitRemoteUrl,
+            ownerUserId: cachedUser?.id,
+          }
+        },
+      })
 
       // Inject AuthHandler as user provider for GuardrailEngine context (TASK017)
       fileHandler.setAuthUserProvider(authHandler)
@@ -351,6 +380,7 @@ if (!gotTheLock) {
           const conflictResolver = new ConflictResolver(gitAbstraction, workspacePath)
           gitHandler.setConflictResolver(conflictResolver)
           gitHandler.setGitAbstraction(gitAbstraction)
+          gitHandler.setWorkspaceManager(workspaceManager)
 
           // Listen for sync:conflict events and broadcast conflict details
           syncManager.on('sync:conflict', async () => {
@@ -486,6 +516,28 @@ if (!gotTheLock) {
           memoryManager.setEventBus(memoryEventBus)
           memoryEventBusBridge = new MemoryEventBusBridge(memoryEventBus, appEventBus)
 
+          try {
+            if (memoryV2Cleanup) {
+              await memoryV2Cleanup()
+              memoryV2Cleanup = null
+            }
+            const { initializeMemoryV2ForWorkspace } = await import(
+              './services/memory/memory-workspace-bootstrap'
+            )
+            memoryV2Cleanup = await initializeMemoryV2ForWorkspace({
+              memoryManager,
+              database: databaseManager.database,
+              workspacePath,
+              aiGatewayClient,
+              getAccessToken: () => tokenStorage.getAccessToken(),
+              memoryEventBus,
+            })
+          } catch (err) {
+            logger.warn('[Main] Memory v2 bootstrap failed', {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
+
           // Register EventIpcHandler for renderer event bridge
           const eventIpcHandler = new EventIpcHandler(appEventBus)
           ipcManager.registerHandler(eventIpcHandler)
@@ -573,6 +625,74 @@ if (!gotTheLock) {
             appEventBus,
             () => mainWindow,
           )
+
+          // ── TASK039: Workflow engine + IPC ──
+          try {
+            const { WorkflowParser } = await import('./services/workflow/WorkflowParser')
+            const {
+              WorkflowRegistry,
+              WorkflowExecutor,
+              WorkflowScheduler,
+              WorkflowRunStore,
+            } = await import('./services/workflow')
+            const { WorkflowHandler } = await import('./ipc/handlers/workflow')
+
+            const workflowResourcesDir = app.isPackaged
+              ? path.join(process.resourcesPath, 'resources', 'workflows')
+              : path.join(app.getAppPath(), 'resources', 'workflows')
+            const workflowParser = new WorkflowParser()
+            const workflowRegistry = new WorkflowRegistry(
+              workflowParser,
+              workflowResourcesDir,
+              workspacePath,
+            )
+            await workflowRegistry.initialize()
+            const workflowRunStore = new WorkflowRunStore(
+              path.join(workspacePath, '.sibylla', 'workflow-runs'),
+            )
+            const workflowExecutor = new WorkflowExecutor(workflowParser, workflowRunStore)
+            const cachedUserForWorkflow = authHandler.getCachedUser()
+            const workflowScheduler = new WorkflowScheduler(
+              workflowRegistry,
+              workflowExecutor,
+              workflowRunStore,
+              workspacePath,
+              cachedUserForWorkflow?.id,
+            )
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              workflowScheduler.setMainWindow(mainWindow)
+            }
+            await workflowScheduler.initialize()
+            const workflowHandler = new WorkflowHandler(
+              workflowRegistry,
+              workflowExecutor,
+              workflowScheduler,
+              workflowRunStore,
+            )
+            ipcManager.registerHandler(workflowHandler)
+            workflowCleanup = () => {
+              workflowScheduler.destroy()
+              workflowHandler.cleanup()
+            }
+          } catch (err) {
+            logger.warn('[Main] Workflow handler registration failed', {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
+
+          try {
+            const { registerPromptPerformanceHandlers } = await import('./ipc/handlers/prompt-performance')
+            if (promptPerformanceCleanup) {
+              promptPerformanceCleanup()
+            }
+            promptPerformanceCleanup = registerPromptPerformanceHandlers(() =>
+              workspaceManager.getWorkspacePath(),
+            )
+          } catch (err) {
+            logger.warn('[Main] Prompt performance handler registration failed', {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
 
           // ── TASK032: Initialize PromptOptimizer + CommandRegistry ──
           const { PromptOptimizer } = await import('./services/prompt-optimizer')
@@ -992,6 +1112,14 @@ if (!gotTheLock) {
               logger,
               workspacePath,
             )
+
+            const { SubAgentHandler } = await import('./ipc/handlers/sub-agent')
+            const subAgentHandler = new SubAgentHandler(
+              subAgentRegistry,
+              subAgentExecutor,
+              traceStore ?? undefined,
+            )
+            ipcManager.registerHandler(subAgentHandler)
           } catch (err) {
             logger.warn('[Main] Sub-agent init failed, proactive engine will have limited functionality', {
               error: err instanceof Error ? err.message : String(err),
@@ -1037,6 +1165,7 @@ if (!gotTheLock) {
               proactiveEngine,
               () => mainWindow,
             )
+          }
 
           const memberDirectory = {
             getAllMembers: () => {
@@ -1052,18 +1181,18 @@ if (!gotTheLock) {
             },
           }
 
+          const { KanbanService } = await import('./services/kanban/kanban-service')
+          const sharedKanbanService = new KanbanService(
+            fileManager,
+            progressLedger!,
+            taskStateMachine!,
+            appEventBus,
+          )
+
           try {
             const { createRiskTaskDelayTrigger } = await import('./services/proactive-engine/triggers/risk-task-delay')
             const { createWorkloadImbalanceTrigger } = await import('./services/proactive-engine/triggers/workload-imbalance')
             const { createDecisionContradictionTrigger } = await import('./services/proactive-engine/triggers/decision-contradiction')
-
-            const { KanbanService } = await import('./services/kanban/kanban-service')
-            const sharedKanbanService = new KanbanService(
-              fileManager,
-              progressLedger!,
-              taskStateMachine!,
-              appEventBus,
-            )
 
             const { DecisionLogger } = await import('./services/decision/decision-logger')
             const decisionLogger = new DecisionLogger(appEventBus, workspacePath)
@@ -1072,15 +1201,14 @@ if (!gotTheLock) {
             const workloadTrigger = createWorkloadImbalanceTrigger(gitAbstraction, memberDirectory)
             const decisionTrigger = createDecisionContradictionTrigger(decisionLogger)
 
-              proactiveEngine.registerPatrolTrigger(riskTrigger)
-              proactiveEngine.registerPatrolTrigger(workloadTrigger)
-              proactiveEngine.registerPatrolTrigger(decisionTrigger)
-              proactiveEngine.startPatrol(30 * 60 * 1000)
-            } catch (err) {
-              logger.warn('[Main] PatrolTrigger registration failed', {
-                error: err instanceof Error ? err.message : String(err),
-              })
-            }
+            proactiveEngine.registerPatrolTrigger(riskTrigger)
+            proactiveEngine.registerPatrolTrigger(workloadTrigger)
+            proactiveEngine.registerPatrolTrigger(decisionTrigger)
+            proactiveEngine.startPatrol(30 * 60 * 1000)
+          } catch (err) {
+            logger.warn('[Main] PatrolTrigger registration failed', {
+              error: err instanceof Error ? err.message : String(err),
+            })
           }
 
           const presenceStore = new PresenceStore(appEventBus)
@@ -1236,6 +1364,14 @@ if (!gotTheLock) {
           planCleanup()
           planCleanup = null
         }
+        if (workflowCleanup) {
+          workflowCleanup()
+          workflowCleanup = null
+        }
+        if (promptPerformanceCleanup) {
+          promptPerformanceCleanup()
+          promptPerformanceCleanup = null
+        }
 
         // Cleanup IPC handlers for workspace-scoped services
         if (wikiLinksIndexer) {
@@ -1245,6 +1381,11 @@ if (!gotTheLock) {
         if (traceHandler) {
           traceHandler.cleanup()
           traceHandler = null
+        }
+
+        if (memoryV2Cleanup) {
+          await memoryV2Cleanup()
+          memoryV2Cleanup = null
         }
 
         memoryManager.setWorkspacePath(null)

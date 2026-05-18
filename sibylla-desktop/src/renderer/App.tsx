@@ -64,6 +64,7 @@ export default function App() {
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null)
   const [isWorkspaceBusy, setIsWorkspaceBusy] = useState(false)
   const [isSyncingNow, setIsSyncingNow] = useState(false)
+  const [workspaceBootstrapped, setWorkspaceBootstrapped] = useState(false)
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false)
 
   // TASK021: Subscribe to Harness IPC events
@@ -94,13 +95,31 @@ export default function App() {
           return
         }
 
-        const timeout = new Promise<never>((_, reject) => {
-          window.setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => reject(new Error('Auth check timeout')), 5000)
         })
 
-        const response = await Promise.race([authApi.getCurrentUser(), timeout])
-        if (response.success && response.data?.isAuthenticated && response.data.user) {
-          setAuthenticated(true, response.data.user)
+        let response: unknown
+        let timedOut = false
+        try {
+          response = await Promise.race([authApi.getCurrentUser(), timeoutPromise])
+        } catch (err) {
+          // Timeout or other error — treat as unauthenticated
+          timedOut = err instanceof Error && err.message === 'Auth check timeout'
+          if (timedOut) {
+            console.warn('[App] Auth check timed out after 5s, falling back to unauthenticated state')
+          }
+          response = null
+        } finally {
+          if (timeoutId) window.clearTimeout(timeoutId)
+        }
+
+        if (response && typeof response === 'object' && 'success' in response) {
+          const typedResponse = response as { success: boolean; data?: { isAuthenticated: boolean; user: unknown } }
+          if (typedResponse.success && typedResponse.data?.isAuthenticated && typedResponse.data?.user) {
+            setAuthenticated(true, typedResponse.data.user)
+          }
         }
       } catch (error) {
         console.error('[App] Auth check failed:', error)
@@ -151,15 +170,25 @@ export default function App() {
   }, [isAuthenticated, onboardingCompleted, currentPage])
 
   useEffect(() => {
-    if (!isAuthenticated || currentWorkspace) {
+    if (!isAuthenticated) {
+      setWorkspaceBootstrapped(false)
+      return
+    }
+
+    if (currentWorkspace) {
+      setWorkspaceBootstrapped(true)
       return
     }
 
     let cancelled = false
+    setWorkspaceBootstrapped(false)
 
     const bootstrapWorkspace = async () => {
       const workspaceApi = window.electronAPI?.workspace
       if (!workspaceApi?.getCurrent) {
+        if (!cancelled) {
+          setWorkspaceBootstrapped(true)
+        }
         return
       }
 
@@ -170,6 +199,10 @@ export default function App() {
         }
       } catch {
         // Ignore bootstrap errors in renderer fallback mode.
+      } finally {
+        if (!cancelled) {
+          setWorkspaceBootstrapped(true)
+        }
       }
     }
 
@@ -306,10 +339,56 @@ export default function App() {
         return <UIComponentsShowcase />
       case 'workspace-studio':
         if (!currentWorkspace) {
+          if (!workspaceBootstrapped) {
+            return (
+              <div className="flex h-full items-center justify-center bg-sys-black">
+                <div className="rounded-md border border-sys-darkBorder bg-[#0A0A0A] px-4 py-2 font-mono text-xs text-sys-darkMuted">
+                  正在检查工作区...
+                </div>
+              </div>
+            )
+          }
+
           return (
-            <div className="flex h-full items-center justify-center bg-sys-black">
-              <div className="rounded-md border border-sys-darkBorder bg-[#0A0A0A] px-4 py-2 font-mono text-xs text-sys-darkMuted">
-                Loading workspace...
+            <div className="flex h-full items-center justify-center bg-sys-black px-6">
+              <div className="w-full max-w-lg rounded-xl border border-sys-darkBorder bg-[#0A0A0A] p-8 text-center">
+                <h2 className="text-xl font-semibold text-white">尚未打开工作区</h2>
+                <p className="mt-2 text-sm text-sys-darkMuted">
+                  创建或打开一个 Workspace 后即可开始编辑；本地功能不依赖云端登录。
+                </p>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <Button onClick={() => setShowCreateWizard(true)}>创建 Workspace</Button>
+                  <Button variant="secondary" onClick={() => setShowOpenDialog(true)}>
+                    打开 Workspace
+                  </Button>
+                  <Button variant="ghost" onClick={() => setCurrentPage('workspace')}>
+                    管理 Workspace
+                  </Button>
+                </div>
+                {recentWorkspaces.length > 0 && (
+                  <div className="mt-8 text-left">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-sys-darkMuted">
+                      最近使用
+                    </p>
+                    <div className="space-y-2">
+                      {recentWorkspaces.slice(0, 5).map((workspace) => (
+                        <button
+                          key={workspace.config.workspaceId}
+                          type="button"
+                          className="flex w-full items-center justify-between rounded-lg border border-sys-darkBorder px-3 py-2 text-left transition-colors hover:border-white/20 hover:bg-white/5"
+                          onClick={() => {
+                            void openWorkspaceByPath(workspace.metadata.path)
+                          }}
+                        >
+                          <span className="text-sm text-white">{workspace.config.name}</span>
+                          <span className="truncate pl-3 text-xs text-sys-darkMuted">
+                            {workspace.metadata.path}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )

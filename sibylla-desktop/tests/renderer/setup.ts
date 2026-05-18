@@ -5,6 +5,58 @@
 
 import '@testing-library/jest-dom'
 
+function createStorageMock() {
+  const store = new Map<string, string>()
+  return {
+    get length() {
+      return store.size
+    },
+    clear: vi.fn(() => {
+      store.clear()
+    }),
+    getItem: vi.fn((key: string) => {
+      return store.has(key) ? store.get(key)! : null
+    }),
+    key: vi.fn((index: number) => {
+      const keys = Array.from(store.keys())
+      return keys[index] ?? null
+    }),
+    removeItem: vi.fn((key: string) => {
+      store.delete(key)
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      store.set(String(key), String(value))
+    }),
+  } satisfies Storage
+}
+
+const localStorageMock = createStorageMock()
+const sessionStorageMock = createStorageMock()
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  configurable: true,
+  writable: true,
+})
+
+Object.defineProperty(window, 'sessionStorage', {
+  value: sessionStorageMock,
+  configurable: true,
+  writable: true,
+})
+
+Object.defineProperty(globalThis, 'localStorage', {
+  value: localStorageMock,
+  configurable: true,
+  writable: true,
+})
+
+Object.defineProperty(globalThis, 'sessionStorage', {
+  value: sessionStorageMock,
+  configurable: true,
+  writable: true,
+})
+
 // Mock window.electronAPI for renderer tests
 const mockElectronAPI = {
   ping: vi.fn(),
@@ -61,6 +113,10 @@ const mockElectronAPI = {
     logout: vi.fn(),
     getCurrentUser: vi.fn(),
     refreshToken: vi.fn(),
+  },
+  app: {
+    getConfig: vi.fn().mockResolvedValue({ success: true, data: {} }),
+    updateConfig: vi.fn().mockResolvedValue({ success: true }),
   },
   window: {
     minimize: vi.fn(),
@@ -146,6 +202,30 @@ Object.defineProperty(window, 'electronAPI', {
   writable: true,
 })
 
+if (process.env.VITEST_DEBUG_HANG === '1') {
+  const watchdog = setInterval(() => {
+    const internalProcess = process as NodeJS.Process & {
+      _getActiveHandles?: () => unknown[]
+      _getActiveRequests?: () => unknown[]
+    }
+    const activeHandles =
+      internalProcess
+        ._getActiveHandles?.()
+        .filter((handle) => {
+          const name = (handle as { constructor?: { name?: string } })?.constructor?.name ?? ''
+          return !['Socket', 'WriteStream', 'ReadStream'].includes(name)
+        }) ?? []
+    const activeRequests = internalProcess._getActiveRequests?.() ?? []
+    if (activeHandles.length || activeRequests.length) {
+      console.warn(
+        `[renderer-hang-debug] handles=${activeHandles.length}, requests=${activeRequests.length}`,
+        activeHandles.map((h) => (h as { constructor?: { name?: string } })?.constructor?.name ?? 'unknown')
+      )
+    }
+  }, 15000)
+  watchdog.unref?.()
+}
+
 // Mock matchMedia for ThemeProvider
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -164,4 +244,6 @@ Object.defineProperty(window, 'matchMedia', {
 // Reset all mocks between tests
 afterEach(() => {
   vi.clearAllMocks()
+  localStorageMock.clear()
+  sessionStorageMock.clear()
 })

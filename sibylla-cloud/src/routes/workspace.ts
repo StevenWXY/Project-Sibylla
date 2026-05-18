@@ -262,6 +262,19 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         }
 
         const body = updateMemberRoleSchema.parse(request.body)
+
+        if (memberUserId === userId && body.role !== 'admin') {
+          const currentMember = await MemberModel.findByUserAndWorkspace(userId, workspaceId)
+          if (currentMember?.role === 'admin') {
+            return reply.status(400).send({
+              error: {
+                code: 'INVALID_OPERATION',
+                message: 'Workspace admin cannot demote self',
+              },
+            })
+          }
+        }
+
         const updated = await WorkspaceService.updateMemberRoleWithGitSync(
           memberUserId,
           workspaceId,

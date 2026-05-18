@@ -1,5 +1,8 @@
 import * as path from 'path'
+import { promises as fs } from 'fs'
 import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from 'electron'
+import { exportSkillDirToBundle, importSkillBundleFile } from '../../services/skill-system/SkillBundle'
+import { isPathInsideRoot } from '../../utils/path-boundary'
 import { IpcHandler } from '../handler'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
@@ -161,6 +164,8 @@ export class AIHandler extends IpcHandler {
     ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_SEARCH)
     ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_GET)
     ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_CREATE)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_EDIT)
+    ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_RESTORE)
     ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_VALIDATE)
     ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_DELETE)
     ipcMain.removeHandler(IPC_CHANNELS.AI_SKILL_EXPORT)
@@ -558,6 +563,10 @@ export class AIHandler extends IpcHandler {
         name: s.name,
         description: s.description,
         scenarios: s.scenarios,
+        category: s.category,
+        tags: s.tags,
+        source: s.source,
+        version: s.version,
       }))
     }
     return this.skillEngine.searchSkills(params.query, params.limit)
@@ -622,6 +631,48 @@ export class AIHandler extends IpcHandler {
     return { skillId: template.id, path: skillDir }
   }
 
+  private async handleSkillEdit(
+    _event: IpcMainInvokeEvent,
+    skillId: string,
+    updates: Partial<SkillTemplate> & { category?: string; version?: string },
+  ): Promise<void> {
+    const workspaceRoot = this.workspaceManager.getWorkspacePath()
+    if (!workspaceRoot) throw new Error('No workspace open')
+
+    const skill = this.skillRegistry?.get(skillId)
+    if (!skill) throw new Error(`Skill not found: ${skillId}`)
+    if (skill.source === 'builtin') throw new Error('Cannot edit builtin skills in place')
+
+    await updateSkillV2(this.fileManager, skill, updates)
+
+    if (this.skillRegistry) {
+      await this.skillRegistry.discoverAll()
+    }
+
+    logger.info('[AIHandler] Skill updated', { skillId })
+  }
+
+  private async handleSkillRestore(
+    _event: IpcMainInvokeEvent,
+    skillId: string,
+  ): Promise<{ path: string }> {
+    const workspaceRoot = this.workspaceManager.getWorkspacePath()
+    if (!workspaceRoot) throw new Error('No workspace open')
+
+    if (!this.skillRegistry?.isTrashed(skillId)) {
+      throw new Error(`Skill is not in trash: ${skillId}`)
+    }
+
+    const restoredPath = await restoreSkillFromTrash(workspaceRoot, skillId)
+
+    if (this.skillRegistry) {
+      await this.skillRegistry.discoverAll()
+    }
+
+    logger.info('[AIHandler] Skill restored', { skillId, restoredPath })
+    return { path: restoredPath }
+  }
+
   private async handleSkillValidate(
     _event: IpcMainInvokeEvent,
     skillId: string,
@@ -649,20 +700,49 @@ export class AIHandler extends IpcHandler {
   ): Promise<void> {
     const skill = this.skillRegistry?.get(skillId)
     if (!skill) throw new Error(`Skill not found: ${skillId}`)
-    if (skill.source === 'builtin') throw new Error('Cannot delete builtin skills')
+    if (this.skillRegistry?.isTrashed(skillId)) {
+      throw new Error('Skill is already in trash')
+    }
 
-    throw new Error('Skill deletion requires confirmation (not yet implemented in IPC)')
+    const workspaceRoot = this.workspaceManager.getWorkspacePath()
+    if (!workspaceRoot) throw new Error('No workspace open')
+
+    await softDeleteSkill(workspaceRoot, this.fileManager, skill)
+
+    if (this.skillRegistry) {
+      await this.skillRegistry.discoverAll()
+    }
+
+    logger.info('[AIHandler] Skill soft-deleted', { skillId, path: skill.filePath })
   }
 
   private async handleSkillExport(
     _event: IpcMainInvokeEvent,
     skillId: string,
-  ): Promise<{ bundlePath: string }> {
+  ): Promise<{ bundlePath: string; base64: string }> {
     const skill = this.skillRegistry?.get(skillId)
     if (!skill) throw new Error(`Skill not found: ${skillId}`)
 
-    logger.info('[AIHandler] Skill export requested', { skillId })
-    throw new Error('Skill export not yet implemented')
+    const workspaceRoot = this.workspaceManager.getWorkspacePath()
+    if (!workspaceRoot) throw new Error('No workspace open')
+
+    const absoluteSkillDir = this.fileManager.resolvePath(skill.filePath)
+    if (!isPathInsideRoot(workspaceRoot, absoluteSkillDir)) {
+      throw new Error('Skill path is outside workspace')
+    }
+
+    const safeVersion = skill.version.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const relativeBundle = `.sibylla/exports/${skill.id}-${safeVersion}.sibylla-skill`
+    const absoluteBundle = path.join(workspaceRoot, relativeBundle)
+
+    await exportSkillDirToBundle(absoluteSkillDir, absoluteBundle)
+
+    const buffer = await fs.readFile(absoluteBundle)
+    const base64 = buffer.toString('base64')
+
+    logger.info('[AIHandler] Skill exported', { skillId, bundlePath: relativeBundle })
+
+    return { bundlePath: relativeBundle, base64 }
   }
 
   private async handleSkillImport(
@@ -672,11 +752,23 @@ export class AIHandler extends IpcHandler {
     if (!bundlePath.endsWith('.sibylla-skill')) {
       throw new Error('Invalid bundle file: must be a .sibylla-skill file')
     }
-    if (bundlePath.includes('..') || path.isAbsolute(bundlePath)) {
-      throw new Error('Invalid bundle path')
+
+    const workspaceRoot = this.workspaceManager.getWorkspacePath()
+    if (!workspaceRoot) throw new Error('No workspace open')
+
+    const absoluteBundle = path.isAbsolute(bundlePath)
+      ? path.resolve(bundlePath)
+      : path.join(workspaceRoot, bundlePath)
+
+    const { skillId } = await importSkillBundleFile(absoluteBundle, workspaceRoot)
+
+    if (this.skillRegistry) {
+      await this.skillRegistry.discoverAll()
     }
-    logger.info('[AIHandler] Skill import requested', { bundlePath })
-    throw new Error('Skill import not yet implemented')
+
+    logger.info('[AIHandler] Skill imported', { skillId, bundlePath: absoluteBundle })
+
+    return { skillId }
   }
 
   private async handleSkillTestRun(

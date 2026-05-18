@@ -136,7 +136,7 @@ export const SkillImportDialog: React.FC<SkillImportDialogProps> = ({ onClose, o
     if (!file) return
     setImporting(true)
     try {
-      await window.electronAPI.safeInvoke('ai:skill:import', file.path)
+      await window.electronAPI.ai.skillImport(file.path)
       onImported()
       onClose()
     } catch {

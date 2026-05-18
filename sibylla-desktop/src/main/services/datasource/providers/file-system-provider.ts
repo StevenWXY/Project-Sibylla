@@ -1,5 +1,6 @@
 import path from 'path'
 import type { FileManager } from '../../file-manager'
+import { isPathInsideRoot } from '../../../utils/path-boundary'
 import type { DataSourceProvider, DataSourceQuery, DataSourceResult, ProviderConfig } from '../types'
 
 export class FileSystemProvider implements DataSourceProvider {
@@ -53,7 +54,7 @@ export class FileSystemProvider implements DataSourceProvider {
 
   private resolveWithinWorkspace(p: string): string {
     const resolved = path.resolve(this.workspaceRoot, p)
-    if (!resolved.startsWith(this.workspaceRoot)) {
+    if (!isPathInsideRoot(this.workspaceRoot, resolved)) {
       throw new Error('Path outside workspace boundary')
     }
     return resolved

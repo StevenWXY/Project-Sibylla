@@ -132,6 +132,10 @@ export class UnifiedSearchEngine {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error(`Source timeout after ${timeoutMs}ms`)), timeoutMs)
     })
+
+    // Race the adapter search against a timeout.
+    // NOTE: adapter.search() is not abortable — it continues in background even if timeout wins.
+    // This is a known limitation of the SearchSourceAdapter interface.
     return Promise.race([
       adapter.search(query).finally(() => { if (timer !== undefined) clearTimeout(timer) }),
       timeout,

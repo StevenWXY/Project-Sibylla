@@ -7,6 +7,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import type { SyncStatus } from '../../../shared/types'
+import { useAppStore, selectCurrentWorkspace } from '../../store/appStore'
 import {
   useSyncStatusStore,
   selectStatus,
@@ -19,6 +20,12 @@ interface StatusConfig {
   readonly label: string
   readonly colorClass: string
   readonly animate: boolean
+}
+
+const NO_WORKSPACE_CONFIG: StatusConfig = {
+  label: '未打开工作区',
+  colorClass: 'text-gray-500',
+  animate: false,
 }
 
 const STATUS_CONFIG: Record<SyncStatus, StatusConfig> = {
@@ -62,10 +69,11 @@ export interface SyncStatusIndicatorProps {
 }
 
 export function SyncStatusIndicator({ variant = 'default' }: SyncStatusIndicatorProps) {
+  const hasWorkspace = useAppStore(selectCurrentWorkspace) !== null
   const status = useSyncStatusStore(selectStatus)
   const lastSyncedAt = useSyncStatusStore(selectLastSyncedAt)
   const [showDetail, setShowDetail] = useState(false)
-  const config = STATUS_CONFIG[status]
+  const config = hasWorkspace ? STATUS_CONFIG[status] : NO_WORKSPACE_CONFIG
   const timeStr = formatTime(lastSyncedAt)
 
   const handleCloseDetail = useCallback(() => {

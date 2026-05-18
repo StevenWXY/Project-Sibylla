@@ -7,6 +7,7 @@ import type { Tracer } from '../trace/tracer'
 import type { logger as loggerType } from '../../utils/logger'
 import type { ConversationStore, MessageRecord } from '../conversation-store'
 import type { FileManager } from '../file-manager'
+import { isPathInsideRoot } from '../../utils/path-boundary'
 import { MarkdownRenderer } from './markdown-renderer'
 import { JsonRenderer } from './json-renderer'
 import { HtmlRenderer } from './html-renderer'
@@ -226,7 +227,7 @@ export class ConversationExporter {
     const workspaceRoot = this.fileManager.getWorkspaceRoot()
     const resolved = path.resolve(targetPath)
 
-    if (resolved.startsWith(workspaceRoot)) {
+    if (isPathInsideRoot(workspaceRoot, resolved)) {
       const relativePath = path.relative(workspaceRoot, resolved)
       await this.fileManager.writeFile(relativePath, content, { atomic: true, createDirs: true })
     } else {

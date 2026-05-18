@@ -120,10 +120,12 @@ export class ProactiveEngine {
     }
 
     if (this.deps.tracer?.isEnabled()) {
-      this.deps.tracer.startSpan('proactive.suggestion-outcome', {
+      const span = this.deps.tracer.startSpan('proactive.suggestion-outcome', {
         kind: 'system',
         attributes: { triggerId, outcome, dwellMs, suggestionId },
-      }).setStatus('ok').end()
+      })
+      span.setStatus('ok')
+      span.end()
     }
   }
 
@@ -186,10 +188,12 @@ export class ProactiveEngine {
           this.deps.triggerRegistry.markPatrolFired(trigger.id)
 
           if (this.deps.tracer?.isEnabled()) {
-            this.deps.tracer.startSpan(`patrol.${trigger.id}.evaluate`, {
+            const span = this.deps.tracer.startSpan(`patrol.${trigger.id}.evaluate`, {
               kind: 'system',
               attributes: { result: 'fired' },
-            }).setStatus('ok').end()
+            })
+            span.setStatus('ok')
+            span.end()
           }
 
           this.deps.eventBus.emitEvent({
@@ -200,10 +204,12 @@ export class ProactiveEngine {
         }
       } catch {
         if (this.deps.tracer?.isEnabled()) {
-          this.deps.tracer.startSpan(`patrol.${trigger.id}.evaluate`, {
+          const span = this.deps.tracer.startSpan(`patrol.${trigger.id}.evaluate`, {
             kind: 'system',
             attributes: { result: 'error' },
-          }).setStatus('error').end()
+          })
+          span.setStatus('error')
+          span.end()
         }
       }
     }
@@ -351,7 +357,7 @@ export class ProactiveEngine {
     this.deps.tracer.startSpan(name, {
       kind: 'system',
       attributes,
-    }).setStatus('ok').end()
+    }).setStatus('ok')
   }
 
   private _generateId(): string {

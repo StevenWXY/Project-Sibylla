@@ -12,6 +12,7 @@
  * - GET  /api/v1/auth/me
  */
 
+import { getCloudApiBaseUrl } from '../config/cloud-api-url'
 import { logger } from '../utils/logger'
 import type {
   AuthLoginInput,
@@ -23,8 +24,8 @@ import type {
 /** Log prefix for all AuthClient operations */
 const LOG_PREFIX = '[AuthClient]'
 
-/** Default cloud API base URL (development) */
-const DEFAULT_API_BASE_URL = 'http://localhost:3000'
+/** Default cloud API base URL (see getCloudApiBaseUrl). */
+const DEFAULT_API_BASE_URL = getCloudApiBaseUrl()
 
 /**
  * Error thrown by AuthClient for API errors

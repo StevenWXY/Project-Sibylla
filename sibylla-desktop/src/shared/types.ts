@@ -475,6 +475,7 @@ export const IPC_CHANNELS = {
   AI_SKILL_GET: 'ai:skill:get',
   AI_SKILL_CREATE: 'ai:skill:create',
   AI_SKILL_EDIT: 'ai:skill:edit',
+  AI_SKILL_RESTORE: 'ai:skill:restore',
   AI_SKILL_VALIDATE: 'ai:skill:validate',
   AI_SKILL_DELETE: 'ai:skill:delete',
   AI_SKILL_EXPORT: 'ai:skill:export',
@@ -499,6 +500,11 @@ export const IPC_CHANNELS = {
   WORKFLOW_LIST_RUNS: 'workflow:list-runs',
   WORKFLOW_CONFIRMATION_REQUIRED: 'workflow:confirmation-required',
   WORKFLOW_CONFIRM_STEP: 'workflow:confirm-step',
+  WORKFLOW_SET_TRIGGER_ENABLED: 'workflow:set-trigger-enabled',
+  WORKFLOW_GET_DISABLED_TRIGGERS: 'workflow:get-disabled-triggers',
+
+  // Prompt performance (context engine)
+  PROMPT_PERFORMANCE_COMPARE_VERSIONS: 'prompt-performance:compare-versions',
 
   // MCP operations (TASK042)
   MCP_CONNECT: 'mcp:connect',
@@ -916,10 +922,11 @@ export interface IPCChannelMap {
   // Skill v2 operations (TASK037)
   [IPC_CHANNELS.AI_SKILL_GET]: { params: [skillId: string]; return: SkillV2 | null }
   [IPC_CHANNELS.AI_SKILL_CREATE]: { params: [template: SkillTemplate]; return: { skillId: string; path: string } }
-  [IPC_CHANNELS.AI_SKILL_EDIT]: { params: [skillId: string, updates: Partial<SkillTemplate>]; return: void }
+  [IPC_CHANNELS.AI_SKILL_EDIT]: { params: [skillId: string, updates: Partial<SkillTemplate> & { category?: string; version?: string }]; return: void }
+  [IPC_CHANNELS.AI_SKILL_RESTORE]: { params: [skillId: string]; return: { path: string } }
   [IPC_CHANNELS.AI_SKILL_VALIDATE]: { params: [skillId: string]; return: SkillValidationResult }
   [IPC_CHANNELS.AI_SKILL_DELETE]: { params: [skillId: string]; return: void }
-  [IPC_CHANNELS.AI_SKILL_EXPORT]: { params: [skillId: string]; return: { bundlePath: string } }
+  [IPC_CHANNELS.AI_SKILL_EXPORT]: { params: [skillId: string]; return: SkillExportResult }
   [IPC_CHANNELS.AI_SKILL_IMPORT]: { params: [bundlePath: string]; return: { skillId: string } }
   [IPC_CHANNELS.AI_SKILL_TEST_RUN]: { params: [skillId: string, userInput: string]; return: SkillResult }
 
@@ -940,6 +947,12 @@ export interface IPCChannelMap {
   [IPC_CHANNELS.WORKFLOW_CANCEL_RUN]: { params: [runId: string]; return: void }
   [IPC_CHANNELS.WORKFLOW_LIST_RUNS]: { params: [filter?: RunFilter]; return: WorkflowRunSummary[] }
   [IPC_CHANNELS.WORKFLOW_CONFIRM_STEP]: { params: [runId: string, decision: 'confirm' | 'skip' | 'cancel']; return: void }
+  [IPC_CHANNELS.WORKFLOW_SET_TRIGGER_ENABLED]: { params: [workflowId: string, enabled: boolean]; return: void }
+  [IPC_CHANNELS.WORKFLOW_GET_DISABLED_TRIGGERS]: { params: []; return: string[] }
+  [IPC_CHANNELS.PROMPT_PERFORMANCE_COMPARE_VERSIONS]: {
+    params: [promptId: string]
+    return: PromptVersionComparisonResult
+  }
   // WORKFLOW_CONFIRMATION_REQUIRED is Main → Renderer push, not in IPCChannelMap
 
   // Import classification operations (TASK041)
@@ -1855,6 +1868,11 @@ export interface SkillSummary {
   name: string
   description: string
   scenarios: string
+  category?: string
+  tags?: string[]
+  source?: 'builtin' | 'workspace' | 'personal'
+  version?: string
+  trashedAt?: number
 }
 
 export interface SkillSearchParams {
@@ -2887,6 +2905,30 @@ export interface SkillV2 extends Skill {
   loadableIn?: {
     modes?: string[]
   }
+}
+
+export interface PromptPerformanceAggregatedMetrics {
+  promptId: string
+  version: string
+  totalCalls: number
+  avgTokens: number
+  maxTokens: number
+  minTokens: number
+  avgToolCallSuccessRate: number
+  failureRate: number
+  p50Tokens: number
+  p95Tokens: number
+  p99Tokens: number
+}
+
+export interface PromptVersionComparisonResult {
+  promptId: string
+  versions: PromptPerformanceAggregatedMetrics[]
+}
+
+export interface SkillExportResult {
+  bundlePath: string
+  base64: string
 }
 
 export interface SkillResult {

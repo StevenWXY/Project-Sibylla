@@ -29,6 +29,7 @@ import {
 } from './types/file-manager.types'
 import { FileWatcher } from './file-watcher'
 import type { Tracer } from './trace/tracer'
+import { isPathInsideRoot } from '../utils/path-boundary'
 
 /**
  * Core forbidden paths that cannot be overridden for security
@@ -169,9 +170,8 @@ export class FileManager {
     fullPath: string,
     context: FileOperationContext = FileOperationContext.USER
   ): void {
-    // 1. Always check path traversal attacks
-    const normalized = path.normalize(fullPath)
-    if (!normalized.startsWith(this.workspaceRoot)) {
+    // 1. Always check path traversal attacks (relative check avoids sibling-prefix bypass)
+    if (!isPathInsideRoot(this.workspaceRoot, fullPath)) {
       throw new FileManagerError(
         FILE_ERROR_CODES.PATH_OUTSIDE_WORKSPACE,
         `Path outside workspace: ${fullPath}`,

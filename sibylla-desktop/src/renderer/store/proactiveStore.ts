@@ -132,7 +132,10 @@ export const useProactiveStore = create<ProactiveStore>()(
 )
 
 export function initProactiveListener(): () => void {
-  if (suggestionUnsubscribe) return suggestionUnsubscribe
+  if (suggestionUnsubscribe) {
+    suggestionUnsubscribe()
+    suggestionUnsubscribe = null
+  }
 
   suggestionUnsubscribe = window.electronAPI.proactive.onSuggestionShown(
     (suggestion) => {
@@ -140,7 +143,12 @@ export function initProactiveListener(): () => void {
     },
   )
 
-  return suggestionUnsubscribe
+  return () => {
+    if (suggestionUnsubscribe) {
+      suggestionUnsubscribe()
+      suggestionUnsubscribe = null
+    }
+  }
 }
 
 export type { ProactiveStore, ProactiveState, ProactiveActions, Suggestion }

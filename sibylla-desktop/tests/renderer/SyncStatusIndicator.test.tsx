@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { SyncStatusIndicator } from '../../src/renderer/components/statusbar/SyncStatusIndicator'
+import { useAppStore } from '../../src/renderer/store/appStore'
 import { useSyncStatusStore } from '../../src/renderer/store/syncStatusStore'
 import type { SyncStatusData } from '../../src/shared/types'
 
@@ -11,9 +12,35 @@ function setStatus(data: SyncStatusData): void {
 describe('SyncStatusIndicator', () => {
   beforeEach(() => {
     useSyncStatusStore.getState().reset()
+    useAppStore.getState().setCurrentWorkspace(null)
   })
 
-  it('renders idle status with 等待同步 label', () => {
+  it('renders no-workspace label when workspace is not open', () => {
+    render(<SyncStatusIndicator />)
+    expect(screen.getByText('未打开工作区')).toBeInTheDocument()
+  })
+
+  it('renders idle status with 等待同步 label when workspace is open', () => {
+    useAppStore.getState().setCurrentWorkspace({
+      config: {
+        workspaceId: 'ws-1',
+        name: 'Test',
+        description: '',
+        icon: '🧠',
+        defaultModel: 'claude-sonnet-4-20250514',
+        syncInterval: 30,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      metadata: {
+        path: '/tmp/ws',
+        fileCount: 0,
+        sizeBytes: 0,
+        lastModifiedAt: new Date().toISOString(),
+        isSyncing: false,
+        hasUncommittedChanges: false,
+      },
+    })
     render(<SyncStatusIndicator />)
     expect(screen.getByText('等待同步')).toBeInTheDocument()
   })

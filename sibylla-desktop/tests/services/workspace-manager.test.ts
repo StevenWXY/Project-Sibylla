@@ -350,4 +350,37 @@ describe('WorkspaceManager', () => {
       expect(workspacePath).toBe(createOptions.path)
     })
   })
+
+  describe('createWorkspace with cloud sync', () => {
+    it('uses remote workspace id when cloud adapter is configured', async () => {
+      const options: CreateWorkspaceOptions = {
+        name: 'Cloud Workspace',
+        description: 'Cloud',
+        icon: '📝',
+        path: path.join(testDir, 'cloud-workspace'),
+        owner: { name: 'Test User', email: 'test@example.com' },
+        enableCloudSync: true,
+      }
+
+      workspaceManager.setCloudSyncAdapter({
+        createRemoteWorkspace: async () => ({
+          workspaceId: '00000000-0000-4000-8000-000000000001',
+          gitRemoteUrl: 'https://git.example/remote.git',
+          ownerUserId: 'user-123',
+        }),
+      })
+
+      const workspace = await workspaceManager.createWorkspace(options)
+      expect(workspace.config.workspaceId).toBe('00000000-0000-4000-8000-000000000001')
+      expect(workspace.config.gitRemote).toBe('https://git.example/remote.git')
+      expect(workspace.config.lastSyncAt).toBeTruthy()
+
+      const membersRaw = await fs.readFile(
+        path.join(options.path, '.sibylla/members.json'),
+        'utf-8',
+      )
+      const members = JSON.parse(membersRaw) as { members: Array<{ id: string }> }
+      expect(members.members[0]?.id).toBe('user-123')
+    })
+  })
 })

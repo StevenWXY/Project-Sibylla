@@ -44,21 +44,21 @@ export const PromptVersionComparison: React.FC<PromptVersionComparisonProps> = (
   const fetchComparison = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await window.electronAPI.safeInvoke('prompt-performance:compare-versions', promptId)
+      const result = await window.electronAPI.promptPerformance.compareVersions(promptId)
       if (result.success && result.data) {
-        const data = result.data as VersionComparison
-        setComparison(data)
-
+        setComparison(result.data)
         const newAlerts: string[] = []
-        for (const v of data.versions) {
+        for (const v of result.data.versions) {
           if (v.failureRate > 0.3) {
             newAlerts.push(`版本 ${v.version} 失败率 ${(v.failureRate * 100).toFixed(1)}% 超过 30% 阈值`)
           }
         }
         setAlerts(newAlerts)
+      } else {
+        setComparison(null)
       }
     } catch {
-      // silently handle
+      setComparison(null)
     } finally {
       setLoading(false)
     }

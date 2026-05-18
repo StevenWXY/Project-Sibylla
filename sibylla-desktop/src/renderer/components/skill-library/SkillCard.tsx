@@ -2,22 +2,13 @@ import React, { useState, useCallback } from 'react'
 import { Edit, Trash2, Download, Copy, RotateCcw } from 'lucide-react'
 import { Button, Badge } from '../ui'
 import { cn } from '../../utils/cn'
-
-interface SkillSummary {
-  id: string
-  name: string
-  description: string
-  category?: string
-  tags: string[]
-  source: 'builtin' | 'workspace' | 'personal'
-  version: string
-  trashedAt?: number
-}
+import type { SkillSummary } from '../../../shared/types'
 
 interface SkillCardProps {
   skill: SkillSummary
   sourceColor: string
   onRefresh: () => void
+  onEdit?: (skillId: string) => void
   className?: string
 }
 
@@ -29,7 +20,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   general: '⚙️',
 }
 
-export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefresh, className }) => {
+export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefresh, onEdit, className }) => {
   const [expanded, setExpanded] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -40,15 +31,16 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefr
       )
       if (!ok) return
       try {
-        const result = await window.electronAPI.safeInvoke('ai:skill:create', {
+        const result = await window.electronAPI.ai.skillCreate({
           id: `${skill.id}-copy`,
           name: `${skill.name} (副本)`,
           description: skill.description,
-          tags: skill.tags,
+          tags: (skill.tags ?? []),
           prompt: '',
         })
-        if (result.success) {
+        if (result.success && result.data?.skillId) {
           onRefresh()
+          onEdit?.(result.data.skillId)
         } else {
           window.alert(`派生失败: ${result.error?.message ?? '未知错误'}`)
         }
@@ -58,13 +50,8 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefr
       return
     }
 
-    try {
-      await window.electronAPI.safeInvoke('ai:skill:edit', skill.id, { name: skill.name })
-      onRefresh()
-    } catch {
-      // silently handle
-    }
-  }, [skill, onRefresh])
+    onEdit?.(skill.id)
+  }, [skill, onRefresh, onEdit])
 
   const handleDelete = useCallback(async () => {
     if (!confirmDelete) {
@@ -72,7 +59,7 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefr
       return
     }
     try {
-      await window.electronAPI.safeInvoke('ai:skill:soft-delete', skill.id)
+      await window.electronAPI.ai.skillDelete(skill.id)
       onRefresh()
     } catch {
       // silently handle
@@ -83,18 +70,23 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefr
 
   const handleRestore = useCallback(async () => {
     try {
-      await window.electronAPI.safeInvoke('ai:skill:restore', skill.id)
-      onRefresh()
-    } catch {
-      // silently handle
+      const result = await window.electronAPI.ai.skillRestore(skill.id)
+      if (result.success) {
+        onRefresh()
+      } else {
+        window.alert(`恢复失败: ${result.error?.message ?? '未知错误'}`)
+      }
+    } catch (err) {
+      window.alert(`恢复失败: ${err instanceof Error ? err.message : '未知错误'}`)
     }
   }, [skill.id, onRefresh])
 
   const handleExport = useCallback(async () => {
     try {
-      const result = await window.electronAPI.safeInvoke('ai:skill:export', skill.id)
-      if (result.success && result.data) {
-        const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' })
+      const result = await window.electronAPI.ai.skillExport(skill.id)
+      if (result.success && result.data?.base64) {
+        const binary = Uint8Array.from(atob(result.data.base64), (c) => c.charCodeAt(0))
+        const blob = new Blob([binary], { type: 'application/zip' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -131,7 +123,13 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefr
             </div>
           </div>
           <Badge className={cn('text-[10px] px-1.5 py-0.5', sourceColor)}>
-            {skill.source === 'builtin' ? '内置' : skill.source === 'workspace' ? '工作区' : '个人'}
+            {skill.trashedAt
+              ? '已删除'
+              : skill.source === 'builtin'
+                ? '内置'
+                : skill.source === 'workspace'
+                  ? '工作区'
+                  : '个人'}
           </Badge>
         </div>
 
@@ -139,16 +137,16 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, sourceColor, onRefr
           {skill.description}
         </p>
 
-        {skill.tags.length > 0 && (
+        {(skill.tags ?? []).length > 0 && (
           <div className="flex flex-wrap gap-1 mb-2">
-            {skill.tags.slice(0, 3).map((tag) => (
+            {(skill.tags ?? []).slice(0, 3).map((tag) => (
               <span key={tag} className="px-1.5 py-0.5 text-[10px] rounded bg-white/10 text-sys-muted">
                 {tag}
               </span>
             ))}
-            {skill.tags.length > 3 && (
+            {(skill.tags ?? []).length > 3 && (
               <span className="px-1.5 py-0.5 text-[10px] rounded bg-white/10 text-sys-muted">
-                +{skill.tags.length - 3}
+                +{(skill.tags ?? []).length - 3}
               </span>
             )}
           </div>

@@ -234,6 +234,7 @@ export interface EmbeddingProvider {
   embed(texts: string[]): Promise<number[][]>
   isAvailable(): boolean
   initialize(): Promise<void>
+  ensureInitialized(): Promise<void>
 }
 
 export interface HybridSearchResult {

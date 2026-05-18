@@ -22,7 +22,7 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({ className }) =
     setLoading(true)
     setError(null)
     try {
-      const result = await window.electronAPI.safeInvoke('workflow:list')
+      const result = await window.electronAPI.workflow.list()
       if (result.success && result.data) {
         setWorkflows(result.data as WorkflowDefinition[])
         if (result.data.length > 0 && !selectedId) {
@@ -40,7 +40,7 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({ className }) =
 
   const fetchRuns = useCallback(async () => {
     try {
-      const result = await window.electronAPI.safeInvoke('workflow:list-runs', {})
+      const result = await window.electronAPI.workflow.listRuns({})
       if (result.success && result.data) {
         setRuns(result.data as WorkflowRunSummary[])
       }
@@ -52,6 +52,11 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({ className }) =
   useEffect(() => {
     fetchWorkflows()
     fetchRuns()
+    void window.electronAPI.workflow.getDisabledTriggers().then((result) => {
+      if (result.success && result.data) {
+        setDisabledTriggers(new Set(result.data))
+      }
+    })
   }, [fetchWorkflows, fetchRuns])
 
   const selectedWorkflow = workflows.find((w) => w.metadata.id === selectedId)
@@ -65,10 +70,11 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({ className }) =
       next.add(workflowId)
     }
     setDisabledTriggers(next)
+    const enabled = !next.has(workflowId)
     try {
-      await window.electronAPI.safeInvoke('workflow:set-trigger-enabled', workflowId, isDisabled)
-    } catch {
-      // silently handle
+      await window.electronAPI.workflow.setTriggerEnabled(workflowId, enabled)
+    } catch (err) {
+      console.warn('[WorkflowManager] Failed to persist trigger state:', err)
     }
   }, [disabledTriggers])
 
@@ -169,9 +175,12 @@ const TriggerButton: React.FC<{ workflowId: string }> = ({ workflowId }) => {
   const handleTrigger = useCallback(async () => {
     setTriggering(true)
     try {
-      await window.electronAPI.safeInvoke('workflow:trigger-manual', workflowId, {})
-    } catch {
-      // silently handle
+      const result = await window.electronAPI.workflow.triggerManual(workflowId, {})
+      if (!result.success) {
+        console.warn('[WorkflowManager] Manual trigger failed:', result.error?.message)
+      }
+    } catch (err) {
+      console.warn('[WorkflowManager] Manual trigger error:', err)
     } finally {
       setTriggering(false)
     }

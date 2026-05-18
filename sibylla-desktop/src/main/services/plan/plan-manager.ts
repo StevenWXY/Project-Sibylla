@@ -44,11 +44,13 @@ export class PlanManager {
   async initialize(): Promise<void> {
     await this.loadExistingPlans()
     this.startFileWatcher()
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupStalePlans().catch((err) => {
-        this.logger.error('plan.cleanup.failed', { error: String(err) })
-      })
-    }, CLEANUP_INTERVAL_MS)
+    if (!this.cleanupInterval) {
+      this.cleanupInterval = setInterval(() => {
+        this.cleanupStalePlans().catch((err) => {
+          this.logger.error('plan.cleanup.failed', { error: String(err) })
+        })
+      }, CLEANUP_INTERVAL_MS)
+    }
     this.logger.info('plan.manager.initialized', { count: this.plans.size })
   }
 
@@ -289,7 +291,27 @@ export class PlanManager {
     return `plan-${y}${m}${d}-${h}${min}${s}`
   }
 
+  private shouldEnableFileWatcher(): boolean {
+    const explicit = process.env.SIBYLLA_PLAN_WATCHER
+    if (explicit === '1' || explicit === 'true') {
+      return true
+    }
+    if (explicit === '0' || explicit === 'false') {
+      return false
+    }
+    // Avoid EMFILE in parallel test workers where watcher behavior is not under test.
+    return !process.env.VITEST
+  }
+
   private startFileWatcher(): void {
+    if (this.fileWatcher) {
+      return
+    }
+    if (!this.shouldEnableFileWatcher()) {
+      this.logger.debug('plan.watcher.disabled')
+      return
+    }
+
     const watchPath = path.join(this.workspaceRoot, PLANS_DIR)
     try {
       fs.promises.mkdir(watchPath, { recursive: true }).catch(() => {})
