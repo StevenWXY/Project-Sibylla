@@ -52,14 +52,18 @@ export class PresenceClient {
       broadcastEnabled: this.config.broadcastEnabled,
     }
 
-    const baseUrl = `${this.config.serviceUrl}/presence?workspaceId=${workspaceId}&token=${token}`
+    // NOTE: WebSocket URL must include auth token as query param (standard limitation).
+    // The token in a WebSocket URL is unavoidable without a custom auth handshake.
+    // For SSE fallback, we only pass workspaceId — heartbeat uses Authorization header below.
+    const wsUrl = `${this.config.serviceUrl}/presence?workspaceId=${workspaceId}&token=${token}`
+    const sseUrl = `${this.config.serviceUrl}/presence/stream?workspaceId=${workspaceId}`
 
     try {
-      await this.setupWebSocket(baseUrl)
+      await this.setupWebSocket(wsUrl)
     } catch {
       logger.info('[PresenceClient] WebSocket failed, trying SSE fallback')
       try {
-        this.setupSSE(`${this.config.serviceUrl}/presence/stream?workspaceId=${workspaceId}&token=${token}`)
+        this.setupSSE(sseUrl, token)
       } catch {
         this._serviceAvailable = false
         this.store.setServiceAvailable(false)
@@ -129,7 +133,7 @@ export class PresenceClient {
     })
   }
 
-  private setupSSE(url: string): void {
+  private setupSSE(url: string, token: string): void {
     const eventSource = this.createEventSource(url)
     let connected = false
 
@@ -158,9 +162,13 @@ export class PresenceClient {
 
     this.ws = {
       send: (data: string) => {
+        // Token no longer in URL; use Authorization header instead
         fetch(`${this.config.serviceUrl}/presence/heartbeat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
           body: data,
         }).catch(() => {
           this.consecutiveHeartbeatFailures++

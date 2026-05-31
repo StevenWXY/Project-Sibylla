@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { promises as fs } from 'fs'
+import os from 'os'
 import path from 'path'
 import { FileManager } from '../../src/main/services/file-manager'
 import { FileWatchEvent } from '../../src/main/services/types/file-manager.types'
@@ -35,9 +36,8 @@ describe('FileWatcher', () => {
   let unwatch: (() => Promise<void>) | null = null
 
   beforeEach(async () => {
-    // Create a temporary test workspace
-    testWorkspace = path.join(process.cwd(), 'test-workspace-watcher')
-    await fs.mkdir(testWorkspace, { recursive: true })
+    // Use a system temp dir to avoid mutating tracked repository fixtures.
+    testWorkspace = await fs.mkdtemp(path.join(os.tmpdir(), 'sibylla-watcher-test-'))
     
     // Initialize FileManager
     fileManager = new FileManager(testWorkspace)

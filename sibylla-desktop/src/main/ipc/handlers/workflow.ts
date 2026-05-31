@@ -45,6 +45,14 @@ export class WorkflowHandler extends IpcHandler {
     ipcMain.handle(IPC_CHANNELS.WORKFLOW_CONFIRM_STEP, this.safeHandle(async (_event, runId: string, decision: 'confirm' | 'skip' | 'cancel') => {
       this.scheduler.resolveConfirmation(runId, decision)
     }))
+
+    ipcMain.handle(IPC_CHANNELS.WORKFLOW_SET_TRIGGER_ENABLED, this.safeHandle(async (_event, workflowId: string, enabled: boolean) => {
+      await this.scheduler.setTriggerEnabled(workflowId, enabled)
+    }))
+
+    ipcMain.handle(IPC_CHANNELS.WORKFLOW_GET_DISABLED_TRIGGERS, this.safeHandle(async () => {
+      return this.scheduler.getDisabledTriggerIds()
+    }))
   }
 
   cleanup(): void {
@@ -54,6 +62,8 @@ export class WorkflowHandler extends IpcHandler {
     ipcMain.removeHandler(IPC_CHANNELS.WORKFLOW_CANCEL_RUN)
     ipcMain.removeHandler(IPC_CHANNELS.WORKFLOW_LIST_RUNS)
     ipcMain.removeHandler(IPC_CHANNELS.WORKFLOW_CONFIRM_STEP)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKFLOW_SET_TRIGGER_ENABLED)
+    ipcMain.removeHandler(IPC_CHANNELS.WORKFLOW_GET_DISABLED_TRIGGERS)
     super.cleanup()
   }
 }

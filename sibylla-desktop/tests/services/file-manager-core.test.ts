@@ -282,6 +282,12 @@ describe('FileManager - Core Operations', () => {
       expect(() => fileManager.validatePath('/absolute/path.txt')).toThrow(/outside workspace/)
     })
 
+    it('should reject sibling workspace prefix paths', async () => {
+      const siblingRoot = `${testDir}-evil`
+      const siblingPath = path.join(siblingRoot, 'secret.md')
+      expect(() => fileManager.validatePath(siblingPath)).toThrow(/outside workspace/)
+    })
+
     it('should reject forbidden directories', async () => {
       const gitPath = fileManager.resolvePath('.git/config')
       expect(() => fileManager.validatePath(gitPath)).toThrow(/forbidden/)

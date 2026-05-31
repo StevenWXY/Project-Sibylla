@@ -2,21 +2,13 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { Search, Filter, Upload, Grid3X3, List } from 'lucide-react'
 import { SkillCard } from './SkillCard'
 import { SkillImportDialog } from './SkillImportDialog'
+import { SkillEditorDialog } from './SkillEditorDialog'
 import { Button, Input } from '../ui'
 import { cn } from '../../utils/cn'
+import type { SkillSummary } from '../../../shared/types'
 
 type SkillSource = 'builtin' | 'workspace' | 'personal'
-type TabFilter = 'all' | 'builtin' | 'workspace' | 'personal'
-
-interface SkillSummary {
-  id: string
-  name: string
-  description: string
-  category?: string
-  tags: string[]
-  source: SkillSource
-  version: string
-}
+type TabFilter = 'all' | 'builtin' | 'workspace' | 'personal' | 'trash'
 
 interface SkillLibraryProps {
   className?: string
@@ -27,6 +19,7 @@ const TAB_OPTIONS: { key: TabFilter; label: string }[] = [
   { key: 'builtin', label: '内置' },
   { key: 'workspace', label: '工作区' },
   { key: 'personal', label: '个人' },
+  { key: 'trash', label: '回收站' },
 ]
 
 const SOURCE_COLORS: Record<SkillSource, string> = {
@@ -45,12 +38,13 @@ export const SkillLibrary: React.FC<SkillLibraryProps> = ({ className }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [allTags, setAllTags] = useState<string[]>([])
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null)
 
   const fetchSkills = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const result = await window.electronAPI.safeInvoke('ai:skill:list')
+      const result = await window.electronAPI.ai.skillList()
       if (result.success && result.data) {
         setSkills(result.data as SkillSummary[])
         const tags = new Set<string>()
@@ -76,7 +70,12 @@ export const SkillLibrary: React.FC<SkillLibraryProps> = ({ className }) => {
 
   const filteredSkills = useMemo(() => {
     return skills.filter((skill) => {
-      if (activeTab !== 'all' && skill.source !== activeTab) return false
+      if (activeTab === 'trash') {
+        if (!skill.trashedAt) return false
+      } else {
+        if (skill.trashedAt) return false
+        if (activeTab !== 'all' && skill.source !== activeTab) return false
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase()
         if (
@@ -202,13 +201,29 @@ export const SkillLibrary: React.FC<SkillLibraryProps> = ({ className }) => {
             )}
           >
             {filteredSkills.map((skill) => (
-              <SkillCard key={skill.id} skill={skill} sourceColor={SOURCE_COLORS[skill.source]} onRefresh={fetchSkills} />
+              <SkillCard
+                key={skill.id}
+                skill={skill}
+                sourceColor={SOURCE_COLORS[skill.source ?? 'workspace']}
+                onRefresh={fetchSkills}
+                onEdit={setEditingSkillId}
+              />
             ))}
           </div>
         )}
       </div>
 
       {showImport && <SkillImportDialog onClose={() => setShowImport(false)} onImported={fetchSkills} />}
+      {editingSkillId && (
+        <SkillEditorDialog
+          skillId={editingSkillId}
+          onClose={() => setEditingSkillId(null)}
+          onSaved={() => {
+            setEditingSkillId(null)
+            void fetchSkills()
+          }}
+        />
+      )}
     </div>
   )
 }

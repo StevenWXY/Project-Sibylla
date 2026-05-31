@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { X } from 'lucide-react'
+import { useAppStore, selectCurrentWorkspace } from '../../store/appStore'
 import {
   useSyncStatusStore,
   selectStatus,
@@ -27,6 +28,7 @@ export interface SyncDetailPanelProps {
 }
 
 export function SyncDetailPanel({ onClose }: SyncDetailPanelProps) {
+  const hasWorkspace = useAppStore(selectCurrentWorkspace) !== null
   const status = useSyncStatusStore(selectStatus)
   const lastSyncedAt = useSyncStatusStore(selectLastSyncedAt)
   const errorMessage = useSyncStatusStore(selectErrorMessage)
@@ -71,7 +73,9 @@ export function SyncDetailPanel({ onClose }: SyncDetailPanelProps) {
         <div className="space-y-1 text-xs">
           <div className="flex items-center justify-between">
             <span className="text-gray-400">状态</span>
-            <span className="text-white">{STATUS_LABELS[status] ?? status}</span>
+            <span className="text-white">
+              {hasWorkspace ? (STATUS_LABELS[status] ?? status) : '未打开工作区'}
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-gray-400">上次同步</span>

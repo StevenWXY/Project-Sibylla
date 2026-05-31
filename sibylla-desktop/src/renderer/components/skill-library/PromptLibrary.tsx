@@ -37,7 +37,7 @@ export const PromptLibrary: React.FC<PromptLibraryProps> = ({ className }) => {
   const fetchPrompts = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await window.electronAPI.safeInvoke('prompt-library:list-all')
+      const result = await window.electronAPI.promptLibrary.listAll()
       if (result.success && result.data) {
         setPrompts(result.data as PromptMetadata[])
       }

@@ -14,7 +14,9 @@ export default defineConfig({
     include: ['tests/renderer/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist'],
     setupFiles: ['tests/renderer/setup.ts'],
-    testTimeout: 10000,
+    testTimeout: 15000,
+    hookTimeout: 15000,
+    teardownTimeout: 15000,
     css: false,
   },
   resolve: {

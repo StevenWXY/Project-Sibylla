@@ -1,4 +1,6 @@
 import chokidar from 'chokidar'
+import { promises as fs } from 'fs'
+import path from 'path'
 import type { BrowserWindow } from 'electron'
 import type { WorkflowDefinition } from '../../../shared/types'
 import type { UserConfirmationDecision } from './types'
@@ -21,12 +23,14 @@ export class WorkflowScheduler {
   private activeRunCounts = new Map<string, number>()
   private pendingConfirmations = new Map<string, PendingConfirmation>()
   private fileDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private disabledWorkflowIds = new Set<string>()
   private mainWindow: BrowserWindow | null = null
 
   constructor(
     private readonly registry: WorkflowRegistry,
     private readonly executor: WorkflowExecutor,
     private readonly runStore: WorkflowRunStore,
+    private readonly workspaceRoot: string,
     private readonly currentUser?: string,
   ) {}
 
@@ -35,11 +39,56 @@ export class WorkflowScheduler {
   }
 
   async initialize(): Promise<void> {
+    await this.loadDisabledTriggers()
     this.setupFileWatchers()
     this.scheduleCronTriggers()
     await this.recoverIncompleteRuns()
 
     logger.info('[WorkflowScheduler] 初始化完成')
+  }
+
+  getDisabledTriggerIds(): string[] {
+    return Array.from(this.disabledWorkflowIds)
+  }
+
+  async setTriggerEnabled(workflowId: string, enabled: boolean): Promise<void> {
+    if (enabled) {
+      this.disabledWorkflowIds.delete(workflowId)
+    } else {
+      this.disabledWorkflowIds.add(workflowId)
+    }
+    await this.persistDisabledTriggers()
+    logger.info('[WorkflowScheduler] 触发器开关已更新', { workflowId, enabled })
+  }
+
+  private isWorkflowTriggerEnabled(workflowId: string): boolean {
+    return !this.disabledWorkflowIds.has(workflowId)
+  }
+
+  private disabledTriggersPath(): string {
+    return path.join(this.workspaceRoot, '.sibylla', 'disabled-workflow-triggers.json')
+  }
+
+  private async loadDisabledTriggers(): Promise<void> {
+    try {
+      const raw = await fs.readFile(this.disabledTriggersPath(), 'utf-8')
+      const parsed = JSON.parse(raw) as { workflowIds?: string[] }
+      if (Array.isArray(parsed.workflowIds)) {
+        this.disabledWorkflowIds = new Set(parsed.workflowIds.filter((id) => typeof id === 'string'))
+      }
+    } catch {
+      this.disabledWorkflowIds = new Set()
+    }
+  }
+
+  private async persistDisabledTriggers(): Promise<void> {
+    const filePath = this.disabledTriggersPath()
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({ workflowIds: Array.from(this.disabledWorkflowIds) }, null, 2),
+      'utf-8',
+    )
   }
 
   async triggerManual(
@@ -224,6 +273,13 @@ export class WorkflowScheduler {
   }
 
   private triggerWorkflow(workflow: WorkflowDefinition, params: Record<string, unknown>): void {
+    if (!this.isWorkflowTriggerEnabled(workflow.metadata.id)) {
+      logger.debug('[WorkflowScheduler] 自动触发已禁用，跳过', {
+        workflowId: workflow.metadata.id,
+      })
+      return
+    }
+
     const currentCount = this.activeRunCounts.get(workflow.metadata.id) ?? 0
     if (currentCount >= MAX_CONCURRENT_PER_WORKFLOW) {
       logger.warn('[WorkflowScheduler] 并发上限达到，跳过触发', {

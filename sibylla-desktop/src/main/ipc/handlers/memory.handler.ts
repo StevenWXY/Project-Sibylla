@@ -537,7 +537,11 @@ export class MemoryHandler extends IpcHandler {
       }
 
       const updated = { ...current, ...patch }
-      await fs.writeFile(configPath, JSON.stringify(updated, null, 2), 'utf-8')
+      // Atomic write: write to temp file first, then rename.
+      // This prevents corruption if the process crashes mid-write.
+      const tmpPath = `${configPath}.tmp`
+      await fs.writeFile(tmpPath, JSON.stringify(updated, null, 2), 'utf-8')
+      await fs.rename(tmpPath, configPath)
       logger.info('[MemoryHandler] Config updated', { patch: Object.keys(patch) })
     } catch (err) {
       logger.error('[MemoryHandler] Config update failed', {

@@ -11,6 +11,7 @@
  */
 
 import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from 'electron'
+import * as path from 'path'
 import { IpcHandler } from '../handler'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type { ConflictInfo, ConflictResolution } from '../../../shared/types'
@@ -18,11 +19,14 @@ import type { HistoryOptions, CommitInfo, FileDiff } from '../../services/types/
 import { logger } from '../../utils/logger'
 import type { ConflictResolver } from '../../services/conflict-resolver'
 import type { GitAbstraction } from '../../services/git-abstraction'
+import type { WorkspaceManager } from '../../services/workspace-manager'
+import { isPathInsideRoot } from '../../utils/path-boundary'
 
 export class GitHandler extends IpcHandler {
   readonly namespace = 'git'
   private conflictResolver: ConflictResolver | null = null
   private gitAbstraction: GitAbstraction | null = null
+  private workspaceManager: WorkspaceManager | null = null
 
   setConflictResolver(resolver: ConflictResolver): void {
     this.conflictResolver = resolver
@@ -32,6 +36,32 @@ export class GitHandler extends IpcHandler {
   setGitAbstraction(gitAbs: GitAbstraction): void {
     this.gitAbstraction = gitAbs
     logger.info('[GitHandler] GitAbstraction instance set')
+  }
+
+  setWorkspaceManager(wsManager: WorkspaceManager): void {
+    this.workspaceManager = wsManager
+    logger.info('[GitHandler] WorkspaceManager instance set')
+  }
+
+  /**
+   * Validate that the given filepath is within the currently open workspace root.
+   * This prevents path traversal attacks where a renderer tries to access files
+   * outside the workspace boundary.
+   */
+  private validateFilepath(filepath: string): void {
+    if (!this.workspaceManager) {
+      throw new Error('GitHandler: WorkspaceManager not set')
+    }
+    const workspaceRoot = this.workspaceManager.getWorkspacePath()
+    if (!workspaceRoot) {
+      throw new Error('GitHandler: No workspace is currently open')
+    }
+    const resolved = path.isAbsolute(filepath)
+      ? path.resolve(filepath)
+      : path.resolve(workspaceRoot, filepath)
+    if (!isPathInsideRoot(workspaceRoot, resolved)) {
+      throw new Error(`GitHandler: filepath "${filepath}" is outside workspace boundary`)
+    }
   }
 
   register(): void {
@@ -112,6 +142,8 @@ export class GitHandler extends IpcHandler {
       throw new Error('ConflictResolver not initialized')
     }
 
+    this.validateFilepath(resolution.filePath)
+
     logger.info('[GitHandler] Resolve conflict requested', {
       filePath: resolution.filePath,
       type: resolution.type,
@@ -126,6 +158,9 @@ export class GitHandler extends IpcHandler {
     if (!this.gitAbstraction) {
       throw new Error('GitAbstraction not initialized')
     }
+    if (options?.filepath) {
+      this.validateFilepath(options.filepath)
+    }
     logger.info('[GitHandler] History requested', { filepath: options?.filepath })
     return this.gitAbstraction.getHistory(options)
   }
@@ -139,6 +174,7 @@ export class GitHandler extends IpcHandler {
     if (!this.gitAbstraction) {
       throw new Error('GitAbstraction not initialized')
     }
+    this.validateFilepath(filepath)
     logger.info('[GitHandler] Diff requested', { filepath, commitA, commitB })
     return this.gitAbstraction.getFileDiff(filepath, commitA, commitB)
   }
@@ -151,6 +187,7 @@ export class GitHandler extends IpcHandler {
     if (!this.gitAbstraction) {
       throw new Error('GitAbstraction not initialized')
     }
+    this.validateFilepath(filepath)
     logger.info('[GitHandler] Restore version requested', { filepath, commitSha })
     return this.gitAbstraction.restoreVersion(filepath, commitSha)
   }

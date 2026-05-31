@@ -11,6 +11,7 @@ import { IpcHandler } from '../handler'
 import { WorkspaceManager } from '../../services/workspace-manager'
 import { TokenStorage } from '../../services/token-storage'
 import { IPC_CHANNELS } from '../../../shared/types'
+import { getCloudApiBaseUrl } from '../../config/cloud-api-url'
 import { logger } from '../../utils/logger'
 import type {
   CreateWorkspaceOptions,
@@ -47,7 +48,7 @@ export class WorkspaceHandler extends IpcHandler {
 
   constructor() {
     super()
-    this.cloudBaseUrl = (process.env.CLOUD_API_URL ?? 'https://api.sibylla.io').replace(/\/+$/, '')
+    this.cloudBaseUrl = getCloudApiBaseUrl()
   }
   
   /**
@@ -361,10 +362,26 @@ export class WorkspaceHandler extends IpcHandler {
     return token
   }
 
+  /**
+   * Validate that the given workspaceId matches the currently open workspace.
+   * This prevents cross-workspace member enumeration/manipulation via guessed workspace IDs.
+   */
+  private validateWorkspaceId(workspaceId: string): void {
+    const manager = this.ensureWorkspaceManager()
+    const current = manager.getCurrentWorkspace()
+    if (!current) {
+      throw new Error('No workspace is currently open')
+    }
+    if (current.config.workspaceId !== workspaceId) {
+      throw new Error(`Workspace ID mismatch: cannot operate on workspace "${workspaceId}" — currently open workspace is "${current.config.workspaceId}"`)
+    }
+  }
+
   private async getMembers(
     _event: IpcMainInvokeEvent,
     workspaceId: string,
   ): Promise<WorkspaceMember[]> {
+    this.validateWorkspaceId(workspaceId)
     const token = this.ensureToken()
     logger.info('[WorkspaceHandler] Getting members', { workspaceId })
 
@@ -385,6 +402,7 @@ export class WorkspaceHandler extends IpcHandler {
     workspaceId: string,
     request: InviteRequest,
   ): Promise<InviteResult> {
+    this.validateWorkspaceId(workspaceId)
     const token = this.ensureToken()
     logger.info('[WorkspaceHandler] Inviting member', { workspaceId, email: request.email })
 
@@ -420,6 +438,7 @@ export class WorkspaceHandler extends IpcHandler {
     userId: string,
     role: MemberRole,
   ): Promise<void> {
+    this.validateWorkspaceId(workspaceId)
     const token = this.ensureToken()
     logger.info('[WorkspaceHandler] Updating member role', { workspaceId, userId, role })
 
@@ -445,6 +464,7 @@ export class WorkspaceHandler extends IpcHandler {
     workspaceId: string,
     userId: string,
   ): Promise<void> {
+    this.validateWorkspaceId(workspaceId)
     const token = this.ensureToken()
     logger.info('[WorkspaceHandler] Removing member', { workspaceId, userId })
 

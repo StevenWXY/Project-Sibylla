@@ -50,7 +50,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
       fetchWorkflows: async () => {
         set({ loading: true, error: null }, false, 'workflow/fetchStart')
         try {
-          const result = await window.electronAPI.safeInvoke('workflow:list')
+          const result = await window.electronAPI.workflow.list()
           if (result.success && result.data) {
             set({ workflows: result.data as WorkflowDefinition[], loading: false }, false, 'workflow/fetchSuccess')
           } else {
@@ -63,7 +63,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
       triggerManual: async (workflowId, params) => {
         try {
-          const result = await window.electronAPI.safeInvoke('workflow:trigger-manual', workflowId, params)
+          const result = await window.electronAPI.workflow.triggerManual(workflowId, params)
           if (result.success && result.data) {
             get().fetchRuns()
             return (result.data as { runId: string }).runId
@@ -77,7 +77,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
       fetchRuns: async (filter?: RunFilter) => {
         try {
-          const result = await window.electronAPI.safeInvoke('workflow:list-runs', filter)
+          const result = await window.electronAPI.workflow.listRuns(filter)
           if (result.success && result.data) {
             set({ runs: result.data as WorkflowRunSummary[] }, false, 'workflow/fetchRunsSuccess')
           }
@@ -88,7 +88,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
       getRun: async (runId: string) => {
         try {
-          const result = await window.electronAPI.safeInvoke('workflow:get-run', runId)
+          const result = await window.electronAPI.workflow.getRun(runId)
           if (result.success && result.data) {
             return result.data as WorkflowRun
           }
@@ -100,7 +100,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
       cancelRun: async (runId: string) => {
         try {
-          await window.electronAPI.safeInvoke('workflow:cancel-run', runId)
+          await window.electronAPI.workflow.cancelRun(runId)
           get().fetchRuns()
         } catch (err) {
           set({ error: err instanceof Error ? err.message : '取消 Workflow 失败' }, false, 'workflow/cancelError')
@@ -109,7 +109,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
       confirmStep: async (runId: string, decision: 'confirm' | 'skip' | 'cancel') => {
         try {
-          await window.electronAPI.safeInvoke('workflow:confirm-step', runId, decision)
+          await window.electronAPI.workflow.confirmStep(runId, decision)
           set({ confirmationRequest: null }, false, 'workflow/confirmStep')
           get().fetchRuns()
         } catch (err) {

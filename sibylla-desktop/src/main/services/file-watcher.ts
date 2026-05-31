@@ -38,6 +38,24 @@ export class FileWatcher {
   }
 
   /**
+   * Determine whether polling mode should be used.
+   *
+   * Native FS events can be unreliable in sandboxed/virtualized environments
+   * (e.g. CI, containerized test runners). In those environments we default
+   * to polling for deterministic behavior.
+   */
+  private shouldUsePolling(): boolean {
+    const explicit = process.env.SIBYLLA_WATCH_USE_POLLING
+    if (explicit === '1' || explicit === 'true') {
+      return true
+    }
+    if (explicit === '0' || explicit === 'false') {
+      return false
+    }
+    return Boolean(process.env.VITEST || process.env.CI)
+  }
+
+  /**
    * Start watching the workspace for file system changes
    * @param callback - Callback function to handle file watch events
    * @throws Error if watcher is already started
@@ -52,11 +70,27 @@ export class FileWatcher {
 
     logger.info('[FileWatcher] Starting file watcher', { workspaceRoot: this.workspaceRoot })
 
+    const usePolling = this.shouldUsePolling()
+    const pollInterval = Number(process.env.SIBYLLA_WATCH_POLL_INTERVAL_MS ?? 100)
+
     // Initialize chokidar watcher with configuration
     this.watcher = chokidar.watch(this.workspaceRoot, {
       ignored: this.ignoredPaths,
       persistent: true,
-      ignoreInitial: true
+      ignoreInitial: true,
+      ignorePermissionErrors: true,
+      usePolling,
+      interval: usePolling ? pollInterval : undefined,
+      binaryInterval: usePolling ? Math.max(150, pollInterval * 2) : undefined,
+      awaitWriteFinish: {
+        stabilityThreshold: 120,
+        pollInterval: 25,
+      },
+    })
+
+    logger.info('[FileWatcher] Watch mode configured', {
+      usePolling,
+      pollInterval: usePolling ? pollInterval : undefined,
     })
 
     // Register event listeners

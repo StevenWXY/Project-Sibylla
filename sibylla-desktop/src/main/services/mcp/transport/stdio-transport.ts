@@ -16,8 +16,19 @@ export class StdioTransport implements MCPTransport {
       throw new Error(`StdioTransport: command is required for server "${this.config.name}"`)
     }
 
+    // Only pass explicitly whitelisted env vars to MCP subprocess.
+    // Spreading all of process.env risks leaking sensitive variables (API keys, tokens).
+    const safeEnv: Record<string, string> = {
+      PATH: process.env.PATH ?? '',
+      HOME: process.env.HOME ?? '',
+      USER: process.env.USER ?? '',
+      LANG: process.env.LANG ?? '',
+      LC_ALL: process.env.LC_ALL ?? '',
+      TMPDIR: process.env.TMPDIR ?? '',
+      ...this.config.env,
+    }
     this.process = spawn(this.config.command, this.config.args ?? [], {
-      env: { ...process.env, ...this.config.env },
+      env: safeEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 

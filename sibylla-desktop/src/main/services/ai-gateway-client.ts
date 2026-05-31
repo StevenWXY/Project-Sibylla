@@ -1,3 +1,4 @@
+import { getCloudApiBaseUrl } from '../config/cloud-api-url'
 import { logger } from '../utils/logger'
 
 export interface AiGatewayChatMessage {
@@ -29,12 +30,25 @@ export interface AiGatewayChatResponse {
   warnings: string[]
 }
 
+export interface AiGatewayEmbeddingRequest {
+  input: string | string[]
+  model?: string
+  dimensions?: number
+}
+
+export interface AiGatewayEmbeddingResponse {
+  provider: string
+  model: string
+  vectors: number[][]
+  warnings: string[]
+}
+
 export class AiGatewayClient {
   private readonly baseUrl: string
   private readonly maxRetries: number
   private readonly baseDelayMs: number
 
-  constructor(baseUrl: string = 'http://localhost:3000', maxRetries: number = 3, baseDelayMs: number = 1000) {
+  constructor(baseUrl: string = getCloudApiBaseUrl(), maxRetries: number = 3, baseDelayMs: number = 1000) {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
     this.maxRetries = maxRetries
     this.baseDelayMs = baseDelayMs
@@ -220,6 +234,27 @@ export class AiGatewayClient {
         warnings: ['Cloud AI gateway unavailable; desktop fallback response applied'],
       }
     }
+  }
+
+  async embeddings(
+    request: AiGatewayEmbeddingRequest,
+    accessToken?: string,
+  ): Promise<AiGatewayEmbeddingResponse> {
+    const response = await fetch(`${this.baseUrl}/api/v1/ai/embeddings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify(request),
+    })
+
+    if (!response.ok) {
+      const fallbackText = await response.text()
+      throw new Error(`AI gateway embeddings failed: ${response.status} ${fallbackText}`)
+    }
+
+    return (await response.json()) as AiGatewayEmbeddingResponse
   }
 }
 

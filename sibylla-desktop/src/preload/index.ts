@@ -290,9 +290,14 @@ interface ElectronAPI {
     skillSearch: (params: SkillSearchParams) => Promise<IPCResponse<SkillSummary[]>>
     skillGet: (skillId: string) => Promise<IPCResponse<SkillV2 | null>>
     skillCreate: (template: SkillTemplate) => Promise<IPCResponse<{ skillId: string; path: string }>>
+    skillEdit: (
+      skillId: string,
+      updates: Partial<SkillTemplate> & { category?: string; version?: string },
+    ) => Promise<IPCResponse<void>>
+    skillRestore: (skillId: string) => Promise<IPCResponse<{ path: string }>>
     skillValidate: (skillId: string) => Promise<IPCResponse<SkillValidationResultType>>
     skillDelete: (skillId: string) => Promise<IPCResponse<void>>
-    skillExport: (skillId: string) => Promise<IPCResponse<{ bundlePath: string }>>
+    skillExport: (skillId: string) => Promise<IPCResponse<import('../shared/types').SkillExportResult>>
     skillImport: (bundlePath: string) => Promise<IPCResponse<{ skillId: string }>>
     skillTestRun: (skillId: string, userInput: string) => Promise<IPCResponse<SkillResult>>
   }
@@ -544,7 +549,13 @@ interface ElectronAPI {
     cancelRun: (runId: string) => Promise<IPCResponse<void>>
     listRuns: (filter?: RunFilter) => Promise<IPCResponse<WorkflowRunSummary[]>>
     confirmStep: (runId: string, decision: 'confirm' | 'skip' | 'cancel') => Promise<IPCResponse<void>>
+    setTriggerEnabled: (workflowId: string, enabled: boolean) => Promise<IPCResponse<void>>
+    getDisabledTriggers: () => Promise<IPCResponse<string[]>>
     onConfirmationRequired: (callback: (request: WorkflowConfirmationRequest) => void) => () => void
+  }
+
+  promptPerformance: {
+    compareVersions: (promptId: string) => Promise<IPCResponse<import('../shared/types').PromptVersionComparisonResult>>
   }
 
   // Import Pipeline operations (TASK040)
@@ -942,6 +953,9 @@ const ALLOWED_CHANNELS: IPCChannel[] = [
   IPC_CHANNELS.WORKFLOW_LIST_RUNS,
   IPC_CHANNELS.WORKFLOW_CONFIRMATION_REQUIRED,
   IPC_CHANNELS.WORKFLOW_CONFIRM_STEP,
+  IPC_CHANNELS.WORKFLOW_SET_TRIGGER_ENABLED,
+  IPC_CHANNELS.WORKFLOW_GET_DISABLED_TRIGGERS,
+  IPC_CHANNELS.PROMPT_PERFORMANCE_COMPARE_VERSIONS,
   // Import Pipeline operations (TASK040)
   IPC_CHANNELS.FILE_IMPORT_PLAN,
   IPC_CHANNELS.FILE_IMPORT_EXECUTE,
@@ -1073,6 +1087,27 @@ function isChannelAllowed(channel: string): boolean {
  * @param args - Arguments to pass to the handler (last arg can be timeout config)
  * @returns Promise resolving to the IPC response
  */
+function isIpcResponse(value: unknown): value is IPCResponse<unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'success' in value &&
+    typeof (value as IPCResponse<unknown>).success === 'boolean'
+  )
+}
+
+/** Handlers that return raw payloads (plan, dashboard, etc.) are wrapped for renderer stores. */
+function normalizeIpcResponse<T>(response: unknown): IPCResponse<T> {
+  if (isIpcResponse(response)) {
+    return response as IPCResponse<T>
+  }
+  return {
+    success: true,
+    data: response as T,
+    timestamp: Date.now(),
+  }
+}
+
 async function safeInvoke<T>(
   channel: IPCChannel,
   ...args: unknown[]
@@ -1094,10 +1129,12 @@ async function safeInvoke<T>(
     })
     
     // Race between actual IPC call and timeout
-    const response = await Promise.race([
+    const raw = await Promise.race([
       ipcRenderer.invoke(channel, ...args),
       timeoutPromise
     ])
+
+    const response = normalizeIpcResponse<T>(raw)
     
     if (isDev) {
       console.debug(`[Preload] Response from ${channel}:`, response.success ? 'success' : 'error')
@@ -1465,6 +1502,17 @@ const api: ElectronAPI = {
       return await safeInvoke<{ skillId: string; path: string }>(IPC_CHANNELS.AI_SKILL_CREATE, template)
     },
 
+    skillEdit: async (
+      skillId: string,
+      updates: Partial<SkillTemplate> & { category?: string; version?: string },
+    ) => {
+      return await safeInvoke<void>(IPC_CHANNELS.AI_SKILL_EDIT, skillId, updates)
+    },
+
+    skillRestore: async (skillId: string) => {
+      return await safeInvoke<{ path: string }>(IPC_CHANNELS.AI_SKILL_RESTORE, skillId)
+    },
+
     skillValidate: async (skillId: string) => {
       return await safeInvoke<SkillValidationResultType>(IPC_CHANNELS.AI_SKILL_VALIDATE, skillId)
     },
@@ -1474,7 +1522,7 @@ const api: ElectronAPI = {
     },
 
     skillExport: async (skillId: string) => {
-      return await safeInvoke<{ bundlePath: string }>(IPC_CHANNELS.AI_SKILL_EXPORT, skillId)
+      return await safeInvoke<import('../shared/types').SkillExportResult>(IPC_CHANNELS.AI_SKILL_EXPORT, skillId)
     },
 
     skillImport: async (bundlePath: string) => {
@@ -2122,6 +2170,12 @@ const api: ElectronAPI = {
     confirmStep: async (runId: string, decision: 'confirm' | 'skip' | 'cancel') => {
       return await safeInvoke<void>(IPC_CHANNELS.WORKFLOW_CONFIRM_STEP, runId, decision)
     },
+    setTriggerEnabled: async (workflowId: string, enabled: boolean) => {
+      return await safeInvoke<void>(IPC_CHANNELS.WORKFLOW_SET_TRIGGER_ENABLED, workflowId, enabled)
+    },
+    getDisabledTriggers: async () => {
+      return await safeInvoke<string[]>(IPC_CHANNELS.WORKFLOW_GET_DISABLED_TRIGGERS)
+    },
     onConfirmationRequired: (callback: (request: WorkflowConfirmationRequest) => void) => {
       const subscription = (_event: IpcRendererEvent, request: WorkflowConfirmationRequest) => {
         callback(request)
@@ -2130,6 +2184,15 @@ const api: ElectronAPI = {
       return () => {
         ipcRenderer.off(IPC_CHANNELS.WORKFLOW_CONFIRMATION_REQUIRED, subscription)
       }
+    },
+  },
+
+  promptPerformance: {
+    compareVersions: async (promptId: string) => {
+      return await safeInvoke<import('../shared/types').PromptVersionComparisonResult>(
+        IPC_CHANNELS.PROMPT_PERFORMANCE_COMPARE_VERSIONS,
+        promptId,
+      )
     },
   },
 

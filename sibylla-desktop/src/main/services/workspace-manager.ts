@@ -49,15 +49,31 @@ import {
 } from './workspace-templates'
 import { logger } from '../utils/logger'
 
+export interface CloudWorkspaceSyncResult {
+  workspaceId: string
+  gitRemoteUrl: string | null
+  ownerUserId?: string
+}
+
+export interface CloudWorkspaceSyncAdapter {
+  createRemoteWorkspace(options: CreateWorkspaceOptions): Promise<CloudWorkspaceSyncResult>
+}
+
 /**
  * WorkspaceManager - Core workspace management service
  */
 export class WorkspaceManager {
   private currentWorkspace: WorkspaceInfo | null = null
   private currentWorkspacePath: string | null = null
+  private cloudSyncAdapter: CloudWorkspaceSyncAdapter | null = null
 
   constructor(private fileManager: FileManager) {
     logger.info('WorkspaceManager initialized')
+  }
+
+  setCloudSyncAdapter(adapter: CloudWorkspaceSyncAdapter | null): void {
+    this.cloudSyncAdapter = adapter
+    logger.info('[WorkspaceManager] Cloud sync adapter updated', { enabled: adapter !== null })
   }
 
   /**
@@ -88,9 +104,27 @@ export class WorkspaceManager {
       await this.fileManager.updateWorkspaceRoot(options.path)
       logger.info('Updated FileManager workspace root for creation', { path: options.path })
 
-      // Step 3: Generate workspace ID
-      const workspaceId = this.generateWorkspaceId()
-      logger.info('Generated workspace ID', { workspaceId })
+      // Step 3: Resolve workspace ID (cloud UUID when sync enabled, else local ws-* id)
+      let workspaceId: string
+      let gitRemoteUrl: string | null = options.gitRemoteUrl ?? null
+      let ownerMemberId: string | undefined
+
+      if (options.enableCloudSync) {
+        if (!this.cloudSyncAdapter) {
+          throw new WorkspaceError(
+            WorkspaceErrorCode.CLOUD_SYNC_FAILED,
+            'Cloud sync adapter is not configured',
+          )
+        }
+        const remote = await this.cloudSyncAdapter.createRemoteWorkspace(options)
+        workspaceId = remote.workspaceId
+        gitRemoteUrl = remote.gitRemoteUrl ?? gitRemoteUrl
+        ownerMemberId = remote.ownerUserId
+        logger.info('Created remote workspace for cloud sync', { workspaceId, gitRemoteUrl })
+      } else {
+        workspaceId = this.generateWorkspaceId()
+        logger.info('Generated local workspace ID', { workspaceId })
+      }
 
       // Step 4: Create directory structure
       await this.createDirectoryStructure(options.path)
@@ -98,10 +132,16 @@ export class WorkspaceManager {
 
       // Step 5: Generate and write configuration files
       const config = generateWorkspaceConfig(options, workspaceId)
+      if (gitRemoteUrl) {
+        config.gitRemote = gitRemoteUrl
+      }
+      if (options.enableCloudSync) {
+        config.lastSyncAt = new Date().toISOString()
+      }
       await this.writeConfig(options.path, config)
       logger.info('Wrote workspace config')
 
-      const membersConfig = generateMembersConfig(options)
+      const membersConfig = generateMembersConfig(options, ownerMemberId)
       await this.writeMembersConfig(options.path, membersConfig)
       logger.info('Wrote members config')
 
@@ -131,13 +171,7 @@ export class WorkspaceManager {
         })
       }
 
-      // Step 8: Create remote workspace (optional, requires cloud sync)
-      if (options.enableCloudSync) {
-        logger.info('Cloud sync requested but not yet implemented')
-        // TODO: Implement cloud workspace creation when cloud integration is ready
-      }
-
-      // Step 9: Load and return workspace info
+      // Step 8: Load and return workspace info
       const workspaceInfo = await this.loadWorkspaceInfo(options.path)
 
       // Step 10: Set as current workspace
