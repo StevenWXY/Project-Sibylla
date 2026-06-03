@@ -34,6 +34,9 @@ export function SyncDetailPanel({ onClose }: SyncDetailPanelProps) {
   const errorMessage = useSyncStatusStore(selectErrorMessage)
   const conflictFiles = useSyncStatusStore(selectConflictFiles)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const statusLabel = !hasWorkspace && status === 'idle'
+    ? '未打开工作区'
+    : STATUS_LABELS[status] ?? status
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -74,7 +77,7 @@ export function SyncDetailPanel({ onClose }: SyncDetailPanelProps) {
           <div className="flex items-center justify-between">
             <span className="text-gray-400">状态</span>
             <span className="text-white">
-              {hasWorkspace ? (STATUS_LABELS[status] ?? status) : '未打开工作区'}
+              {statusLabel}
             </span>
           </div>
           <div className="flex items-center justify-between">

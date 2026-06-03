@@ -73,7 +73,7 @@ export function SyncStatusIndicator({ variant = 'default' }: SyncStatusIndicator
   const status = useSyncStatusStore(selectStatus)
   const lastSyncedAt = useSyncStatusStore(selectLastSyncedAt)
   const [showDetail, setShowDetail] = useState(false)
-  const config = hasWorkspace ? STATUS_CONFIG[status] : NO_WORKSPACE_CONFIG
+  const config = !hasWorkspace && status === 'idle' ? NO_WORKSPACE_CONFIG : STATUS_CONFIG[status]
   const timeStr = formatTime(lastSyncedAt)
 
   const handleCloseDetail = useCallback(() => {

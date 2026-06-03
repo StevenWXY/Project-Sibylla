@@ -17,8 +17,9 @@ export function useSyncStatus(): void {
 
     return () => {
       unlisten()
+      reset()
     }
-  }, [setState])
+  }, [setState, reset])
 
   useEffect(() => {
     if (!currentWorkspace) {
