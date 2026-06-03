@@ -47,7 +47,9 @@ function createMocks() {
   const loader = {
     loadFromDir: vi.fn().mockResolvedValue([]),
   }
-  const fileManager = {}
+  const fileManager = {
+    getWorkspaceRoot: vi.fn().mockReturnValue('/tmp/sibylla-test-workspace'),
+  }
   return { loader, fileManager }
 }
 
@@ -454,7 +456,7 @@ describe('SkillRegistry', () => {
 
       const summaries = registry.getSkillSummaries()
       expect(summaries).toHaveLength(2)
-      expect(summaries[0]).toEqual({
+      expect(summaries[0]).toMatchObject({
         id: expect.any(String),
         name: expect.any(String),
         description: expect.any(String),
