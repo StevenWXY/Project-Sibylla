@@ -82,7 +82,6 @@ describe('EvolutionLog', () => {
       const dirPath = path.join(tmpDir, '.sibylla', 'memory')
       await fs.mkdir(dirPath, { recursive: true })
 
-      const headerAndFirst = await fs.readFile(logPath, 'utf-8')
       const eventBlock = `\n## 2026-04-20T10:00:00.000Z — add — entry-0\n\n- **Section:** user_preference\n- **Trigger:** checkpoint\n\n---\n`
 
       const bulkEvents = eventBlock.repeat(5001)
@@ -94,7 +93,9 @@ describe('EvolutionLog', () => {
         timestamp: '2026-04-21T10:00:00.000Z',
       }))
 
-      const rotatedPath = path.join(tmpDir, '.sibylla', 'memory', 'CHANGELOG-2026-05.md')
+      const rotatedName = (await fs.readdir(dirPath)).find((name) => /^CHANGELOG-\d{4}-\d{2}\.md$/.test(name))
+      expect(rotatedName).toBeDefined()
+      const rotatedPath = path.join(tmpDir, '.sibylla', 'memory', rotatedName!)
       const rotatedExists = await fs.access(rotatedPath).then(() => true, () => false)
       expect(rotatedExists).toBe(true)
 
