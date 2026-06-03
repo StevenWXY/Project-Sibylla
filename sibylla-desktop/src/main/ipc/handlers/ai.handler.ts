@@ -2,10 +2,20 @@ import * as path from 'path'
 import { promises as fs } from 'fs'
 import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from 'electron'
 import { exportSkillDirToBundle, importSkillBundleFile } from '../../services/skill-system/SkillBundle'
+import { updateSkillV2 } from '../../services/skill-system/skill-edit'
+import { restoreSkillFromTrash, softDeleteSkill } from '../../services/skill-system/skill-trash'
 import { isPathInsideRoot } from '../../utils/path-boundary'
 import { IpcHandler } from '../handler'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type {
+  AIChatRequest,
+  AIChatResponse,
+  AIEmbedRequest,
+  AIEmbedResponse,
+  AIStreamChunk,
+  AIStreamEnd,
+  AIStreamError,
+  AIStreamRequest,
   ContextFileInfo,
   SkillSearchParams,
   SkillSummary,
@@ -52,8 +62,8 @@ export class AIHandler extends IpcHandler {
   private skillRegistry: SkillRegistry | null = null
   private skillValidator: SkillValidator | null = null
   private skillExecutor: SkillExecutor | null = null
-  private streamListener: ((...args: unknown[]) => void) | null = null
-  private abortListener: ((...args: unknown[]) => void) | null = null
+  private streamListener: ((event: Electron.IpcMainEvent, input: AIStreamRequest | AIChatRequest | string) => void) | null = null
+  private abortListener: ((event: Electron.IpcMainEvent, streamId: string) => void) | null = null
   private harnessOrchestrator: HarnessOrchestrator | null = null
   private progressLedger: ProgressLedger | null = null
   private aiModeRegistry: AiModeRegistry | null = null
@@ -120,9 +130,14 @@ export class AIHandler extends IpcHandler {
     }
   }
 
+  getSkillWorkflowServices(): { registry: SkillRegistry; executor: SkillExecutor } | null {
+    if (!this.skillRegistry || !this.skillExecutor) return null
+    return { registry: this.skillRegistry, executor: this.skillExecutor }
+  }
+
   register(): void {
     ipcMain.handle(IPC_CHANNELS.AI_CHAT, this.safeHandle(this.chat.bind(this)))
-    this.streamListener = (event: Electron.IpcMainEvent, input: unknown) => {
+    this.streamListener = (event: Electron.IpcMainEvent, input: AIStreamRequest | AIChatRequest | string) => {
       this.handleStream(event, input).catch((err) => {
         logger.error('[AIHandler] Unhandled stream error', {
           error: err instanceof Error ? err.message : String(err),
@@ -140,6 +155,8 @@ export class AIHandler extends IpcHandler {
     ipcMain.handle(IPC_CHANNELS.AI_SKILL_SEARCH, this.safeHandle(this.handleSkillSearch.bind(this)))
     ipcMain.handle(IPC_CHANNELS.AI_SKILL_GET, this.safeHandle(this.handleSkillGet.bind(this)))
     ipcMain.handle(IPC_CHANNELS.AI_SKILL_CREATE, this.safeHandle(this.handleSkillCreate.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_EDIT, this.safeHandle(this.handleSkillEdit.bind(this)))
+    ipcMain.handle(IPC_CHANNELS.AI_SKILL_RESTORE, this.safeHandle(this.handleSkillRestore.bind(this)))
     ipcMain.handle(IPC_CHANNELS.AI_SKILL_VALIDATE, this.safeHandle(this.handleSkillValidate.bind(this)))
     ipcMain.handle(IPC_CHANNELS.AI_SKILL_DELETE, this.safeHandle(this.handleSkillDelete.bind(this)))
     ipcMain.handle(IPC_CHANNELS.AI_SKILL_EXPORT, this.safeHandle(this.handleSkillExport.bind(this)))

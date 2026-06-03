@@ -1,5 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core'
-import { InputRule } from '@tiptap/pm/inputrules'
+import { InputRule, Node, mergeAttributes } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 
 export interface WikiLinkOptions {
@@ -103,14 +102,14 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   },
 
   addInputRules() {
-    const nodeType = this.type
+    const nodeName = this.name
 
     return [
       new InputRule({
         find: WIKI_LINK_INPUT_REGEX,
-        handler: ({ state, range, match, chain }) => {
+        handler: ({ range, match, commands }) => {
           const fullMatch = match[0]
-          const inner = match[1].trim()
+          const inner = match[1]?.trim()
 
           if (!inner) return
 
@@ -124,14 +123,17 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           const from = range.from + startOffset
           const to = range.from + fullMatch.length - startOffset
 
-          const node = nodeType.create({
-            target,
-            label: label || target,
-            broken: false,
-          })
-
-          const tr = state.tr.replaceWith(from, to, node)
-          chain(() => tr)
+          commands.insertContentAt(
+            { from, to },
+            {
+              type: nodeName,
+              attrs: {
+                target,
+                label: label || target,
+                broken: false,
+              },
+            },
+          )
         },
       }),
     ]

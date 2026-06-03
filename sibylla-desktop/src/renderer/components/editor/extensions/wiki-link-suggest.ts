@@ -1,10 +1,11 @@
 import { Extension } from '@tiptap/core'
 import Suggestion from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
+import type { Editor } from '@tiptap/core'
 import type { SuggestionProps, SuggestionKeyDownProps } from '@tiptap/suggestion'
 import { ReactRenderer } from '@tiptap/react'
 import tippy, { type Instance as TippyInstance } from 'tippy.js'
-import { WikiLinkPickerElement } from '../WikiLinkPicker'
+import { WikiLinkPickerElement, type WikiLinkPickerProps } from '../WikiLinkPicker'
 
 export const WikiLinkSuggest = Extension.create({
   name: 'wikiLinkSuggest',
@@ -26,7 +27,7 @@ export const WikiLinkSuggest = Extension.create({
           }
         },
         render() {
-          let component: ReactRenderer<WikiLinkPickerElement> | null = null
+          let component: ReactRenderer<unknown, WikiLinkPickerProps> | null = null
           let popup: TippyInstance | null = null
 
           return {
@@ -41,7 +42,7 @@ export const WikiLinkSuggest = Extension.create({
 
               if (!props.clientRect) return
 
-              popup = tippy('body', {
+              const instance = tippy('body', {
                 getReferenceClientRect: props.clientRect as () => DOMRect,
                 appendTo: () => document.body,
                 content: component.element,
@@ -52,6 +53,7 @@ export const WikiLinkSuggest = Extension.create({
                 theme: 'wiki-link-picker',
                 zIndex: 100,
               })[0]
+              popup = instance ?? null
             },
 
             onUpdate(props: SuggestionProps<Array<{ path: string; title: string }>>) {
@@ -72,7 +74,7 @@ export const WikiLinkSuggest = Extension.create({
                 popup?.hide()
                 return true
               }
-              return (component?.ref as WikiLinkPickerElement | null)?.onKeyDown?.(props.event) ?? false
+              return false
             },
 
             onExit() {
@@ -88,7 +90,7 @@ export const WikiLinkSuggest = Extension.create({
           range,
           props,
         }: {
-          editor: ReturnType<Extension.create>['editor']
+          editor: Editor
           range: { from: number; to: number }
           props: { path: string; title: string }
         }) => {

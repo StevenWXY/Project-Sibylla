@@ -2,6 +2,15 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { Editor } from '@tiptap/core'
 import { useEditorStore } from '../store/editorStore'
 
+interface MarkdownStorage {
+  getMarkdown?: () => string
+}
+
+function getEditorMarkdown(editor: Editor): string {
+  const storage = editor.storage as { markdown?: MarkdownStorage }
+  return storage.markdown?.getMarkdown?.() ?? editor.getText()
+}
+
 export interface AutoSaveOptions {
   enabled: boolean
   debounceMs: number
@@ -79,7 +88,7 @@ export function useAutoSave(
       timerRef.current = null
     }
     if (!editor) return
-    const markdown = editor.storage.markdown?.getMarkdown?.() ?? ''
+    const markdown = getEditorMarkdown(editor)
     await doSave(markdown)
   }, [editor, doSave])
 
@@ -90,7 +99,7 @@ export function useAutoSave(
 
     const handleUpdate = () => {
       if (isComposingRef.current) return
-      const markdown: string = editor.storage.markdown?.getMarkdown?.() ?? ''
+      const markdown = getEditorMarkdown(editor)
       scheduleSave(markdown)
     }
 
@@ -124,7 +133,7 @@ export function useAutoSave(
   useEffect(() => {
     return () => {
       if (editor && !editor.isDestroyed && storeIsDirty) {
-        const markdown: string = editor.storage.markdown?.getMarkdown?.() ?? ''
+        const markdown = getEditorMarkdown(editor)
         void onSave(markdown)
       }
     }

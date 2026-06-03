@@ -9,6 +9,7 @@ import type {
   EchoRequest,
   IPCChannel,
   FileContent,
+  FileOperationOptions,
   FileReadOptions,
   FileWriteOptions,
   ListFilesOptions,
@@ -198,9 +199,9 @@ interface ElectronAPI {
   file: {
     read: (path: string, options?: FileReadOptions) => Promise<IPCResponse<FileContent>>
     write: (path: string, content: string, options?: FileWriteOptions) => Promise<IPCResponse<void>>
-    delete: (path: string) => Promise<IPCResponse<void>>
+    delete: (path: string, options?: FileOperationOptions) => Promise<IPCResponse<void>>
     copy: (sourcePath: string, destPath: string) => Promise<IPCResponse<void>>
-    move: (sourcePath: string, destPath: string) => Promise<IPCResponse<void>>
+    move: (sourcePath: string, destPath: string, options?: FileOperationOptions) => Promise<IPCResponse<void>>
     list: (path: string, options?: ListFilesOptions) => Promise<IPCResponse<FileInfo[]>>
     getInfo: (path: string) => Promise<IPCResponse<FileInfo>>
     exists: (path: string) => Promise<IPCResponse<boolean>>
@@ -1197,16 +1198,16 @@ const api: ElectronAPI = {
       return await safeInvoke<void>(IPC_CHANNELS.FILE_WRITE, path, content, options)
     },
     
-    delete: async (path: string) => {
-      return await safeInvoke<void>(IPC_CHANNELS.FILE_DELETE, path)
+    delete: async (path: string, options?: FileOperationOptions) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_DELETE, path, options)
     },
     
     copy: async (sourcePath: string, destPath: string) => {
       return await safeInvoke<void>(IPC_CHANNELS.FILE_COPY, sourcePath, destPath)
     },
     
-    move: async (sourcePath: string, destPath: string) => {
-      return await safeInvoke<void>(IPC_CHANNELS.FILE_MOVE, sourcePath, destPath)
+    move: async (sourcePath: string, destPath: string, options?: FileOperationOptions) => {
+      return await safeInvoke<void>(IPC_CHANNELS.FILE_MOVE, sourcePath, destPath, options)
     },
     
     list: async (path: string, options?: ListFilesOptions) => {
@@ -2283,6 +2284,7 @@ const api: ElectronAPI = {
     if (isDev) {
       console.debug(`[Preload] Event listener removed for channel: ${channel}`)
     }
+    return () => {}
   },
 
   // MCP operations (TASK042)

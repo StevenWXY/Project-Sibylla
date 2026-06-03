@@ -51,7 +51,7 @@ export class SubAgentHandler extends IpcHandler {
     }))
   }
 
-  cleanup(): void {
+  override cleanup(): void {
     ipcMain.removeHandler(this.channelList)
     ipcMain.removeHandler(this.channelCreate)
     ipcMain.removeHandler(this.channelTrace)

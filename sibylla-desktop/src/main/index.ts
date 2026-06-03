@@ -64,7 +64,7 @@ import { TraceHandler } from './ipc/handlers/trace.handler'
 import { ConversationStore } from './services/conversation-store'
 import { ConversationHandler } from './ipc/handlers/conversation.handler'
 import { logger } from './utils/logger'
-import type { WorkspaceInfo } from '../shared/types'
+import type { MemberRole, WorkspaceInfo } from '../shared/types'
 import { IPC_CHANNELS } from '../shared/types'
 import { EventLogStore } from './services/event-log-store'
 import { MemoryEventBusBridge } from './services/event-bus-bridges'
@@ -115,12 +115,19 @@ let focusModeCleanup: (() => void) | null = null
 let dashboardCleanups: Array<() => void> = []
 let workflowCleanup: (() => void) | null = null
 let promptPerformanceCleanup: (() => void) | null = null
+let mcpCleanup: (() => Promise<void>) | null = null
 
 // Keep reference to LocalSearchEngine for FileWatcher forwarding
 let localSearchEngineRef: import('./services/local-search-engine').LocalSearchEngine | null = null
 
 // Keep reference to FileWatcher for cleanup on quit
 let fileWatcher: FileWatcher | null = null
+
+function coerceMemberRole(role: unknown): MemberRole {
+  return role === 'admin' || role === 'editor' || role === 'viewer'
+    ? role
+    : 'viewer'
+}
 
 // Enable single instance lock to prevent multiple app instances
 const gotTheLock = app.requestSingleInstanceLock()
@@ -427,7 +434,7 @@ if (!gotTheLock) {
             aiHandler.handleFileChangeForSkills(event)
             // Forward to LocalSearchEngine for incremental index updates
             if (localSearchEngineRef) {
-              void localSearchEngineRef.onFileChange(event)
+              void localSearchEngineRef.onFileChange({ type: event.type, path: event.path })
             }
           })
           
@@ -627,6 +634,7 @@ if (!gotTheLock) {
           )
 
           // ── TASK039: Workflow engine + IPC ──
+          let workflowExecutorForSubAgents: import('./services/workflow/WorkflowExecutor').WorkflowExecutor | null = null
           try {
             const { WorkflowParser } = await import('./services/workflow/WorkflowParser')
             const {
@@ -634,6 +642,9 @@ if (!gotTheLock) {
               WorkflowExecutor,
               WorkflowScheduler,
               WorkflowRunStore,
+              SkillStep,
+              ConditionStep,
+              NotifyStep,
             } = await import('./services/workflow')
             const { WorkflowHandler } = await import('./ipc/handlers/workflow')
 
@@ -651,6 +662,19 @@ if (!gotTheLock) {
               path.join(workspacePath, '.sibylla', 'workflow-runs'),
             )
             const workflowExecutor = new WorkflowExecutor(workflowParser, workflowRunStore)
+            workflowExecutor.registerStepExecutor('notify', new NotifyStep())
+            workflowExecutor.registerStepExecutor('condition', new ConditionStep(workflowParser))
+
+            const skillWorkflowServices = aiHandler.getSkillWorkflowServices()
+            if (skillWorkflowServices) {
+              workflowExecutor.registerStepExecutor(
+                'skill',
+                new SkillStep(skillWorkflowServices.registry, skillWorkflowServices.executor),
+              )
+            } else {
+              logger.warn('[Main] Skill workflow step not registered: skill system unavailable')
+            }
+            workflowExecutorForSubAgents = workflowExecutor
             const cachedUserForWorkflow = authHandler.getCachedUser()
             const workflowScheduler = new WorkflowScheduler(
               workflowRegistry,
@@ -894,6 +918,7 @@ if (!gotTheLock) {
           const { MCPPermission } = await import('./services/mcp/mcp-permission')
           const { MCPRegistry } = await import('./services/mcp/mcp-registry')
           const { MCPTemplateLoader } = await import('./services/mcp/mcp-templates')
+          const { McpSyncManager } = await import('./services/mcp/mcp-sync')
           const { McpHandler } = await import('./ipc/handlers/mcp.handler')
 
           const mcpConfigPath = path.join(workspacePath, '.sibylla', 'config.json')
@@ -909,59 +934,84 @@ if (!gotTheLock) {
             mcpEnabled = false
           }
 
+          const mcpAuditLog = new MCPAuditLog(
+            path.join(workspacePath, '.sibylla', 'mcp', 'audit-log.jsonl'),
+            mcpEnabled,
+          )
+          const mcpClient = new MCPClient(mcpAuditLog)
+          const mcpCredentials = new MCPCredentials(
+            workspacePath,
+            workspaceInfo.config.workspaceId,
+          )
+          await mcpCredentials.initialize()
+
+          const mcpPermission = new MCPPermission(
+            path.join(workspacePath, '.sibylla', 'mcp', 'permissions.json'),
+            [],
+          )
+          await mcpPermission.initialize()
+
+          const mcpRegistry = new MCPRegistry(
+            mcpClient,
+            mcpCredentials,
+            mcpConfigPath,
+          )
           if (mcpEnabled) {
-            const mcpAuditLog = new MCPAuditLog(
-              path.join(workspacePath, '.sibylla', 'mcp', 'audit-log.jsonl'),
-              true,
-            )
-            const mcpClient = new MCPClient(mcpAuditLog)
-            const mcpCredentials = new MCPCredentials(
-              workspacePath,
-              workspaceInfo.config.workspaceId,
-            )
-            await mcpCredentials.initialize()
-
-            const mcpPermission = new MCPPermission(
-              path.join(workspacePath, '.sibylla', 'mcp', 'permissions.json'),
-              [],
-            )
-            await mcpPermission.initialize()
-
-            const mcpRegistry = new MCPRegistry(
-              mcpClient,
-              mcpCredentials,
-              mcpConfigPath,
-            )
             await mcpRegistry.initialize()
-
-            const mcpTemplateLoader = new MCPTemplateLoader(
-              app.isPackaged
-                ? path.join(process.resourcesPath, 'resources', 'mcp-templates')
-                : path.join(app.getAppPath(), 'resources', 'mcp-templates'),
-            )
-            await mcpTemplateLoader.initialize()
-
-            aiHandler.setMcpServices({
-              client: mcpClient,
-              registry: mcpRegistry,
-              permission: mcpPermission,
-              auditLog: mcpAuditLog,
-              enabled: true,
-            })
-
-            harnessContextEngine.setMcpRegistry(mcpRegistry, true)
-
-            const mcpHandler = new McpHandler(
-              mcpClient,
-              mcpRegistry,
-              mcpPermission,
-              mcpAuditLog,
-              aiHandler,
-            )
-            ipcManager.registerHandler(mcpHandler)
-
-            logger.info('[Main] MCP services initialized', { workspace: workspacePath })
           }
+
+          const mcpTemplateLoader = new MCPTemplateLoader(
+            app.isPackaged
+              ? path.join(process.resourcesPath, 'resources', 'mcp-templates')
+              : path.join(app.getAppPath(), 'resources', 'mcp-templates'),
+          )
+          await mcpTemplateLoader.initialize()
+
+          const mcpSyncManager = new McpSyncManager(
+            mcpClient,
+            mcpRegistry,
+            fileManager,
+            path.join(workspacePath, '.sibylla', 'mcp', 'sync-state.json'),
+            path.join(workspacePath, '.sibylla', 'mcp', 'sync-tasks.json'),
+            (progress) => {
+              for (const window of BrowserWindow.getAllWindows()) {
+                if (!window.isDestroyed()) {
+                  window.webContents.send(IPC_CHANNELS.MCP_SYNC_PROGRESS, progress)
+                }
+              }
+            },
+          )
+          if (mcpEnabled) {
+            await mcpSyncManager.initialize()
+          }
+
+          aiHandler.setMcpServices({
+            client: mcpClient,
+            registry: mcpRegistry,
+            permission: mcpPermission,
+            auditLog: mcpAuditLog,
+            enabled: mcpEnabled,
+          })
+
+          harnessContextEngine.setMcpRegistry(mcpRegistry, mcpEnabled)
+
+          const mcpHandler = new McpHandler(
+            mcpClient,
+            mcpRegistry,
+            mcpPermission,
+            mcpAuditLog,
+            aiHandler,
+          )
+          mcpHandler.setSyncManager(mcpSyncManager)
+          ipcManager.registerHandler(mcpHandler)
+          mcpHandler.registerSyncHandlers()
+          mcpCleanup = async () => {
+            mcpHandler.cleanup()
+            await mcpSyncManager.shutdown()
+            await mcpClient.dispose()
+          }
+
+          logger.info('[Main] MCP services initialized', { workspace: workspacePath, enabled: mcpEnabled })
 
           // ── Phase2-TASK005: Initialize MemorySyncManager + TaskStateMachineSync ──
           const { MemorySyncManager } = await import('./services/sync/memory-sync')
@@ -987,7 +1037,9 @@ if (!gotTheLock) {
 
           syncManager.addBeforeSyncHook(() => memorySyncManager.beforePush())
           syncManager.addAfterSyncHook(() => memorySyncManager.afterPull())
-          syncManager.addAfterSyncHook(() => taskStateMachineSync.detectCrossDeviceTasks())
+          syncManager.addAfterSyncHook(async () => {
+            await taskStateMachineSync.detectCrossDeviceTasks()
+          })
 
           // Register trace/performance event push to renderer
           const forwardToRenderer = (eventName: string, channel: string) => {
@@ -1092,6 +1144,7 @@ if (!gotTheLock) {
             globalCooldownMinutes: DEFAULT_PROACTIVE_CONFIG.globalCooldownMinutes,
           })
           const interruptPolicy = new InterruptPolicy(DEFAULT_PROACTIVE_CONFIG)
+          let proactiveEngine: InstanceType<typeof ProactiveEngine> | null = null
 
           let subAgentRegistry: InstanceType<typeof import('./services/sub-agent/SubAgentRegistry').SubAgentRegistry> | null = null
           let subAgentExecutor: InstanceType<typeof import('./services/sub-agent/SubAgentExecutor').SubAgentExecutor> | null = null
@@ -1113,6 +1166,14 @@ if (!gotTheLock) {
               workspacePath,
             )
 
+            if (workflowExecutorForSubAgents) {
+              const { SubAgentStep } = await import('./services/workflow')
+              workflowExecutorForSubAgents.registerStepExecutor(
+                'sub_agent',
+                new SubAgentStep(subAgentRegistry, subAgentExecutor),
+              )
+            }
+
             const { SubAgentHandler } = await import('./ipc/handlers/sub-agent')
             const subAgentHandler = new SubAgentHandler(
               subAgentRegistry,
@@ -1127,7 +1188,7 @@ if (!gotTheLock) {
           }
 
           if (subAgentExecutor && subAgentRegistry && unifiedSearchEngine) {
-            const proactiveEngine = new ProactiveEngine(
+            proactiveEngine = new ProactiveEngine(
               {
                 triggerRegistry,
                 interruptPolicy,
@@ -1136,7 +1197,21 @@ if (!gotTheLock) {
                 eventBus: appEventBus,
                 tracer,
                 triggerDeps: {
-                  searchEngine: unifiedSearchEngine,
+                  searchEngine: {
+                    search: async (query: string, options?: { limit?: number }) => {
+                      const response = await unifiedSearchEngine.search({
+                        query,
+                        limit: options?.limit,
+                      })
+
+                      return {
+                        results: response.results.map((result) => ({
+                          filePath: result.fullPath
+                            ?? (result.navigation.kind === 'file' ? result.navigation.path : result.title),
+                        })),
+                      }
+                    },
+                  },
                   memoryStore: {
                     persistCooldown: async () => {},
                   },
@@ -1172,7 +1247,36 @@ if (!gotTheLock) {
               try {
                 const membersPath = path.join(workspacePath, '.sibylla', 'members.json')
                 if (!fs.existsSync(membersPath)) return []
-                return JSON.parse(fs.readFileSync(membersPath, 'utf-8')) as Array<{ userId: string; role: string; displayName: string }>
+                const parsed = JSON.parse(fs.readFileSync(membersPath, 'utf-8')) as Array<{
+                  userId?: unknown
+                  id?: unknown
+                  role?: unknown
+                  displayName?: unknown
+                  name?: unknown
+                }>
+
+                if (!Array.isArray(parsed)) return []
+
+                return parsed.flatMap((member) => {
+                  const userId = typeof member.userId === 'string'
+                    ? member.userId
+                    : typeof member.id === 'string'
+                      ? member.id
+                      : null
+                  if (!userId) return []
+
+                  const displayName = typeof member.displayName === 'string'
+                    ? member.displayName
+                    : typeof member.name === 'string'
+                      ? member.name
+                      : userId
+
+                  return [{
+                    userId,
+                    role: coerceMemberRole(member.role),
+                    displayName,
+                  }]
+                })
               } catch { return [] }
             },
             getMember: (userId: string) => {
@@ -1201,10 +1305,12 @@ if (!gotTheLock) {
             const workloadTrigger = createWorkloadImbalanceTrigger(gitAbstraction, memberDirectory)
             const decisionTrigger = createDecisionContradictionTrigger(decisionLogger)
 
-            proactiveEngine.registerPatrolTrigger(riskTrigger)
-            proactiveEngine.registerPatrolTrigger(workloadTrigger)
-            proactiveEngine.registerPatrolTrigger(decisionTrigger)
-            proactiveEngine.startPatrol(30 * 60 * 1000)
+            if (proactiveEngine) {
+              proactiveEngine.registerPatrolTrigger(riskTrigger)
+              proactiveEngine.registerPatrolTrigger(workloadTrigger)
+              proactiveEngine.registerPatrolTrigger(decisionTrigger)
+              proactiveEngine.startPatrol(30 * 60 * 1000)
+            }
           } catch (err) {
             logger.warn('[Main] PatrolTrigger registration failed', {
               error: err instanceof Error ? err.message : String(err),
@@ -1229,7 +1335,7 @@ if (!gotTheLock) {
             presenceClient,
             privacyFilter,
             presenceConfig,
-            () => 'member' as const,
+            () => 'viewer',
             () => mainWindow,
           )
 
@@ -1265,7 +1371,7 @@ if (!gotTheLock) {
             fileHandler.setRoleResolver({
               getMemberRole: (userId: string) => {
                 const member = memberDirectory.getMember(userId)
-                return member?.role as import('../shared/types').MemberRole | undefined
+                return member?.role
               },
             })
 
@@ -1371,6 +1477,10 @@ if (!gotTheLock) {
         if (promptPerformanceCleanup) {
           promptPerformanceCleanup()
           promptPerformanceCleanup = null
+        }
+        if (mcpCleanup) {
+          await mcpCleanup()
+          mcpCleanup = null
         }
 
         // Cleanup IPC handlers for workspace-scoped services

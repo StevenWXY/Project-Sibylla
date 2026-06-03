@@ -17,7 +17,7 @@ export const WikiLinkPreview = Extension.create({
         key: new PluginKey('wikiLinkPreview'),
         props: {
           handleDOMEvents: {
-            mouseover: (view, event) => {
+            mouseover: (_view, event) => {
               const target = event.target as HTMLElement
               const wikiLinkEl = target.closest('[data-wiki-link]') as HTMLElement | null
               if (!wikiLinkEl) return false
@@ -35,7 +35,7 @@ export const WikiLinkPreview = Extension.create({
                   }
 
                   if (isBroken) {
-                    previewPopup = tippy(wikiLinkEl, {
+                    const instance = tippy(wikiLinkEl, {
                       content: 'File does not exist or has been deleted',
                       showOnCreate: true,
                       trigger: 'manual',
@@ -43,13 +43,14 @@ export const WikiLinkPreview = Extension.create({
                       theme: 'wiki-link-preview',
                       zIndex: 100,
                       maxWidth: 300,
-                    })[0]
+                    })
+                    previewPopup = instance
                     return
                   }
 
                   const response = await window.electronAPI.file.read(linkTarget)
                   if (!response.success || !response.data) {
-                    previewPopup = tippy(wikiLinkEl, {
+                    const instance = tippy(wikiLinkEl, {
                       content: 'Failed to load preview',
                       showOnCreate: true,
                       trigger: 'manual',
@@ -57,7 +58,8 @@ export const WikiLinkPreview = Extension.create({
                       theme: 'wiki-link-preview',
                       zIndex: 100,
                       maxWidth: 300,
-                    })[0]
+                    })
+                    previewPopup = instance
                     return
                   }
 
@@ -68,7 +70,7 @@ export const WikiLinkPreview = Extension.create({
                   previewEl.className = 'wiki-link-preview-content'
                   previewEl.textContent = preview.length < content.length ? preview + '...' : preview
 
-                  previewPopup = tippy(wikiLinkEl, {
+                  const instance = tippy(wikiLinkEl, {
                     content: previewEl,
                     showOnCreate: true,
                     trigger: 'manual',
@@ -78,9 +80,10 @@ export const WikiLinkPreview = Extension.create({
                     maxWidth: 400,
                     interactive: true,
                     allowHTML: true,
-                  })[0]
+                  })
+                  previewPopup = instance
                 } catch {
-                  previewPopup = tippy(wikiLinkEl, {
+                  const instance = tippy(wikiLinkEl, {
                     content: 'Failed to load preview',
                     showOnCreate: true,
                     trigger: 'manual',
@@ -88,7 +91,8 @@ export const WikiLinkPreview = Extension.create({
                     theme: 'wiki-link-preview',
                     zIndex: 100,
                     maxWidth: 300,
-                  })[0]
+                  })
+                  previewPopup = instance
                 }
               }, HOVER_DELAY_MS)
 

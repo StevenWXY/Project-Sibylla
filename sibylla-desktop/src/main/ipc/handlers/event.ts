@@ -102,7 +102,7 @@ export class EventIpcHandler extends IpcHandler {
     }
   }
 
-  cleanup(): void {
+  override cleanup(): void {
     if (this.unsubscribeBus) {
       this.unsubscribeBus()
       this.unsubscribeBus = undefined

@@ -1,3 +1,5 @@
+import type { SpanImplOptions } from './span-impl'
+
 export type SpanStatus = 'ok' | 'error' | 'unset'
 
 export type SpanKind = 'internal' | 'ai-call' | 'tool-call' | 'user-action' | 'system'

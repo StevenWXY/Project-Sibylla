@@ -6,7 +6,7 @@ import type {
   WorkflowRun,
   WorkflowConfirmationRequest,
   RunFilter,
-} from '../../../shared/types'
+} from '../../shared/types'
 
 interface WorkflowState {
   workflows: WorkflowDefinition[]

@@ -14,7 +14,7 @@ export interface BacklinkCardProps {
 export function BacklinkCard({ backlink }: BacklinkCardProps) {
   const handleClick = useCallback(() => {
     const fileName = backlink.sourcePath.split('/').pop() ?? backlink.sourcePath
-    import('../../../store/tabStore').then(({ useTabStore }) => {
+    import('../../store/tabStore').then(({ useTabStore }) => {
       useTabStore.getState().openTab(backlink.sourcePath, fileName)
     })
   }, [backlink.sourcePath])

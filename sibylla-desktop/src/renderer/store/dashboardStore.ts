@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
-import type { DashboardOverviewData } from '../../../shared/types'
+import type { DashboardOverviewData } from '../../shared/types'
 
 interface DashboardState {
   data: DashboardOverviewData | null

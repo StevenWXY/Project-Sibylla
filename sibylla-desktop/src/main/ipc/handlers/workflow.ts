@@ -55,7 +55,7 @@ export class WorkflowHandler extends IpcHandler {
     }))
   }
 
-  cleanup(): void {
+  override cleanup(): void {
     ipcMain.removeHandler(IPC_CHANNELS.WORKFLOW_LIST)
     ipcMain.removeHandler(IPC_CHANNELS.WORKFLOW_TRIGGER_MANUAL)
     ipcMain.removeHandler(IPC_CHANNELS.WORKFLOW_GET_RUN)

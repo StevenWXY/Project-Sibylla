@@ -62,7 +62,7 @@ export const useDiffReviewStore = create<DiffReviewStore>()(
           const response = await window.electronAPI.file.write(
             proposal.filePath,
             proposal.fullNewContent,
-            { atomic: true, createDirs: true }
+            { atomic: true, createDirs: true, source: 'ai' }
           )
 
           if (!response.success) {
@@ -116,7 +116,7 @@ export const useDiffReviewStore = create<DiffReviewStore>()(
             const response = await window.electronAPI.file.write(
               proposal.filePath,
               proposal.fullNewContent,
-              { atomic: true, createDirs: true }
+              { atomic: true, createDirs: true, source: 'ai' }
             )
 
             if (!response.success) {
@@ -189,7 +189,7 @@ export const useDiffReviewStore = create<DiffReviewStore>()(
           const response = await window.electronAPI.file.write(
             proposal.filePath,
             state.editingContent,
-            { atomic: true, createDirs: true }
+            { atomic: true, createDirs: true, source: 'ai' }
           )
 
           if (!response.success) {
@@ -241,7 +241,7 @@ export const useDiffReviewStore = create<DiffReviewStore>()(
             await window.electronAPI.file.write(
               proposal.filePath,
               proposal.fullOldContent,
-              { atomic: true }
+              { atomic: true, source: 'ai' }
             )
           } catch {
             // continue rolling back remaining files

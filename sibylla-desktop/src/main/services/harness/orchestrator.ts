@@ -41,7 +41,6 @@ const SPEC_FILE_PATTERN = /(_spec\.md|CLAUDE\.md|design\.md|requirements\.md|tas
 
 export class HarnessOrchestrator {
   private readonly config: Required<Pick<HarnessConfig, 'defaultMode' | 'maxRetries'>> & HarnessConfig
-  private readonly guards: GuardrailEngine
   private toolScopeManager: ToolScopeManager | null = null
   private taskStateMachine: TaskStateMachine | null = null
   private tracer?: Tracer
@@ -53,7 +52,7 @@ export class HarnessOrchestrator {
   constructor(
     private readonly generator: Generator,
     private readonly evaluator: Evaluator,
-    guards: GuardrailEngine,
+    _guards: GuardrailEngine,
     private readonly contextEngine: ContextEngine,
     private readonly memoryManager: MemoryManager,
     private readonly logger: typeof loggerType,
@@ -61,7 +60,6 @@ export class HarnessOrchestrator {
     private readonly guideRegistry?: GuideRegistry,
     private readonly sensorFeedbackLoop?: SensorFeedbackLoop,
   ) {
-    this.guards = guards
     this.config = {
       defaultMode: config?.defaultMode ?? 'dual',
       maxRetries: config?.maxRetries ?? 2,
@@ -131,7 +129,7 @@ export class HarnessOrchestrator {
         trigger: { userMessage: request.message },
         conversationId: request.sessionId ?? '',
         workspacePath: request.workspaceId ?? '',
-        parentTraceId: rootSpan?.context()?.traceId,
+        parentTraceId: rootSpan?.context.traceId,
       })
       const blocked = preUserResults.find(r => r.decision === 'block')
       if (blocked) {
@@ -215,7 +213,7 @@ export class HarnessOrchestrator {
         trigger: { userMessage: effectiveRequest.message },
         conversationId: effectiveRequest.sessionId ?? '',
         workspacePath: effectiveRequest.workspaceId ?? '',
-        parentTraceId: rootSpan?.context()?.traceId,
+        parentTraceId: rootSpan?.context.traceId,
       })
       for (const r of preSystemResults) {
         if (r.decision === 'modify' && r.modifications?.systemPromptAppend) {
@@ -290,7 +288,7 @@ export class HarnessOrchestrator {
             const planMetadata = await this.planManager.createFromAIOutput({
               aiContent: content,
               conversationId: effectiveRequest.sessionId ?? '',
-              traceId: rootSpan?.context()?.traceId ?? '',
+              traceId: rootSpan?.context.traceId ?? '',
             })
             result = {
               ...result,
@@ -451,7 +449,7 @@ export class HarnessOrchestrator {
       response.content,
       request.sessionId ?? '',
       request.workspaceId ?? '',
-      rootSpan?.context()?.traceId,
+      rootSpan?.context.traceId,
     )
 
     return {
@@ -537,7 +535,7 @@ export class HarnessOrchestrator {
       suggestion.content,
       request.sessionId ?? '',
       request.workspaceId ?? '',
-      rootSpan?.context()?.traceId,
+      rootSpan?.context.traceId,
     )
 
     return {
@@ -678,7 +676,7 @@ export class HarnessOrchestrator {
       suggestion.content,
       request.sessionId ?? '',
       request.workspaceId ?? '',
-      rootSpan?.context()?.traceId,
+      rootSpan?.context.traceId,
     )
 
     return {

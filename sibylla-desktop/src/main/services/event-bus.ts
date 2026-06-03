@@ -37,7 +37,8 @@ type EventMap = {
 }
 
 interface EventLogStore {
-  append(event: SibyllaEvent): Promise<void>
+  append(event: SibyllaEvent): void | Promise<void>
+  flush(): Promise<void>
 }
 
 export class AppEventBus extends EventEmitter {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown as TiptapMarkdown } from 'tiptap-markdown'
-import { Extension } from '@tiptap/core'
+import { Extension, type Editor } from '@tiptap/core'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
@@ -60,6 +60,15 @@ function createSaveShortcutExtension(onSaveShortcut: () => boolean) {
       }
     },
   })
+}
+
+interface MarkdownStorage {
+  getMarkdown?: () => string
+}
+
+function getEditorMarkdown(editor: Editor): string {
+  const storage = editor.storage as { markdown?: MarkdownStorage }
+  return storage.markdown?.getMarkdown?.() ?? editor.getText()
 }
 
 export function WysiwygEditor({
@@ -126,7 +135,6 @@ export function WysiwygEditor({
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4, 5, 6] },
         codeBlock: false,
-        history: { depth: 100 },
       }),
       TiptapMarkdown.configure({
         html: true,
@@ -169,7 +177,7 @@ export function WysiwygEditor({
     content: initialContent ?? '',
     editable: !readOnly,
     onUpdate: ({ editor: ed }) => {
-      const isDirty = ed.isDirty
+      const isDirty = true
       if (isDirty !== previousDirtyRef.current) {
         previousDirtyRef.current = isDirty
         setDirty(isDirty)
@@ -211,7 +219,7 @@ export function WysiwygEditor({
     return () => {
       window.electronAPI.presence.broadcastView(undefined).catch(() => {})
     }
-  }, [filePath])
+  }, [filePath, onDirtyChange])
 
   useEffect(() => {
     const cleanup = window.electronAPI.file.onSaveFailed((data) => {
@@ -227,6 +235,8 @@ export function WysiwygEditor({
     const cleanup = window.electronAPI.file.onAutoSaved((data) => {
       if (data.files.includes(filePath)) {
         setSaveFailures([])
+        previousDirtyRef.current = false
+        onDirtyChange?.(false)
       }
     })
     return cleanup
@@ -251,9 +261,9 @@ export function WysiwygEditor({
     if (!editor) return
 
     if (initialContent !== undefined) {
-      const currentContent = editor.storage.markdown?.getMarkdown?.() ?? ''
+      const currentContent = getEditorMarkdown(editor)
       if (currentContent !== initialContent) {
-        editor.commands.setContent(initialContent, false)
+        editor.commands.setContent(initialContent, { emitUpdate: false })
         editor.commands.blur()
       }
       resetStore()
@@ -272,7 +282,7 @@ export function WysiwygEditor({
       if (response.success && response.data) {
         const content = response.data.content ?? response.data
         if (editor) {
-          editor.commands.setContent(typeof content === 'string' ? content : '', false)
+          editor.commands.setContent(typeof content === 'string' ? content : '', { emitUpdate: false })
         }
         resetStore()
       } else {

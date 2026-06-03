@@ -180,7 +180,7 @@ export abstract class IpcHandler {
   }
 
   protected safeHandle<T, Args extends unknown[] = unknown[]>(
-    handler: (event: IpcMainInvokeEvent, ...args: Args) => Promise<T>
+    handler: (event: IpcMainInvokeEvent, ...args: Args) => T | Promise<T>
   ): (event: IpcMainInvokeEvent, ...args: Args) => Promise<IPCResponse<T>> {
     return async (event: IpcMainInvokeEvent, ...args: Args): Promise<IPCResponse<T>> => {
       const requestId = `${this.namespace}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`

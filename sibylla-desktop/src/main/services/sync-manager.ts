@@ -37,7 +37,7 @@ import {
   DEFAULT_RECONNECT_SYNC_DELAY_MS,
   DEFAULT_INITIAL_SYNC_DELAY_MS,
 } from './types/sync-manager.types'
-import type { SyncStatus, SyncStatusData, ConflictInfo } from '../../../shared/types'
+import type { SyncStatus, SyncStatusData, ConflictInfo } from '../../shared/types'
 import type { NetworkMonitor } from './network-monitor'
 import type { AutoSaveManager } from './auto-save-manager'
 import type { AppEventBus } from './event-bus'

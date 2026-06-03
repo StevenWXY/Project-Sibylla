@@ -669,9 +669,9 @@ export interface IPCChannelMap {
   // File operations
   [IPC_CHANNELS.FILE_READ]: { params: [path: string, options?: FileReadOptions]; return: FileContent }
   [IPC_CHANNELS.FILE_WRITE]: { params: [path: string, content: string, options?: FileWriteOptions]; return: FileOperationResult | void }
-  [IPC_CHANNELS.FILE_DELETE]: { params: [path: string]; return: FileOperationResult | void }
+  [IPC_CHANNELS.FILE_DELETE]: { params: [path: string, options?: FileOperationOptions]; return: FileOperationResult | void }
   [IPC_CHANNELS.FILE_COPY]: { params: [sourcePath: string, destPath: string]; return: void }
-  [IPC_CHANNELS.FILE_MOVE]: { params: [sourcePath: string, destPath: string]; return: FileOperationResult | void }
+  [IPC_CHANNELS.FILE_MOVE]: { params: [sourcePath: string, destPath: string, options?: FileOperationOptions]; return: FileOperationResult | void }
   [IPC_CHANNELS.FILE_LIST]: { params: [path: string, options?: ListFilesOptions]; return: FileInfo[] }
   [IPC_CHANNELS.FILE_INFO]: { params: [path: string]; return: FileInfo }
   [IPC_CHANNELS.FILE_EXISTS]: { params: [path: string]; return: boolean }
@@ -1037,8 +1037,8 @@ export interface IPCChannelMap {
 /**
  * Helper types for extracting channel params and return types
  */
-export type IPCChannelParams<C extends IPCChannel> = IPCChannelMap[C]['params']
-export type IPCChannelReturn<C extends IPCChannel> = IPCChannelMap[C]['return']
+export type IPCChannelParams<C extends keyof IPCChannelMap> = IPCChannelMap[C]['params']
+export type IPCChannelReturn<C extends keyof IPCChannelMap> = IPCChannelMap[C]['return']
 
 /**
  * Generic IPC response wrapper
@@ -1211,6 +1211,15 @@ export interface FileWriteOptions {
   atomic?: boolean
   /** Create parent directories if they don't exist (default: true) */
   createDirs?: boolean
+  /** Source of the operation for main-process guardrail policy evaluation */
+  source?: FileOperationSource
+}
+
+export type FileOperationSource = 'user' | 'ai' | 'sync'
+
+export interface FileOperationOptions {
+  /** Source of the operation for main-process guardrail policy evaluation */
+  source?: FileOperationSource
 }
 
 /**
@@ -1284,6 +1293,10 @@ export interface AIChatRequest {
   message: string
   /** Chat session identifier for logging */
   sessionId?: string
+  /** Parent trace identifier for linking AI/tool calls */
+  traceId?: string
+  /** Workspace identifier or path used for trace and hook metadata */
+  workspaceId?: string
   /** Preferred model name */
   model?: string
   /** Sampling temperature (0-2) */
@@ -1809,6 +1822,7 @@ export type ContextLayerType =
   | 'always' | 'manual' | 'skill' | 'memory'
   | 'mode' | 'tool' | 'agent' | 'hook' | 'context'
   | 'mcp'
+  | 'collab'
 
 export interface ContextSource {
   filePath: string
@@ -2677,7 +2691,7 @@ export interface OptimizeRequestShared {
   readonly currentMode: string
   readonly conversationContext?: {
     readonly summary: string
-    readonly recentMessages: readonly Array<{ readonly role: string; readonly content: string }>
+    readonly recentMessages: ReadonlyArray<{ readonly role: string; readonly content: string }>
   }
   readonly userPreferences?: {
     readonly preferredLength?: 'short' | 'medium' | 'detailed'
@@ -2894,7 +2908,7 @@ export interface SkillV2 extends Skill {
   author: string
   category: string
   tags: string[]
-  scope: 'public' | 'private' | 'personal'
+  scope: 'public' | 'private' | 'personal' | 'team'
   source: 'builtin' | 'workspace' | 'personal'
   triggers: SkillTrigger[]
   allowedTools?: string[]
@@ -2951,6 +2965,7 @@ export interface SkillTemplate {
   description: string
   prompt: string
   tools?: string[]
+  tags?: string[]
 }
 
 export interface CommandParam {

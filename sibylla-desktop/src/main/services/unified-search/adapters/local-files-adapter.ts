@@ -1,4 +1,4 @@
-import type { LocalSearchEngine } from '../local-search-engine'
+import type { LocalSearchEngine } from '../../local-search-engine'
 import type { SearchSourceAdapter, UnifiedSearchQuery, UnifiedSearchResult } from '../types'
 
 export class LocalFilesAdapter implements SearchSourceAdapter {

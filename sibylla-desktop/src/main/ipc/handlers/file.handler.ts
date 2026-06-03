@@ -27,6 +27,7 @@ import type {
   AuthUser,
   AutoSavedPayload,
   FileContent,
+  FileOperationOptions,
   FileReadOptions,
   FileWriteOptions,
   FileOperationResult,
@@ -269,10 +270,10 @@ export class FileHandler extends IpcHandler {
       throw new Error('Workspace not initialized. Please open or create a workspace first.')
     }
 
-    // Guardrail pre-check (defaults to 'user' source; AI calls will pass 'ai' in future)
+    // Guardrail pre-check. AI-originated diff applications must pass source: 'ai'.
     const guardrailResult = await this.checkGuardrail(
       { type: 'write', path, content },
-      'user',
+      this.resolveOperationSource(options),
     )
     if (guardrailResult) {
       return guardrailResult
@@ -293,7 +294,8 @@ export class FileHandler extends IpcHandler {
    */
   private async deleteFile(
     _event: IpcMainInvokeEvent,
-    path: string
+    path: string,
+    options?: FileOperationOptions,
   ): Promise<FileOperationResult | void> {
     if (!this.fileManager) {
       throw new Error('Workspace not initialized. Please open or create a workspace first.')
@@ -302,7 +304,7 @@ export class FileHandler extends IpcHandler {
     // Guardrail pre-check
     const guardrailResult = await this.checkGuardrail(
       { type: 'delete', path },
-      'user',
+      this.resolveOperationSource(options),
     )
     if (guardrailResult) {
       return guardrailResult
@@ -333,7 +335,8 @@ export class FileHandler extends IpcHandler {
   private async moveFile(
     _event: IpcMainInvokeEvent,
     sourcePath: string,
-    destPath: string
+    destPath: string,
+    options?: FileOperationOptions,
   ): Promise<FileOperationResult | void> {
     if (!this.fileManager) {
       throw new Error('Workspace not initialized. Please open or create a workspace first.')
@@ -342,7 +345,7 @@ export class FileHandler extends IpcHandler {
     // Guardrail pre-check (rename semantics for guardrail)
     const guardrailResult = await this.checkGuardrail(
       { type: 'rename', path: sourcePath, newPath: destPath },
-      'user',
+      this.resolveOperationSource(options),
     )
     if (guardrailResult) {
       return guardrailResult
@@ -616,6 +619,10 @@ export class FileHandler extends IpcHandler {
       userRole: resolvedRole,
       workspaceRoot: this.fileManager?.getWorkspaceRoot() ?? '',
     }
+  }
+
+  private resolveOperationSource(options?: { source?: string }): OperationSource {
+    return options?.source === 'ai' || options?.source === 'sync' ? options.source : 'user'
   }
 
   /**

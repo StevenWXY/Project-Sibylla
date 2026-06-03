@@ -120,7 +120,7 @@ export type SlashCommandCallback = (props: {
 }) => void
 
 export function createSlashCommandExtension(
-  onCommandCallback: (cb: SlashCommandCallback) => void
+  onCommandCallback: SlashCommandCallback
 ) {
   return Extension.create({
     name: 'slashCommand',

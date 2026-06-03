@@ -1,5 +1,5 @@
-import type { LocalSearchEngine } from '../local-search-engine'
-import type { FileManager } from '../file-manager'
+import type { LocalSearchEngine } from '../../local-search-engine'
+import type { FileManager } from '../../file-manager'
 import type { SearchSource, SearchSourceAdapter, UnifiedSearchQuery, UnifiedSearchResult } from '../types'
 import { logger } from '../../../utils/logger'
 

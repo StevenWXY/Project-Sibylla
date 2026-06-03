@@ -27,7 +27,7 @@ export class McpHandler extends IpcHandler {
     private readonly client: MCPClient,
     private readonly registry: MCPRegistry,
     private readonly permission: MCPPermission,
-    private readonly auditLog: MCPAuditLog,
+    _auditLog: MCPAuditLog,
     private readonly aiHandler: AIHandler,
   ) {
     super()

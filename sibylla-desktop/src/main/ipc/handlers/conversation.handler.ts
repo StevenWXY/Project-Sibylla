@@ -40,15 +40,15 @@ export class ConversationHandler extends IpcHandler {
     id: string,
     title?: string
   ): ConversationSummary {
-    this.ensureStore()
-    return this.store!.createConversation(id, title)
+    const store = this.getStore()
+    return store.createConversation(id, title)
   }
 
   private appendMessage(
     _event: IpcMainInvokeEvent,
     msg: ConversationMessageShared
   ): void {
-    this.ensureStore()
+    const store = this.getStore()
     const record: MessageRecord = {
       id: msg.id,
       conversationId: msg.conversationId,
@@ -60,7 +60,7 @@ export class ConversationHandler extends IpcHandler {
       memoryState: msg.memoryState ?? null,
       ragHits: msg.ragHits ? msg.ragHits.map((h) => ({ ...h })) : null,
     }
-    this.store!.appendMessage(record)
+    store.appendMessage(record)
   }
 
   private getMessages(
@@ -69,8 +69,8 @@ export class ConversationHandler extends IpcHandler {
     limit: number,
     beforeTimestamp?: number
   ): PaginatedMessagesShared {
-    this.ensureStore()
-    const result = this.store!.getMessages(conversationId, limit, beforeTimestamp)
+    const store = this.getStore()
+    const result = store.getMessages(conversationId, limit, beforeTimestamp)
     return {
       messages: result.messages.map((m) => this.recordToShared(m)),
       hasMore: result.hasMore,
@@ -83,19 +83,20 @@ export class ConversationHandler extends IpcHandler {
     limit: number,
     offset: number
   ): ConversationSummary[] {
-    this.ensureStore()
-    return this.store!.listConversations(limit, offset)
+    const store = this.getStore()
+    return store.listConversations(limit, offset)
   }
 
   private loadLatest(
     _event: IpcMainInvokeEvent
   ): { conversationId: string; messages: ConversationMessageShared[]; hasMore: boolean } | null {
-    this.ensureStore()
-    const conversations = this.store!.listConversations(1, 0)
+    const store = this.getStore()
+    const conversations = store.listConversations(1, 0)
     if (conversations.length === 0) return null
 
     const conv = conversations[0]
-    const result = this.store!.getMessages(conv.id, 50)
+    if (!conv) return null
+    const result = store.getMessages(conv.id, 50)
     return {
       conversationId: conv.id,
       messages: result.messages.map((m) => this.recordToShared(m)),
@@ -117,9 +118,10 @@ export class ConversationHandler extends IpcHandler {
     }
   }
 
-  private ensureStore(): asserts this is { store: ConversationStore } {
+  private getStore(): ConversationStore {
     if (!this.store) {
       throw new Error('ConversationStore not initialized')
     }
+    return this.store
   }
 }

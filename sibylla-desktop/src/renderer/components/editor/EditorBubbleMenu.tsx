@@ -37,8 +37,7 @@ export const EditorBubbleMenu = memo(function EditorBubbleMenu({ editor }: Edito
   return (
     <TiptapBubbleMenu
       editor={editor}
-      tippyOptions={{
-        duration: 150,
+      options={{
         placement: 'top',
       }}
       shouldShow={({ state }) => {

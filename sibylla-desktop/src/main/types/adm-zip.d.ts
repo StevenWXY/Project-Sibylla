@@ -7,9 +7,11 @@ declare module 'adm-zip' {
   }
 
   class AdmZip {
-    constructor(filePath: string)
+    constructor(filePath?: string)
+    addLocalFolder(localPath: string): void
     getEntries(): IZipEntry[]
     extractAllTo(targetPath: string, overwrite?: boolean): void
+    writeZip(targetPath: string): void
   }
 
   export = AdmZip

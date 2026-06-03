@@ -118,7 +118,9 @@ export function useSlashCommandState() {
   const handleSelect = useCallback(
     (index: number) => {
       if (index >= 0 && index < items.length) {
-        commandRef.current(items[index])
+        const item = items[index]
+        if (!item) return
+        commandRef.current(item)
         setItems([])
         setPosition(null)
       }

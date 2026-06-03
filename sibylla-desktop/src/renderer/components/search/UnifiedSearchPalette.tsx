@@ -4,7 +4,7 @@ import type {
   UnifiedSearchQueryShared,
   UnifiedSearchResultShared,
   UnifiedSearchResponseShared,
-} from '../../shared/types'
+} from '../../../shared/types'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useKeyboardNavigation, handleNavigate } from '../../hooks/useKeyboardNavigation'
 import { SourceGroup } from './SourceGroup'
@@ -28,7 +28,7 @@ function parseSourcePrefix(input: string): {
   const memMatch = input.match(/^mem:\s*(.*)/i)
   if (memMatch) {
     return {
-      cleanQuery: memMatch[1].trim(),
+      cleanQuery: (memMatch[1] ?? '').trim(),
       sources: ['memory', 'memory-archive'],
     }
   }
@@ -36,16 +36,16 @@ function parseSourcePrefix(input: string): {
   const fileMatch = input.match(/^file:\s*(.*)/i)
   if (fileMatch) {
     return {
-      cleanQuery: fileMatch[1].trim(),
+      cleanQuery: (fileMatch[1] ?? '').trim(),
       sources: ['local-files'],
     }
   }
 
   const mcpMatch = input.match(/^@?mcp:(\w+)\s+(.*)/i)
   if (mcpMatch) {
-    const mcpSource = `mcp:${mcpMatch[1].toLowerCase()}` as SearchSourceShared
+    const mcpSource = `mcp:${(mcpMatch[1] ?? '').toLowerCase()}` as SearchSourceShared
     return {
-      cleanQuery: mcpMatch[2].trim(),
+      cleanQuery: (mcpMatch[2] ?? '').trim(),
       sources: [mcpSource],
     }
   }
