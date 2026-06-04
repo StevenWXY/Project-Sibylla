@@ -21,11 +21,11 @@ export class EditorErrorBoundary extends Component<Props, State> {
     return { hasError: true, error }
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
+  override componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[EditorErrorBoundary]', error, info)
   }
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       return (
         <div className="flex h-full items-center justify-center p-8">

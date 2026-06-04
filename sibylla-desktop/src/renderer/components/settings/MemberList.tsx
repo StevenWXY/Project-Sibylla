@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { UserPlus } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { useMembersStore, selectMembers, selectIsLoading } from '../../store/membersStore'

@@ -4,19 +4,28 @@ import type {
   AIStreamChunk,
   AIStreamEnd,
   AIStreamError,
+  AdoptMergeParams,
   AuthLoginInput,
   AuthRegisterInput,
   AuthSession,
   AuthUser,
+  AutoSavedPayload,
   ConflictInfo,
   ConflictResolution,
   ContextFileInfo,
+  CreateWorkspaceOptions,
+  CrossDeviceTaskShared,
   FileContent,
   FileInfo,
   FileWatchEvent,
+  ImportOptions,
+  ImportProgress,
+  ImportResult,
   IPCChannel,
   IPCResponse,
   ListFilesOptions,
+  MergeResult,
+  SaveFailedPayload,
   SyncStatusData,
   SyncResult,
   WorkspaceConfig,
@@ -28,9 +37,16 @@ import type {
   MemberRole,
   SkillSummary,
   SkillSearchParams,
+  SkillExportResult,
+  SkillResult,
+  SkillTemplate,
+  SkillV2,
+  SkillValidationResult,
   SearchQueryParams,
   SearchResult,
   SearchIndexStatus,
+  UnifiedSearchQueryShared,
+  UnifiedSearchResponseShared,
 } from '../../shared/types'
 import type { CommitInfo, FileDiff } from '../../shared/types/git.types'
 import { ErrorType } from '../../shared/types'
@@ -431,6 +447,7 @@ function createMockAPI(): ElectronAPI {
           MOCK_FILES.has(target) || Array.from(MOCK_FILES.keys()).some((filePath) => filePath.startsWith(`${target}/`))
         return ok(exists)
       },
+      showInManager: async (_path: string) => ok(undefined),
       createDir: async () => ok(undefined),
       deleteDir: async (path: string) => {
         removePath(path)
@@ -445,9 +462,28 @@ function createMockAPI(): ElectronAPI {
           fileWatchListeners.delete(callback)
         }
       },
+      import: async (sourcePaths: string[], _options?: ImportOptions) => ok<ImportResult>({
+        imported: sourcePaths.map((sourcePath) => ({
+          sourcePath,
+          destPath: sourcePath.split('/').pop() ?? sourcePath,
+          action: 'copied',
+          sourceType: '.md',
+        })),
+        converted: [],
+        skipped: [],
+        failed: [],
+        durationMs: 0,
+      }),
+      onImportProgress: (_callback: (data: ImportProgress) => void) => () => {},
+      notifyChange: (filePath: string, content: string) => {
+        MOCK_FILES.set(normalizePath(filePath), content)
+      },
+      onAutoSaved: (_callback: (data: AutoSavedPayload) => void) => () => {},
+      onSaveFailed: (_callback: (data: SaveFailedPayload) => void) => () => {},
+      retrySave: async (_filePath: string) => ok(undefined),
     },
     workspace: {
-      create: async (options) => {
+      create: async (options: CreateWorkspaceOptions) => {
         currentWorkspacePath = options.path
         currentWorkspace = {
           config: {
@@ -473,7 +509,7 @@ function createMockAPI(): ElectronAPI {
       validate: async () => ok(true),
       selectFolder: async () => ok('/Users/dd/Documents/Playground/Project-Sibylla'),
       getConfig: async () => ok(currentWorkspace.config),
-      updateConfig: async (updates) => {
+      updateConfig: async (updates: Partial<WorkspaceConfig>) => {
         currentWorkspace = {
           ...currentWorkspace,
           config: {
@@ -507,6 +543,20 @@ function createMockAPI(): ElectronAPI {
           syncListeners.delete(callback)
         }
       },
+      memoryEnable: async () => ok({ success: true }),
+      memoryDisable: async () => ok({ success: true }),
+      memorySetPassword: async (_password: string) => ok({ success: true }),
+      memoryIsLocked: async () => ok({ locked: false }),
+      listCrossDeviceTasks: async () => ok<CrossDeviceTaskShared[]>([]),
+      memoryGetConfig: async () => ok({ syncMemory: false, locked: false }),
+      proposeAIMerge: async (conflict: ConflictInfo) => ok<MergeResult>({
+        status: 'success',
+        mergedContent: conflict.localContent,
+        attribution: { fromMine: [], fromTheirs: [], byAI: [] },
+        rationale: 'Mock AI merge proposal.',
+        conflictId: conflict.conflictId,
+      }),
+      adoptAIMerge: async (_params: AdoptMergeParams) => ok({ success: true }),
     },
     git: {
       getConflicts: async () => ok<ConflictInfo[]>([]),
@@ -551,8 +601,8 @@ function createMockAPI(): ElectronAPI {
       restore: async () => ok(`mock-restore-oid-${Date.now()}`),
     },
     ai: {
-      chat: async (request) => ok(createAIResponse(request)),
-      stream: (request) => {
+      chat: async (request: string | AIChatRequest) => ok(createAIResponse(request)),
+      stream: (request: string | AIChatRequest) => {
         const streamId = `mock-stream-${Date.now()}`
         const content = typeof request === 'string' ? request : request.message
         const mockText = `Sure, retrieved \`Sibylla_VI_Design_System.html\`.\nIt is recommended to use a dark gray panel with warning colors.\nI have generated a Diff preview for this request:\n\n- ${content.slice(0, 120)}`
@@ -580,7 +630,7 @@ function createMockAPI(): ElectronAPI {
             }
             return
           }
-          const delta = chars[charIndex]
+          const delta = chars[charIndex] ?? ''
           charIndex++
           const chunk: AIStreamChunk = { id: streamId, delta }
           const chunkListeners = channelListeners.get('ai:stream:chunk' as IPCChannel)
@@ -652,6 +702,49 @@ function createMockAPI(): ElectronAPI {
         )
         return ok<SkillSummary[]>(matched.slice(0, params.limit ?? 10))
       },
+      skillGet: async (skillId: string) => ok<SkillV2 | null>({
+        id: skillId,
+        name: 'Mock Skill',
+        description: 'Mock skill',
+        scenarios: 'Mock scenario',
+        instructions: 'Mock instructions',
+        outputFormat: 'Markdown',
+        examples: '',
+        filePath: `.sibylla/skills/${skillId}/SKILL.md`,
+        tokenCount: 100,
+        updatedAt: Date.now(),
+        version: '1.0.0',
+        author: 'Mock',
+        category: 'mock',
+        tags: [],
+        scope: 'personal',
+        source: 'personal',
+        triggers: [],
+        formatVersion: 2,
+      }),
+      skillCreate: async (template: SkillTemplate) => ok({
+        skillId: template.id,
+        path: `.sibylla/skills/${template.id}/SKILL.md`,
+      }),
+      skillEdit: async (_skillId: string, _updates: Partial<SkillTemplate> & { category?: string; version?: string }) => ok(undefined),
+      skillRestore: async (skillId: string) => ok({ path: `.sibylla/skills/${skillId}/SKILL.md` }),
+      skillValidate: async (_skillId: string) => ok<SkillValidationResult>({
+        valid: true,
+        errors: [],
+        warnings: [],
+      }),
+      skillDelete: async (_skillId: string) => ok(undefined),
+      skillExport: async (skillId: string) => ok<SkillExportResult>({
+        bundlePath: `/tmp/${skillId}.zip`,
+        base64: '',
+      }),
+      skillImport: async (_bundlePath: string) => ok({ skillId: `mock-skill-${Date.now()}` }),
+      skillTestRun: async (_skillId: string, _userInput: string) => ok<SkillResult>({
+        success: true,
+        tokensUsed: 0,
+        toolCallsCount: 0,
+        errors: [],
+      }),
     },
     auth: {
       login: async (_input: AuthLoginInput) => ok<AuthSession>({ isAuthenticated: true, user: MOCK_USER }),
@@ -674,11 +767,13 @@ function createMockAPI(): ElectronAPI {
         for (const [filePath, content] of MOCK_FILES.entries()) {
           const lines = content.split('\n')
           for (let i = 0; i < lines.length; i++) {
-            if (lines[i].toLowerCase().includes(lowerQuery)) {
+            const line = lines[i]
+            if (!line) continue
+            if (line.toLowerCase().includes(lowerQuery)) {
               results.push({
                 id: `${filePath}::${i + 1}`,
                 path: filePath,
-                snippet: lines[i].replace(
+                snippet: line.replace(
                   new RegExp(params.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
                   '<mark>$&</mark>',
                 ),
@@ -700,6 +795,28 @@ function createMockAPI(): ElectronAPI {
       }),
       reindex: async () => ok(undefined),
       onIndexProgress: () => () => {},
+      unified: async (_query: UnifiedSearchQueryShared) => ok<UnifiedSearchResponseShared>({
+        results: [],
+        totalCount: 0,
+        partial: false,
+        timing: {
+          totalMs: 0,
+          perSource: {},
+        },
+      }),
+      listSources: async () => ok(['local-files']),
+      fuzzyFiles: async (query: string, options?: { limit?: number }) => {
+        const lowerQuery = query.toLowerCase()
+        const files = Array.from(MOCK_FILES.keys())
+          .filter((path) => path.toLowerCase().includes(lowerQuery))
+          .slice(0, options?.limit ?? 20)
+          .map((path) => ({
+            path,
+            title: path.split('/').pop() ?? path,
+          }))
+
+        return ok(files)
+      },
     },
     on: (channel: IPCChannel, callback: (...args: unknown[]) => void) => {
       if (!channelListeners.has(channel)) {
@@ -712,8 +829,9 @@ function createMockAPI(): ElectronAPI {
     },
     off: (channel: IPCChannel, callback: (...args: unknown[]) => void) => {
       channelListeners.get(channel)?.delete(callback)
+      return () => {}
     },
-  }
+  } as unknown as ElectronAPI
 }
 
 export function installRendererElectronMock(): void {

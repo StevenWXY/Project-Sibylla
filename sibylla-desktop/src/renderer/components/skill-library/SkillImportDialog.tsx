@@ -110,10 +110,21 @@ export const SkillImportDialog: React.FC<SkillImportDialogProps> = ({ onClose, o
         const risks = scanForRisks(parsed)
         const riskLevel = assessRiskLevel(risks)
 
+        const prompt = typeof parsed.prompt === 'string'
+          ? parsed.prompt
+          : typeof parsed.instructions === 'string'
+            ? parsed.instructions
+            : ''
+        const rawTools = Array.isArray(parsed.tools)
+          ? parsed.tools
+          : Array.isArray(parsed.allowed_tools)
+            ? parsed.allowed_tools
+            : []
+
         setScanResult({
-          name: parsed.name ?? selected.name,
-          promptLength: (parsed.prompt ?? parsed.instructions ?? '').length,
-          toolList: parsed.tools ?? parsed.allowed_tools ?? [],
+          name: typeof parsed.name === 'string' ? parsed.name : selected.name,
+          promptLength: prompt.length,
+          toolList: rawTools.filter((tool): tool is string => typeof tool === 'string'),
           risks,
           riskLevel,
         })
@@ -147,7 +158,7 @@ export const SkillImportDialog: React.FC<SkillImportDialogProps> = ({ onClose, o
   }, [file, onImported, onClose])
 
   return (
-    <Modal onClose={onClose}>
+    <Modal isOpen onClose={onClose}>
       <div className="w-[480px] max-h-[80vh] overflow-y-auto bg-sys-darkSurface border border-sys-darkBorder rounded-lg shadow-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-sys-darkBorder">
           <h2 className="text-sm font-medium text-white">导入 Skill</h2>

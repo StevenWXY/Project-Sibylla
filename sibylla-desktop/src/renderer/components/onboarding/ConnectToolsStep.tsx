@@ -45,7 +45,7 @@ export function ConnectToolsStep() {
       }
 
       const template = serversResponse.data?.find(
-        (s: { id: string }) => s.id === toolId
+        (s) => s.name.toLowerCase() === toolId
       )
       if (!template) {
         throw new Error(`Template ${toolId} not found`)
@@ -54,9 +54,8 @@ export function ConnectToolsStep() {
       const connectResponse = await window.electronAPI.mcp.connect({
         name: toolId,
         transport: 'stdio',
-        command:
-          (template as { command?: string }).command || '',
-        args: (template as { args?: string[] }).args || [],
+        command: template.name,
+        args: [],
       })
 
       if (!connectResponse.success) {

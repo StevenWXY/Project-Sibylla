@@ -23,7 +23,7 @@ export const WorkflowConfirmPanel: React.FC<WorkflowConfirmPanelProps> = ({ requ
   )
 
   return (
-    <Modal onClose={() => handleDecision('cancel')}>
+    <Modal isOpen onClose={() => handleDecision('cancel')}>
       <div className="w-[560px] max-h-[80vh] overflow-y-auto bg-sys-darkSurface border border-sys-darkBorder rounded-lg shadow-xl">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-sys-darkBorder">
           <Shield className="w-5 h-5 text-status-warning" />

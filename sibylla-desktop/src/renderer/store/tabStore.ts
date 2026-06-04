@@ -218,6 +218,7 @@ export const useTabStore = create<TabState>()(
 
             const nextTabs = [...state.tabs]
             const [moved] = nextTabs.splice(fromIndex, 1)
+            if (!moved) return state
             nextTabs.splice(toIndex, 0, moved)
             return { tabs: nextTabs }
           },

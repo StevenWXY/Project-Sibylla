@@ -1,4 +1,3 @@
-import React from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useProactiveStore } from '../../store/proactiveStore'
 import { SuggestionToast } from './SuggestionToast'

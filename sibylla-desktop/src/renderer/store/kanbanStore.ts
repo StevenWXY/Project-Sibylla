@@ -35,6 +35,7 @@ interface KanbanState {
   isLoading: boolean
   parseError: boolean
   selectedTaskId: string | null
+  selectedColumn: KanbanTask['status'] | null
   aiSidebarOpen: boolean
   error: string | null
 }
@@ -46,6 +47,7 @@ interface KanbanActions {
   dispatchToAI: (taskId: string) => Promise<void>
   promoteFromLedger: (ledgerTaskId: string) => Promise<void>
   selectTask: (taskId: string | null) => void
+  setSelectedColumn: (column: KanbanTask['status'] | null) => void
   toggleAiSidebar: () => void
   acceptSuggestion: (taskId: string, suggestedStatus: '待开始' | '进行中' | '已完成') => Promise<void>
   dismissSuggestion: (taskId: string, suggestedStatus: '待开始' | '进行中' | '已完成') => Promise<void>
@@ -59,6 +61,7 @@ const initialState: KanbanState = {
   isLoading: false,
   parseError: false,
   selectedTaskId: null,
+  selectedColumn: null,
   aiSidebarOpen: false,
   error: null,
 }
@@ -109,7 +112,7 @@ export const useKanbanStore = create<KanbanStore>()(
 
       createTask: async (input: CreateTaskInput) => {
         try {
-          const response = await window.electronAPI.kanban.create(input as Record<string, unknown>)
+          const response = await window.electronAPI.kanban.create(input as unknown as Record<string, unknown>)
           if (response.success) {
             await get().fetchBoard()
           }
@@ -153,6 +156,10 @@ export const useKanbanStore = create<KanbanStore>()(
 
       selectTask: (taskId: string | null) => {
         set({ selectedTaskId: taskId }, false, 'kanban/selectTask')
+      },
+
+      setSelectedColumn: (column: KanbanTask['status'] | null) => {
+        set({ selectedColumn: column }, false, 'kanban/selectColumn')
       },
 
       toggleAiSidebar: () => {

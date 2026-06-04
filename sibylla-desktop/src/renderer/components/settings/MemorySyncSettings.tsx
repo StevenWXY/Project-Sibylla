@@ -11,7 +11,7 @@
  * @see plans/phase2/phase2-task005-sync-enhancement-citation-tracing-plan.md §Phase G4
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Lock, AlertTriangle, Loader2 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 

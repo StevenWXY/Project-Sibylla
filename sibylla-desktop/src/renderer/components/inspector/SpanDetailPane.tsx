@@ -38,7 +38,7 @@ export const SpanDetailPane: React.FC<SpanDetailPaneProps> = ({ spanId }) => {
 
   const children = spans.filter(s => s.parentSpanId === span.spanId)
   const parent = span.parentSpanId ? spans.find(s => s.spanId === span.parentSpanId) : null
-  const statusInfo = STATUS_LABELS[span.status] ?? STATUS_LABELS['unset']
+  const statusInfo = STATUS_LABELS[span.status] ?? { label: '未设置', color: '#9CA3AF' }
 
   return (
     <div style={{ padding: '12px', fontSize: '12px' }}>

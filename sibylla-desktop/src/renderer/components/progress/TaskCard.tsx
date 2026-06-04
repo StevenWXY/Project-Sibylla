@@ -23,7 +23,7 @@ const STATE_STYLES: Record<string, { bg: string; border: string; color: string; 
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({ task, isActive }) => {
-  const style = STATE_STYLES[task.state] ?? STATE_STYLES.queued
+  const style = STATE_STYLES[task.state] ?? STATE_STYLES.queued!
 
   return (
     <div

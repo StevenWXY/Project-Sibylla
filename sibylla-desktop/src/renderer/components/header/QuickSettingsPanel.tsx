@@ -31,6 +31,7 @@ export const QuickSettingsPanel: React.FC<QuickSettingsPanelProps> = ({ open, on
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
+    return undefined
   }, [open, onClose])
 
   if (!open) return null

@@ -139,7 +139,7 @@ export function initProactiveListener(): () => void {
 
   suggestionUnsubscribe = window.electronAPI.proactive.onSuggestionShown(
     (suggestion) => {
-      useProactiveStore.getState().pushSuggestion(suggestion as Suggestion)
+      useProactiveStore.getState().pushSuggestion(suggestion as unknown as Suggestion)
     },
   )
 

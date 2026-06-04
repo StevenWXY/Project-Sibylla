@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { FileTree, FileTreeNode } from '../components/layout/FileTree'
 import { Button } from '../components/ui'
 

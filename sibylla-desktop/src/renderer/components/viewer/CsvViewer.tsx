@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronUp, ChevronDown } from 'lucide-react'
@@ -50,7 +50,7 @@ export function CsvViewer({ filePath, className }: CsvViewerProps) {
         })
 
         if (parsed.errors.length > 0 && parsed.data.length === 0) {
-          throw new Error(`CSV parse error: ${parsed.errors[0].message}`)
+          throw new Error(`CSV parse error: ${parsed.errors[0]?.message ?? 'Unknown CSV parse error'}`)
         }
 
         if (!cancelled) {

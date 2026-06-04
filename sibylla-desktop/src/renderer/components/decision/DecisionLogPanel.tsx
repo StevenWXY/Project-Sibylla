@@ -80,6 +80,8 @@ export const DecisionLogPanel: React.FC = () => {
   }
 
   if (viewMode === 'detail' && selectedDecision) {
+    const statusConfig = STATUS_CONFIG[selectedDecision.status]
+
     return (
       <div style={styles.container}>
         <div style={styles.detailHeader}>
@@ -87,15 +89,15 @@ export const DecisionLogPanel: React.FC = () => {
             ← 返回列表
           </button>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {STATUS_CONFIG[selectedDecision.status] && (
+            {statusConfig && (
               <span
                 style={{
                   ...styles.statusBadge,
-                  color: STATUS_CONFIG[selectedDecision.status].color,
-                  background: STATUS_CONFIG[selectedDecision.status].bg,
+                  color: statusConfig.color,
+                  background: statusConfig.bg,
                 }}
               >
-                {STATUS_CONFIG[selectedDecision.status].label}
+                {statusConfig.label}
               </span>
             )}
           </div>

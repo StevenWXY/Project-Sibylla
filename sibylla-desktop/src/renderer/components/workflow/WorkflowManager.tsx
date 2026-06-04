@@ -26,7 +26,10 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({ className }) =
       if (result.success && result.data) {
         setWorkflows(result.data as WorkflowDefinition[])
         if (result.data.length > 0 && !selectedId) {
-          setSelectedId((result.data as WorkflowDefinition[])[0].metadata.id)
+          const firstWorkflow = (result.data as WorkflowDefinition[])[0]
+          if (firstWorkflow) {
+            setSelectedId(firstWorkflow.metadata.id)
+          }
         }
       } else {
         setError(result.error?.message ?? '获取 Workflow 列表失败')

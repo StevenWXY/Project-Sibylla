@@ -12,7 +12,10 @@ export function extractDiffCodeBlocks(content: string): RawDiffBlock[] {
   const regex = /```diff:([^\n]+)\n([\s\S]*?)```/g
   let match: RegExpExecArray | null
   while ((match = regex.exec(content)) !== null) {
-    blocks.push({ filePath: match[1].trim(), diffBody: match[2] })
+    const filePath = match[1]?.trim()
+    const diffBody = match[2]
+    if (!filePath || diffBody === undefined) continue
+    blocks.push({ filePath, diffBody })
   }
   return blocks
 }
@@ -59,7 +62,7 @@ function applyPatchToContent(oldContent: string, diffBody: string): string {
       oldIndex++
     } else {
       if (oldIndex < oldLines.length) {
-        result.push(oldLines[oldIndex])
+        result.push(oldLines[oldIndex] ?? '')
         oldIndex++
       } else {
         result.push(diffLine)
@@ -68,7 +71,7 @@ function applyPatchToContent(oldContent: string, diffBody: string): string {
   }
 
   while (oldIndex < oldLines.length) {
-    result.push(oldLines[oldIndex])
+    result.push(oldLines[oldIndex] ?? '')
     oldIndex++
   }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Button, Input, Modal } from '../components/ui'
 import { Home, FileText, Settings, Plus, Save, Trash2 } from 'lucide-react'
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useCallback } from 'react'
 import { useProductivityStore } from '../../store/productivityStore'
-import type { AnalysisPeriod, DimensionScore } from '../../../../main/services/productivity/types'
+import type { AnalysisPeriod, DimensionScore } from '../../../main/services/productivity/types'
 
 const DIMENSION_LABELS: Record<string, string> = {
   taskCompletion: '任务完成率',

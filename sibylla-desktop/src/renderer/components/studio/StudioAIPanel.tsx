@@ -84,7 +84,8 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
     const matches: string[] = []
     let match: RegExpExecArray | null
     while ((match = regex.exec(text)) !== null) {
-      matches.push(match[1].trim())
+      const fileRef = match[1]
+      if (fileRef) matches.push(fileRef.trim())
     }
     return [...new Set(matches)]
   }, [])
@@ -94,7 +95,8 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
     const matches: string[] = []
     let match: RegExpExecArray | null
     while ((match = regex.exec(text)) !== null) {
-      matches.push(match[1])
+      const skillRef = match[1]
+      if (skillRef) matches.push(skillRef)
     }
     return [...new Set(matches)]
   }, [])
@@ -446,7 +448,7 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
             )}
             <OptimizeButton
               inputValue={props.chatInput}
-              currentMode={activeMode ?? 'free'}
+              currentMode={activeMode?.id ?? 'free'}
               conversationId={conversationId ?? ''}
               onApply={(text) => props.onChatInputChange(text)}
               onMerge={(text) => props.onChatInputChange(text)}

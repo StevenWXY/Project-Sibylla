@@ -38,13 +38,13 @@ export function KnowledgeGraph({ centerPath }: KnowledgeGraphProps) {
       setLoading(true)
       try {
         const response = await window.electronAPI.wikiLinks.getGraphData(centerPath)
-        if (!response || !response.nodes) {
+        if (!response.success || !response.data) {
           setNodes([])
           setEdges([])
           setLoading(false)
           return
         }
-        const data = response as GraphData
+        const data: GraphData = response.data
         const graphNodes: GraphNode[] = data.nodes.map((n) => ({
           id: n.id,
           label: n.label,
@@ -119,6 +119,7 @@ export function KnowledgeGraph({ centerPath }: KnowledgeGraphProps) {
         for (let j = i + 1; j < currentNodes.length; j++) {
           const a = currentNodes[i]
           const b = currentNodes[j]
+          if (!a || !b) continue
           const dx = b.x - a.x
           const dy = b.y - a.y
           const dist = Math.sqrt(dx * dx + dy * dy)

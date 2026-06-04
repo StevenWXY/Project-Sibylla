@@ -31,10 +31,10 @@ interface ExecutionTraceProps {
 
 function filterAndGroupSpans(spans: SerializedSpanShared[]): FilteredSpan[] {
   const filtered = spans
-    .filter(span => span.name in USER_VISIBLE_SPANS)
-    .map(span => {
+    .flatMap((span): FilteredSpan[] => {
       const config = USER_VISIBLE_SPANS[span.name]
-      return {
+      if (!config) return []
+      return [{
         name: span.name,
         label: config.label,
         icon: config.icon,
@@ -44,7 +44,7 @@ function filterAndGroupSpans(spans: SerializedSpanShared[]): FilteredSpan[] {
         statusMessage: span.statusMessage,
         attributes: span.attributes,
         spanId: span.spanId,
-      }
+      }]
     })
     .sort((a, b) => a.order - b.order || a.durationMs - b.durationMs)
 
@@ -71,7 +71,7 @@ function computeMedianDurationsByName(spans: FilteredSpan[]): Map<string, number
   for (const [name, durations] of byName) {
     const sorted = [...durations].sort((a, b) => a - b)
     const mid = Math.floor(sorted.length / 2)
-    medians.set(name, sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2)
+    medians.set(name, sorted.length % 2 !== 0 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2)
   }
   return medians
 }

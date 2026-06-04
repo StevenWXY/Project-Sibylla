@@ -1,4 +1,3 @@
-import React from 'react'
 import { useTheme } from '../components/providers/ThemeProvider'
 import { Sun, Moon, Monitor, Palette } from 'lucide-react'
 import { Button } from '../components/ui'

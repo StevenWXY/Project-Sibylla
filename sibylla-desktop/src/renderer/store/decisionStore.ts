@@ -123,7 +123,7 @@ export const useDecisionStore = create<DecisionStore>()(
 
       createDecision: async (input: CreateDecisionInput) => {
         try {
-          const response = await window.electronAPI.decision.create(input as Record<string, unknown>)
+          const response = await window.electronAPI.decision.create(input as unknown as Record<string, unknown>)
           if (response.success) {
             await get().fetchDecisions()
           }

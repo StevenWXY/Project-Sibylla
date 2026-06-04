@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface Suggestion {
@@ -106,7 +106,7 @@ export function SuggestionToast({ suggestion, onDismiss, onAccept, onAcceptWithE
       initial={{ opacity: 0, x: 80 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.3, exit: { duration: 0.2 } }}
+      transition={{ duration: 0.3 }}
       className="fixed bottom-4 right-4 z-50 w-80 rounded-md border-l-4 border-l-indigo-500 bg-white shadow-lg dark:bg-gray-800"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}

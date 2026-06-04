@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { FileWatchEvent } from '../../shared/types'
+import type { FileInfo, FileWatchEvent } from '../../shared/types'
 import type { AIStreamEnd, AIStreamError } from '../../shared/types'
 import {
   useAppStore,
   selectCurrentWorkspace,
   selectCurrentUser,
 } from '../store/appStore'
-import type { FileInfo } from '../store/appStore'
 import {
   getBaseName,
   joinPath,
@@ -341,7 +340,7 @@ export function WorkspaceStudioPage() {
     store.setIsLoadingHistory(true)
     try {
       const oldestTimestamp = store.messages.length > 0
-        ? store.messages[0].createdAt
+        ? store.messages[0]?.createdAt
         : undefined
       const response = await window.electronAPI.conversation.getMessages(
         store.conversationId,

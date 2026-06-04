@@ -27,6 +27,11 @@ export function AiModeSwitcher({ conversationId }: AiModeSwitcherProps) {
 
   const activeMode = getActiveMode()
 
+  const handleSelect = useCallback((mode: AiModeDefinitionShared) => {
+    switchMode(conversationId, mode.id)
+    setOpen(false)
+  }, [switchMode, conversationId])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
@@ -48,6 +53,7 @@ export function AiModeSwitcher({ conversationId }: AiModeSwitcherProps) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
+    return undefined
   }, [open])
 
   useEffect(() => {
@@ -73,11 +79,6 @@ export function AiModeSwitcher({ conversationId }: AiModeSwitcherProps) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, highlightIndex, modes, handleSelect])
 
-  const handleSelect = useCallback((mode: AiModeDefinitionShared) => {
-    switchMode(conversationId, mode.id)
-    setOpen(false)
-  }, [switchMode, conversationId])
-
   const displayMode = activeMode ?? modes.find(m => m.id === 'free')
 
   return (
@@ -92,7 +93,6 @@ export function AiModeSwitcher({ conversationId }: AiModeSwitcherProps) {
         style={{
           backgroundColor: hexToRgba(displayMode?.color ?? '#64748b', 0.12),
           color: displayMode?.color ?? '#64748b',
-          focusRingColor: displayMode?.color ?? '#64748b',
         }}
         title={displayMode?.description}
       >

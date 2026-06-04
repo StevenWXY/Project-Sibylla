@@ -14,6 +14,8 @@ export const SaveFailureBanner = React.memo(function SaveFailureBanner({
   onDismiss,
 }: SaveFailureBannerProps) {
   if (failedFiles.length === 0) return null
+  const firstFailedFile = failedFiles[0]
+  if (!firstFailedFile) return null
 
   return (
     <div className="sticky top-0 z-20 border-b border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/20">
@@ -38,7 +40,7 @@ export const SaveFailureBanner = React.memo(function SaveFailureBanner({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => { onRetry(failedFiles[0].path) }}
+            onClick={() => { onRetry(firstFailedFile.path) }}
             className="border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
           >
             重试

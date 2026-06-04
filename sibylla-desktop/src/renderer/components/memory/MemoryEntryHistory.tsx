@@ -45,7 +45,7 @@ export const MemoryEntryHistory = React.memo(function MemoryEntryHistory({
 }: MemoryEntryHistoryProps) {
   // Filter to events for this entry (if entryIds array or entryId field present)
   const relevantEvents = events.filter((ev) => {
-    const evObj = ev as Record<string, unknown>
+    const evObj = ev as unknown as Record<string, unknown>
     if (Array.isArray(evObj['entryIds'])) {
       return (evObj['entryIds'] as string[]).includes(entryId)
     }
@@ -98,7 +98,7 @@ export const MemoryEntryHistory = React.memo(function MemoryEntryHistory({
 /** Single timeline entry */
 function TimelineItem({ event }: { event: EvolutionEvent }) {
   const [expanded, setExpanded] = React.useState(false)
-  const evObj = event as Record<string, unknown>
+  const evObj = event as unknown as Record<string, unknown>
   const eventType = String(evObj['type'] ?? event.type ?? 'unknown')
   const label = EVENT_TYPE_LABELS[eventType] ?? eventType
   const colorClass = EVENT_TYPE_COLORS[eventType] ?? 'bg-gray-500/20 text-gray-400'
@@ -118,13 +118,13 @@ function TimelineItem({ event }: { event: EvolutionEvent }) {
         </span>
         {event.trigger?.source && (
           <span className="text-xs text-gray-500">
-            来源: {event.trigger.source}
+            来源: {String(event.trigger.source)}
           </span>
         )}
       </div>
 
       {/* Before/After diff */}
-      {(evObj['before'] || evObj['after']) && (
+      {Boolean(evObj['before'] || evObj['after']) && (
         <button
           onClick={() => setExpanded(!expanded)}
           className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
@@ -135,16 +135,16 @@ function TimelineItem({ event }: { event: EvolutionEvent }) {
 
       {expanded && (
         <div className="mt-2 space-y-1 text-xs">
-          {evObj['before'] && (
+          {Boolean(evObj['before']) && (
             <div className="rounded bg-red-500/10 p-2 text-red-300">
               <span className="font-medium">变更前: </span>
-              {String((evObj['before'] as Record<string, unknown>)['content'] ?? JSON.stringify(evObj['before']))}
+              {String((evObj['before'] as unknown as Record<string, unknown>)['content'] ?? JSON.stringify(evObj['before']))}
             </div>
           )}
-          {evObj['after'] && (
+          {Boolean(evObj['after']) && (
             <div className="rounded bg-green-500/10 p-2 text-green-300">
               <span className="font-medium">变更后: </span>
-              {String((evObj['after'] as Record<string, unknown>)['content'] ?? JSON.stringify(evObj['after']))}
+              {String((evObj['after'] as unknown as Record<string, unknown>)['content'] ?? JSON.stringify(evObj['after']))}
             </div>
           )}
         </div>

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
-import type { AnalysisPeriod, ProductivityReport } from '../../../main/services/productivity/types'
+import type { AnalysisPeriod, ProductivityReport } from '../../main/services/productivity/types'
 
 interface ProductivityState {
   report: ProductivityReport | null

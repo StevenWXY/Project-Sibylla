@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useOnboardingStore } from '../store/onboardingStore'
 import { useAppStore } from '../store/appStore'

@@ -97,7 +97,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
   const updateCustomRule = (index: number, field: 'pattern' | 'reason', value: string) => {
     const updated = [...customRules]
-    updated[index] = { ...updated[index], [field]: value }
+    const current = updated[index]
+    if (!current) return
+    updated[index] = { ...current, [field]: value }
     setCustomRules(updated)
   }
 

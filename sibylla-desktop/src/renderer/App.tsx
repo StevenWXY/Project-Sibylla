@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import type { AuthUser } from '../shared/types'
 import { ThemeProvider } from './components/providers/ThemeProvider'
 import { AppLayout } from './components/layout/AppLayout'
 import { ComponentShowcase } from './pages/ComponentShowcase'
@@ -95,7 +96,7 @@ export default function App() {
           return
         }
 
-        let timeoutId: ReturnType<typeof setTimeout> | null = null
+        let timeoutId: number | null = null
         const timeoutPromise = new Promise<never>((_, reject) => {
           timeoutId = window.setTimeout(() => reject(new Error('Auth check timeout')), 5000)
         })
@@ -116,7 +117,7 @@ export default function App() {
         }
 
         if (response && typeof response === 'object' && 'success' in response) {
-          const typedResponse = response as { success: boolean; data?: { isAuthenticated: boolean; user: unknown } }
+          const typedResponse = response as { success: boolean; data?: { isAuthenticated: boolean; user: AuthUser | null } }
           if (typedResponse.success && typedResponse.data?.isAuthenticated && typedResponse.data?.user) {
             setAuthenticated(true, typedResponse.data.user)
           }

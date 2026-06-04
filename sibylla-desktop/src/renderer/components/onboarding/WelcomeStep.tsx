@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Brain, Lock, Zap } from 'lucide-react'
 import { useOnboardingStore, detectUserType } from '../../store/onboardingStore'

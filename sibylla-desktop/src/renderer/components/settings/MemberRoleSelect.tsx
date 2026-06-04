@@ -33,7 +33,6 @@ export function MemberRoleSelect({
           disabled && 'cursor-not-allowed opacity-50',
         )}
         disabled={disabled}
-        onClick={() => setIsOpen(true)}
         aria-label="成员操作"
       >
         <MoreHorizontal className="h-4 w-4" />
