@@ -31,7 +31,9 @@ export class WikiLinksIndexer {
 
     const regex = new RegExp(WIKI_LINK_REGEX.source, 'g')
     while ((match = regex.exec(content)) !== null) {
-      const inner = match[1].trim()
+      const rawInner = match[1]
+      if (!rawInner) continue
+      const inner = rawInner.trim()
       if (inner.length === 0) continue
 
       const pipeIndex = inner.indexOf('|')

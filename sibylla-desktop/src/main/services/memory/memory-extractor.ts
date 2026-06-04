@@ -188,7 +188,8 @@ export class MemoryExtractor {
             maxAttempts,
             err: err instanceof Error ? err.message : String(err),
           })
-          await this.sleep(delays[attempt])
+          const delay = delays[attempt] ?? delays[delays.length - 1] ?? 1000
+          await this.sleep(delay)
         }
       }
     }

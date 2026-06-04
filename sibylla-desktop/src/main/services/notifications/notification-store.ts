@@ -63,12 +63,10 @@ function deserializeNotification(row: NotificationRow): Notification {
 export class NotificationStore {
   private db!: Database.Database
   private readonly dbPath: string
-  private readonly workspaceRoot: string
   private readonly archiveDir: string
   private archiveRunning = false
 
   constructor(workspaceRoot: string) {
-    this.workspaceRoot = workspaceRoot
     this.dbPath = path.join(workspaceRoot, '.sibylla', 'notifications', 'notifications.db')
     this.archiveDir = path.join(workspaceRoot, '.sibylla', 'notifications', 'archive')
   }
@@ -80,7 +78,7 @@ export class NotificationStore {
 
     this.db = new Database(this.dbPath, {
       verbose: process.env.NODE_ENV === 'development'
-        ? (msg: string) => {
+        ? (msg?: unknown) => {
             if (typeof msg === 'string' && !msg.startsWith('PRAGMA')) {
               logger.debug('notification-store.sql', { msg })
             }

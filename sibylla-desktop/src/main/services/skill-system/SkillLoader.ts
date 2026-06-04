@@ -166,7 +166,7 @@ export class SkillLoader {
       examples: '',
     }
     let name = id
-    let section = ''
+    let section: keyof typeof fields | '' = ''
 
     for (const line of lines) {
       if (line.startsWith('# ')) {
@@ -189,21 +189,21 @@ export class SkillLoader {
       }
     }
 
-    for (const key of Object.keys(fields)) {
-      fields[key] = fields[key].trim()
+    for (const key of Object.keys(fields) as Array<keyof typeof fields>) {
+      fields[key] = (fields[key] ?? '').trim()
     }
 
-    const instructions = fields.instructions
-    const outputFormat = fields.outputFormat
+    const instructions = fields.instructions ?? ''
+    const outputFormat = fields.outputFormat ?? ''
 
     return {
       id,
       name,
-      description: fields.description,
-      scenarios: fields.scenarios,
+      description: fields.description ?? '',
+      scenarios: fields.scenarios ?? '',
       instructions,
       outputFormat,
-      examples: fields.examples,
+      examples: fields.examples ?? '',
       filePath,
       tokenCount: this.tokenEstimator(instructions + '\n' + outputFormat),
       updatedAt: Date.now(),
@@ -217,6 +217,9 @@ export class SkillLoader {
     }
 
     const yaml = match[1]
+    if (yaml === undefined) {
+      throw new Error('Missing YAML frontmatter in _index.md')
+    }
     const result: Record<string, unknown> = {}
 
     for (const line of yaml.split('\n')) {

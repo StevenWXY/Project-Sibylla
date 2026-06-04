@@ -46,7 +46,7 @@ export function registerReportHandlers(
 
         const dailyPath = `personal/${currentUser}/reports/daily`
         try {
-          const files = await services.fileManager.list(dailyPath)
+          const files = await services.fileManager.listFiles(dailyPath)
           for (const file of files) {
             if (file.name.endsWith('.md')) {
               const date = file.name.replace('.md', '')
@@ -63,7 +63,7 @@ export function registerReportHandlers(
 
         const weeklyPath = 'docs/reports/weekly'
         try {
-          const files = await services.fileManager.list(weeklyPath)
+          const files = await services.fileManager.listFiles(weeklyPath)
           for (const file of files) {
             if (file.name.endsWith('.md')) {
               const date = file.name.replace('.md', '')

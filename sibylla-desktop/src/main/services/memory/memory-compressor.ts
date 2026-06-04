@@ -16,10 +16,7 @@ const MEMORY_DIR = '.sibylla/memory'
 const COMPRESS_SYSTEM_PROMPT = `You merge related memories into concise, coherent single entries. Preserve all unique information, eliminate duplication. Output only the merged content as plain text, no markdown headers, no JSON, no explanation.`
 
 export class MemoryCompressor {
-  /** Lower bound of target token range (reserved for future fine-grained control) */
-  private readonly TARGET_MIN: number
   private readonly TARGET_MAX: number
-  private readonly TRIGGER_THRESHOLD: number
   private readonly workspaceRoot: string
 
   constructor(
@@ -31,9 +28,7 @@ export class MemoryCompressor {
     private readonly config: MemoryConfig,
     private readonly loggerInstance: typeof logger = logger,
   ) {
-    this.TARGET_MIN = config.compressionTargetMin
     this.TARGET_MAX = config.compressionTargetMax
-    this.TRIGGER_THRESHOLD = config.compressionThreshold
     this.workspaceRoot = this.memoryManager.getWorkspacePathOrFail()
   }
 
@@ -96,8 +91,12 @@ export class MemoryCompressor {
       throw new Error('No compression snapshot found')
     }
 
-    const latestSnapshot = path.join(snapshotsDir, mdFiles[0])
-    const snapshotTimestamp = parseInt(path.basename(mdFiles[0], '.md'), 10)
+    const latestFile = mdFiles[0]
+    if (!latestFile) {
+      throw new Error('No compression snapshot found')
+    }
+    const latestSnapshot = path.join(snapshotsDir, latestFile)
+    const snapshotTimestamp = parseInt(path.basename(latestFile, '.md'), 10)
     const snapshotAge = Date.now() - snapshotTimestamp
 
     if (snapshotAge > 24 * 60 * 60 * 1000) {
@@ -135,8 +134,10 @@ export class MemoryCompressor {
     const merges: CompressionResult['merged'] = []
 
     for (const cluster of clusters) {
+      const first = cluster[0]
+      if (!first) continue
       if (cluster.length === 1) {
-        result.push(cluster[0])
+        result.push(first)
         continue
       }
 
@@ -154,6 +155,10 @@ export class MemoryCompressor {
   }
 
   private async llmMerge(cluster: MemoryEntry[]): Promise<MemoryEntry> {
+    const first = cluster[0]
+    if (!first) {
+      throw new Error('Cannot merge empty memory cluster')
+    }
     const session = this.aiGateway.createSession({ role: 'memory-compressor' })
     try {
       const contentList = cluster
@@ -177,11 +182,11 @@ export class MemoryCompressor {
 
       const earliestCreatedAt = cluster
         .map((e) => e.createdAt)
-        .sort()[0]
+        .sort()[0] ?? new Date().toISOString()
 
       return {
         id: `merged-${Date.now()}`,
-        section: cluster[0].section,
+        section: first.section,
         content: response.content,
         confidence: weightedConfidence,
         hits: totalHits,

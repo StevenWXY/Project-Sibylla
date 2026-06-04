@@ -99,6 +99,7 @@ export class DecisionProjectionProcessor implements ExtractionPostProcessor {
     if (!match) return null
 
     const yaml = match[1]
+    if (yaml === undefined) return null
     const result: Record<string, unknown> = {}
 
     for (const line of yaml.split('\n')) {
@@ -128,14 +129,19 @@ export class DecisionProjectionProcessor implements ExtractionPostProcessor {
     let m: RegExpExecArray | null
 
     while ((m = sectionRegex.exec(content)) !== null) {
-      sectionIndices.push({ title: m[1].trim(), index: m.index })
+      const title = m[1]
+      if (!title) continue
+      sectionIndices.push({ title: title.trim(), index: m.index })
     }
 
     const getSectionContent = (title: string): string | null => {
       const idx = sectionIndices.findIndex((s) => s.title === title)
       if (idx === -1) return null
-      const start = sectionIndices[idx].index + sectionIndices[idx].title.length + 3
-      const end = idx + 1 < sectionIndices.length ? sectionIndices[idx + 1].index : content.length
+      const current = sectionIndices[idx]
+      if (!current) return null
+      const next = sectionIndices[idx + 1]
+      const start = current.index + current.title.length + 3
+      const end = next ? next.index : content.length
       return content.slice(start, end).trim()
     }
 

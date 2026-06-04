@@ -10,6 +10,8 @@ export type NotificationType =
   | 'performance.alert'
   | 'system.indexed'
   | 'system.suggestion'
+  | 'kanban.status-suggestion'
+  | 'kanban.task-risk'
 
 export type NotificationPriority = 'urgent' | 'high' | 'normal' | 'low'
 
@@ -49,7 +51,9 @@ export interface Notification {
   metadata: Record<string, unknown>
 }
 
-export type NotificationDraft = Omit<Notification, 'id' | 'createdAt'>
+export type NotificationDraft = Omit<Notification, 'id' | 'createdAt' | 'stale'> & {
+  stale?: boolean
+}
 
 export interface NotificationRule {
   id: string

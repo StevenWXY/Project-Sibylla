@@ -224,6 +224,7 @@ export class SkillValidator {
     if (!match) return {}
 
     const yaml = match[1]
+    if (yaml === undefined) return {}
     const result: Record<string, unknown> = {}
 
     for (const line of yaml.split('\n')) {

@@ -159,7 +159,7 @@ export class SkillExecutor {
     }
 
     const sortedByTokens = examples
-      .map((e, i) => ({ content: e, tokens: exampleTokens[i] }))
+      .map((e, i) => ({ content: e, tokens: exampleTokens[i] ?? 0 }))
       .sort((a, b) => a.tokens - b.tokens)
 
     const trimmed: string[] = []
@@ -171,7 +171,8 @@ export class SkillExecutor {
     }
 
     if (trimmed.length === 0 && sortedByTokens.length > 0) {
-      trimmed.push(sortedByTokens[0].content)
+      const first = sortedByTokens[0]
+      if (first) trimmed.push(first.content)
     }
 
     logger.debug('[SkillExecutor] Examples trimmed', {

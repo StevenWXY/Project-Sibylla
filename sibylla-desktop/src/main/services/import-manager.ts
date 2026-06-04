@@ -12,7 +12,7 @@
 
 import * as path from 'path'
 import { promises as fs } from 'fs'
-import mammoth from 'mammoth'
+import * as mammoth from 'mammoth'
 import pdfParse from 'pdf-parse'
 import { FileManager } from './file-manager'
 import { logger } from '../utils/logger'
@@ -272,12 +272,12 @@ export class ImportManager {
     const fileName = path.basename(sourcePath, '.docx') + '.md'
     const destPath = path.join(targetDir, fileName)
 
-    const result = await mammoth.convertToMarkdown({ path: sourcePath })
+    const result = await mammoth.extractRawText({ path: sourcePath })
 
     if (result.messages.length > 0) {
       logger.warn('[ImportManager] Word conversion warnings', {
         sourcePath,
-        warnings: result.messages.map((m) => m.message),
+        warnings: result.messages.map((m: { message: string }) => m.message),
       })
     }
 

@@ -17,7 +17,7 @@ export class AppHandler extends IpcHandler {
   readonly namespace = 'app'
   private configPath: string
 
-  constructor(private readonly workspaceRoot: string) {
+  constructor(workspaceRoot: string) {
     super()
     this.configPath = path.join(workspaceRoot, '.sibylla', 'config.json')
   }

@@ -312,6 +312,10 @@ export class CheckpointScheduler {
     return this.queue.length
   }
 
+  getCurrentRecord(): CheckpointRecord | undefined {
+    return this.currentRecord
+  }
+
   private generateId(): string {
     const hex = Math.random().toString(16).slice(2, 6)
     return `chk-${Date.now()}-${hex}`

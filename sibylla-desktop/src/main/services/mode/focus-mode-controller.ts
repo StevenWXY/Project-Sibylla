@@ -33,7 +33,7 @@ export class FocusModeController {
     private readonly store: NotificationStoreLike | null,
     private readonly preferenceLearner: PreferenceLearnerLike | null,
     private readonly subAgentExecutor: SubAgentExecutorLike | null,
-    private readonly workspacePath: string,
+    workspacePath: string,
   ) {
     this.queueDir = path.join(workspacePath, '.sibylla', 'notifications', 'focused-queue')
   }

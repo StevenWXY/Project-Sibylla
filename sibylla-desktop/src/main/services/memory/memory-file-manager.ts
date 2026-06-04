@@ -91,7 +91,9 @@ export class MemoryFileManager {
 
     let metadata: MemoryFileMetadata
     try {
-      const parsed = parseYaml(match[1]) as Record<string, unknown>
+      const frontmatter = match[1]
+      if (frontmatter === undefined) return this.parseAsV1Text(raw)
+      const parsed = parseYaml(frontmatter) as Record<string, unknown>
       metadata = {
         version: ((parsed.version as number) ?? 2) as 2,
         lastCheckpoint: (parsed.lastCheckpoint as string) ?? new Date().toISOString(),
@@ -297,7 +299,9 @@ export class MemoryFileManager {
         if (currentSection) {
           result.push({ section: currentSection, content: currentLines.join('\n') })
         }
-        currentSection = headingMatch[1].trim()
+        const section = headingMatch[1]
+        if (!section) continue
+        currentSection = section.trim()
         currentLines = []
       } else {
         currentLines.push(line)
@@ -314,7 +318,8 @@ export class MemoryFileManager {
   private mapSectionName(sectionName: string): MemorySection {
     const trimmed = sectionName.trim()
     if (trimmed in V1_SECTION_MAP) {
-      return V1_SECTION_MAP[trimmed]
+      const mapped = V1_SECTION_MAP[trimmed]
+      if (mapped) return mapped
     }
     if (VALID_SECTIONS.has(trimmed)) {
       return trimmed as MemorySection
@@ -357,6 +362,7 @@ export class MemoryFileManager {
     }
 
     const metaStr = metaMatch[1]
+    if (metaStr === undefined) return null
     const meta = this.parseEntryMetadata(metaStr)
     const contentAfterMeta = trimmedBlock.slice(metaMatch.index! + metaMatch[0].length).trim()
     const contentBeforeMeta = trimmedBlock.slice(0, metaMatch.index!).trim()
@@ -399,7 +405,10 @@ export class MemoryFileManager {
     let m: RegExpExecArray | null
     const regex = new RegExp(META_KV_REGEX.source, 'g')
     while ((m = regex.exec(metaStr)) !== null) {
-      kv[m[1]] = m[2]
+      const key = m[1]
+      const value = m[2]
+      if (!key || value === undefined) continue
+      kv[key] = value
     }
 
     let confidence = 0.5
@@ -442,7 +451,9 @@ export class MemoryFileManager {
     let m: RegExpExecArray | null
     const regex = new RegExp(SOURCE_REF_REGEX.source, 'g')
     while ((m = regex.exec(text)) !== null) {
-      refs.push(...m[1].split(',').map((s) => s.trim()).filter((s) => s.length > 0))
+      const rawRefs = m[1]
+      if (!rawRefs) continue
+      refs.push(...rawRefs.split(',').map((s) => s.trim()).filter((s) => s.length > 0))
     }
     return refs
   }

@@ -95,6 +95,10 @@ export class ProactiveEngine {
     this._isFullscreen = value
   }
 
+  isInitialized(): boolean {
+    return this._initialized
+  }
+
   recordSuggestionOutcome(
     suggestionId: string,
     outcome: SuggestionOutcome,
@@ -273,6 +277,7 @@ export class ProactiveEngine {
     })
 
     const candidate = candidates[0]
+    if (!candidate) return
 
     const interrupt = this.deps.interruptPolicy.canInterrupt(context)
     if (!interrupt.allowed) {

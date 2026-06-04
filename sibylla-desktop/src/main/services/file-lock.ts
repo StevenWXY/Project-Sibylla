@@ -1,4 +1,5 @@
-import { promises as fs, FileHandle } from 'fs'
+import { promises as fs } from 'fs'
+import type { FileHandle } from 'fs/promises'
 import * as path from 'path'
 
 export interface LockHandle {

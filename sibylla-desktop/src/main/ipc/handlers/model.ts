@@ -1,4 +1,4 @@
-import type { IpcMain, BrowserWindow } from 'electron'
+import { BrowserWindow, type IpcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../shared/types'
 import type { ConfiguredModelShared, ModelSwitchedEventShared } from '../../../shared/types'
 import type { Tracer } from '../../services/trace/tracer'
@@ -33,7 +33,7 @@ export function registerModelHandlers(
   ipcMain: IpcMain,
   tracer: Tracer,
   eventBus: AppEventBus,
-  getWindow: () => BrowserWindow | null,
+  _getWindow: () => BrowserWindow | null,
   defaultModel: string,
 ): () => void {
   const conversationModels = new Map<string, string>()

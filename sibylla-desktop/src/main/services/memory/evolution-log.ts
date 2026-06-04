@@ -172,13 +172,15 @@ export class EvolutionLog {
 
       const timestamp = headerMatch[1]
       const rawType = headerMatch[2]
+      const entryId = headerMatch[3]
+      if (!timestamp || !rawType || !entryId) {
+        return null
+      }
       if (!VALID_EVOLUTION_TYPES.has(rawType)) {
         this.loggerInstance.warn('memory.evolution.parse.malformed', { reason: `invalid type: ${rawType}` })
         return null
       }
       const type = rawType as EvolutionEventType
-      const entryId = headerMatch[3]
-
       const sectionMatch = block.match(/- \*\*Section:\*\*\s+(\S+)/)
       const section = (sectionMatch?.[1] ?? 'project_convention') as MemorySection
 
@@ -225,8 +227,10 @@ export class EvolutionLog {
     const regex = new RegExp(pattern)
     const match = block.match(regex)
     if (!match) return null
+    const json = match[1]
+    if (json === undefined) return null
     try {
-      return JSON.parse(match[1]) as Partial<MemoryEntry>
+      return JSON.parse(json) as Partial<MemoryEntry>
     } catch {
       return null
     }

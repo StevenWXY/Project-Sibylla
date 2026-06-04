@@ -75,7 +75,7 @@ export function registerExportHandlers(
       try {
         const safeFormat = sanitizeFormat(format)
         logger.info('[ExportHandler] copyToClipboard', { messageCount: messageIds.length, format: safeFormat })
-        const text = await conversationExporter.copyToClipboard(messageIds, safeFormat)
+        const text = await conversationExporter.copyToClipboard(messageIds, safeFormat === 'plain-text' ? 'markdown' : safeFormat)
         clipboard.writeText(text)
         return text
       } catch (error) {

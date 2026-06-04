@@ -87,7 +87,7 @@ export class GuardrailEngine {
             source: ctx.source,
             user: ctx.userId,
             result: verdict.allow === false ? 'blocked' : 'conditional',
-            reason: verdict.allow !== true ? verdict.reason : undefined,
+            reason: verdict.reason,
           })
 
           return verdict

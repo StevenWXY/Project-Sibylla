@@ -48,6 +48,7 @@ export function createDecisionContradictionTrigger(
         for (let j = i + 1; j < decisions.length; j++) {
           const d1 = decisions[i]
           const d2 = decisions[j]
+          if (!d1 || !d2) continue
 
           if (d1.chosen === d2.chosen) continue
 

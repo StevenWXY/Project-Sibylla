@@ -20,6 +20,10 @@ function generateHexId(bytes: number): string {
   return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+function isKanbanColumn(value: string | undefined): value is KanbanColumn {
+  return value === '待开始' || value === '进行中' || value === '已完成'
+}
+
 export class KanbanService {
   private modelCache: KanbanModel | null = null
   private unsubscribeFns: Array<() => void> = []
@@ -126,8 +130,8 @@ export class KanbanService {
 
     for (const line of lines) {
       const headerMatch = SECTION_HEADER_RE.exec(line)
-      if (headerMatch) {
-        currentColumn = headerMatch[1] as KanbanColumn
+      if (headerMatch && isKanbanColumn(headerMatch[1])) {
+        currentColumn = headerMatch[1]
         currentTask = null
         continue
       }
@@ -138,8 +142,11 @@ export class KanbanService {
           this.finalizeTask(currentTask, tasks, columns)
         }
 
-        const checked = checkboxMatch[2].toLowerCase() === 'x'
+        const marker = checkboxMatch[2]
         const restOfLine = checkboxMatch[3]
+        if (marker === undefined || restOfLine === undefined) continue
+
+        const checked = marker.toLowerCase() === 'x'
 
         const idMatch = TASK_ID_RE.exec(restOfLine)
         const hasAiSuggested = AI_SUGGESTED_RE.test(restOfLine)
@@ -163,10 +170,12 @@ export class KanbanService {
         continue
       }
 
-      const metaMatch = METADATA_RE.exec(line)
-      if (metaMatch && currentTask) {
-        const key = metaMatch[1]
-        const value = metaMatch[2].trim()
+        const metaMatch = METADATA_RE.exec(line)
+        if (metaMatch && currentTask) {
+          const key = metaMatch[1]
+        const rawValue = metaMatch[2]
+        if (!key || rawValue === undefined) continue
+        const value = rawValue.trim()
         currentTask.metadataLines.push(line)
 
         switch (key) {
@@ -258,15 +267,16 @@ export class KanbanService {
     let currentColumn: KanbanColumn | null = null
     for (const line of lines) {
       const headerMatch = SECTION_HEADER_RE.exec(line)
-      if (headerMatch) {
-        currentColumn = headerMatch[1] as KanbanColumn
+      if (headerMatch && isKanbanColumn(headerMatch[1])) {
+        currentColumn = headerMatch[1]
         continue
       }
       if (currentColumn && TASK_ID_RE.test(line)) {
         const match = TASK_ID_RE.exec(line)
         if (match?.[1] === taskId) {
           const checkMatch = CHECKBOX_RE.exec(line)
-          if (checkMatch && checkMatch[2].toLowerCase() === 'x') {
+          const marker = checkMatch?.[2]
+          if (marker && marker.toLowerCase() === 'x') {
             return '已完成'
           }
           return currentColumn
@@ -294,16 +304,21 @@ export class KanbanService {
     const taskBlockStart = taskLineIndex
     const taskBlockEnd = this.findTaskBlockEnd(lines, taskLineIndex)
     const taskBlock = lines.slice(taskBlockStart, taskBlockEnd + 1)
+    const firstTaskLine = taskBlock[0]
+    if (firstTaskLine === undefined) {
+      return { modifiedContent: lines.join('\n'), from: fromColumn, to: toColumn }
+    }
 
     if (toColumn === '已完成' && fromColumn !== '已完成') {
-      taskBlock[0] = taskBlock[0].replace(/- \[ \]/, '- [x]')
+      taskBlock[0] = firstTaskLine.replace(/- \[ \]/, '- [x]')
       const hasCompletionMeta = taskBlock.some((l) => /完成时间:/.test(l))
       if (!hasCompletionMeta) {
-        const indent = taskBlock[0].match(/^(\s*)/)?.[1] ?? ''
-        taskBlock.push(`${indent}  - 完成时间: ${new Date().toISOString().split('T')[0]}`)
+        const indent = taskBlock[0]?.match(/^(\s*)/)?.[1] ?? ''
+        const today = new Date().toISOString().split('T')[0] ?? new Date().toISOString()
+        taskBlock.push(`${indent}  - 完成时间: ${today}`)
       }
     } else if (toColumn !== '已完成' && fromColumn === '已完成') {
-      taskBlock[0] = taskBlock[0].replace(/- \[x\]/, '- [ ]').replace(/- \[X\]/, '- [ ]')
+      taskBlock[0] = firstTaskLine.replace(/- \[x\]/, '- [ ]').replace(/- \[X\]/, '- [ ]')
       const completionLineIdx = taskBlock.findIndex((l) => /完成时间:/.test(l))
       if (completionLineIdx !== -1) {
         taskBlock.splice(completionLineIdx, 1)
@@ -324,13 +339,13 @@ export class KanbanService {
       remainingLines.push(...taskBlock)
     } else {
       let insertIdx = targetSectionIdx + 1
-      while (insertIdx < remainingLines.length && remainingLines[insertIdx].trim() === '') {
+      while (insertIdx < remainingLines.length && (remainingLines[insertIdx]?.trim() ?? '') === '') {
         insertIdx++
       }
 
       while (
         insertIdx < remainingLines.length &&
-        !SECTION_HEADER_RE.test(remainingLines[insertIdx])
+        !SECTION_HEADER_RE.test(remainingLines[insertIdx] ?? '')
       ) {
         insertIdx++
       }
@@ -348,11 +363,14 @@ export class KanbanService {
   private findTaskBlockEnd(lines: string[], startIndex: number): number {
     let end = startIndex
     for (let i = startIndex + 1; i < lines.length; i++) {
-      if (CHECKBOX_RE.test(lines[i]) || SECTION_HEADER_RE.test(lines[i])) {
+      const line = lines[i]
+      if (line === undefined) break
+      if (CHECKBOX_RE.test(line) || SECTION_HEADER_RE.test(line)) {
         break
       }
-      if (METADATA_RE.test(lines[i]) || lines[i].trim() === '') {
-        if (lines[i].trim() === '' && i + 1 < lines.length && !METADATA_RE.test(lines[i + 1])) {
+      if (METADATA_RE.test(line) || line.trim() === '') {
+        const nextLine = lines[i + 1]
+        if (line.trim() === '' && i + 1 < lines.length && !METADATA_RE.test(nextLine ?? '')) {
           break
         }
         end = i
@@ -395,12 +413,12 @@ export class KanbanService {
       lines.push(`## ${targetColumn}`, '', fullBlock)
     } else {
       let insertIdx = sectionIdx + 1
-      while (insertIdx < lines.length && lines[insertIdx].trim() === '') {
+      while (insertIdx < lines.length && (lines[insertIdx]?.trim() ?? '') === '') {
         insertIdx++
       }
       while (
         insertIdx < lines.length &&
-        !SECTION_HEADER_RE.test(lines[insertIdx])
+        !SECTION_HEADER_RE.test(lines[insertIdx] ?? '')
       ) {
         insertIdx++
       }
@@ -482,6 +500,7 @@ export class KanbanService {
     if (taskLineIdx === -1) return
 
     const line = lines[taskLineIdx]
+    if (line === undefined) return
     lines[taskLineIdx] = line.replace(
       /<!--\s*task-id:\s*(\S+)\s*-->/,
       '<!-- task-id: $1 ai-linked -->',

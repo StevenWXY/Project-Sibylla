@@ -129,7 +129,7 @@ function injectBeforeMarker(
 }
 
 export async function detectStaleSyncedPaths(
-  workspaceRoot: string,
+  _workspaceRoot: string,
   gitAbstraction: GitAbstraction,
 ): Promise<readonly string[]> {
   const stalePaths: string[] = []

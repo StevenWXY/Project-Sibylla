@@ -38,7 +38,7 @@ export class ConversationStore {
     const dbPath = path.join(dataDir, 'conversations.db')
     this.db = new Database(dbPath, {
       verbose: process.env.NODE_ENV === 'development'
-        ? (msg: string) => {
+        ? (msg?: unknown) => {
             if (typeof msg === 'string' && !msg.startsWith('PRAGMA')) {
               console.debug('[ConversationStore]', msg)
             }

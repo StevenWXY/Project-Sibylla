@@ -15,7 +15,7 @@ export class SubAgentHandler extends IpcHandler {
 
   constructor(
     private readonly subAgentRegistry: SubAgentRegistry,
-    private readonly subAgentExecutor: SubAgentExecutor,
+    _subAgentExecutor: SubAgentExecutor,
     private readonly traceStore?: TraceStore,
   ) {
     super()

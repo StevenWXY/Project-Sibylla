@@ -1,4 +1,5 @@
 import type { MemoryLogType } from '../memory-manager'
+export type { MemoryLogType } from '../memory-manager'
 
 export type MemorySection =
   | 'user_preference'
@@ -104,6 +105,7 @@ export interface ExtractionCandidate {
   reasoning: string
   sourceLogIds: string[]
   similarExistingId?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface ExtractionReport {

@@ -67,10 +67,11 @@ export class SubAgentExecutor {
       this.activeContexts.add(ctx)
 
       if (this.tracer?.isEnabled()) {
+        const runContext = ctx
         return await this.tracer.withSpan('sub-agent.run', async (span) => {
           span.setAttribute('agent.id', opts.agent.id)
           span.setAttribute('parent_trace_id', opts.parentTraceId)
-          return this.executeLoop(ctx, opts, span)
+          return this.executeLoop(runContext, opts, span)
         }, {
           kind: 'ai-call',
           parent: opts.parentTraceId ? { traceId: opts.parentTraceId, spanId: '' } : undefined,
@@ -96,6 +97,29 @@ export class SubAgentExecutor {
       this.activeCount--
       this.releaseSlot()
     }
+  }
+
+  async execute(agentId: string, params: Record<string, unknown>): Promise<SubAgentResult> {
+    const agent = this.registry.get(agentId)
+    if (!agent) {
+      return {
+        success: false,
+        summary: '',
+        turnsUsed: 0,
+        tokensUsed: 0,
+        traceId: '',
+        errors: [`Sub-agent not found: ${agentId}`],
+      }
+    }
+
+    return this.run({
+      agent,
+      task: typeof params.conversation === 'string' ? params.conversation : JSON.stringify(params),
+      params,
+      parentTraceId: '',
+      parentAllowedTools: agent.allowedTools,
+      timeoutMs: 60_000,
+    })
   }
 
   private async executeLoop(
@@ -242,7 +266,7 @@ export class SubAgentExecutor {
       const parsed = JSON.parse(jsonStr) as Record<string, unknown>
       const errors = this.validateAgainstSchema(parsed, schema)
       if (errors.length === 0) {
-        return { valid: true, output: parsed }
+        return { valid: true, output: parsed, errors: [] }
       }
       return { valid: false, errors }
     } catch (err) {

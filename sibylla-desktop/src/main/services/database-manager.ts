@@ -38,7 +38,7 @@ export class DatabaseManager {
 
   private openDatabase(): Database.Database {
     return new Database(this.dbPath, {
-      verbose: process.env.NODE_ENV === 'development' ? (msg: string) => {
+      verbose: process.env.NODE_ENV === 'development' ? (msg?: unknown) => {
         if (typeof msg === 'string' && !msg.startsWith('PRAGMA')) {
           console.debug('[DatabaseManager]', msg)
         }
@@ -198,7 +198,7 @@ export class DatabaseManager {
   checkIntegrity(): boolean {
     try {
       const result = this.db.pragma('integrity_check') as Array<{ integrity_check: string }>
-      return result.length === 1 && result[0].integrity_check === 'ok'
+      return result.length === 1 && result[0]?.integrity_check === 'ok'
     } catch {
       return false
     }

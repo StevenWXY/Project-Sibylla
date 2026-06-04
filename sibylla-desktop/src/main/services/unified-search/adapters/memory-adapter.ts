@@ -32,7 +32,7 @@ export class MemoryAdapter implements SearchSourceAdapter {
 
   private deriveTitle(content: string): string {
     const titleMatch = content.match(/^#\s+(.+)$/m)
-    if (titleMatch) return titleMatch[1].trim()
+    if (titleMatch?.[1]) return titleMatch[1].trim()
     return content.slice(0, 50).replace(/\n/g, ' ') + (content.length > 50 ? '...' : '')
   }
 

@@ -11,6 +11,7 @@
  */
 
 import { promises as fs } from 'fs'
+import type { Dirent } from 'fs'
 import * as path from 'path'
 import { logger } from '../../utils/logger'
 import type { AppEventBus } from '../event-bus'
@@ -33,7 +34,7 @@ export class TaskStateMachineSync {
   private readonly reportedTaskIds = new Set<string>()
 
   constructor(
-    private readonly workspaceRoot: string,
+    workspaceRoot: string,
     private readonly eventBus: AppEventBus,
     private readonly currentSessionId: string,
   ) {
@@ -45,7 +46,7 @@ export class TaskStateMachineSync {
   async detectCrossDeviceTasks(): Promise<readonly CrossDeviceTask[]> {
     const crossDeviceTasks: CrossDeviceTask[] = []
 
-    let entries: fs.Dirent[]
+    let entries: Dirent[]
     try {
       entries = await fs.readdir(this.agentsPath, { withFileTypes: true })
     } catch {

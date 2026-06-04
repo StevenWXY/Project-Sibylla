@@ -178,7 +178,7 @@ export class ContextEngine {
     return this.tracer.withSpan('context.assemble', async (span) => {
       const result = await this.assembleContextInternal(request)
       span.setAttribute('context.files_count', result.sources.length)
-      span.setAttribute('context.memory_tokens', result.memoryTokens)
+      span.setAttribute('context.memory_tokens', result.memoryTokens ?? 0)
       span.setAttribute('context.budget_total', result.budgetTotal)
       return result
     }, { kind: 'tool-call' })
@@ -232,6 +232,7 @@ export class ContextEngine {
       budgetTotal: totalBudget,
       sources: allSources,
       warnings,
+      memoryTokens: adjustedMemory.reduce((sum, s) => sum + s.tokenCount, 0),
     }
   }
 
@@ -242,7 +243,7 @@ export class ContextEngine {
     return this.tracer.withSpan('context.assemble', async (span) => {
       const result = await this.assembleForHarnessInternal(request)
       span.setAttribute('context.files_count', result.sources.length)
-      span.setAttribute('context.memory_tokens', result.memoryTokens)
+      span.setAttribute('context.memory_tokens', result.memoryTokens ?? 0)
       span.setAttribute('context.budget_total', result.budgetTotal)
       return result
     }, { kind: 'tool-call' })
@@ -378,7 +379,8 @@ export class ContextEngine {
     const matches: string[] = []
     let match: RegExpExecArray | null
     while ((match = regex.exec(message)) !== null) {
-      matches.push(match[1].trim())
+      const ref = match[1]
+      if (ref) matches.push(ref.trim())
     }
     return [...new Set(matches)]
   }
@@ -405,6 +407,8 @@ export class ContextEngine {
       const source = match[1]
       const part1 = match[2]
       const part2 = match[3]
+
+      if (!source || !part1) continue
 
       if (part2) {
         // @github:issue-123 → source=github, resource=issue, identifier=123

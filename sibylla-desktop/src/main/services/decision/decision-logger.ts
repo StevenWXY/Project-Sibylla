@@ -295,10 +295,10 @@ ${input.reason}
     const stat = await fs.promises.stat(fullPath).catch(() => null)
 
     return {
-      id: fm.id ?? '',
-      title: fm.title ?? '',
-      status: (fm.status as DecisionStatus) ?? 'decided',
-      decidedAt: fm.decided_at ?? '',
+      id: typeof fm.id === 'string' ? fm.id : '',
+      title: typeof fm.title === 'string' ? fm.title : '',
+      status: typeof fm.status === 'string' ? (fm.status as DecisionStatus) : 'decided',
+      decidedAt: typeof fm.decided_at === 'string' ? fm.decided_at : '',
       decidedBy: Array.isArray(fm.decided_by) ? fm.decided_by : [],
       tags: Array.isArray(fm.tags) ? fm.tags : [],
       relatedFiles: Array.isArray(fm.related_files) ? fm.related_files : [],
@@ -319,6 +319,7 @@ ${input.reason}
     if (!match) return null
 
     const yaml = match[1]
+    if (yaml === undefined) return null
     const result: Record<string, unknown> = {}
 
     for (const line of yaml.split('\n')) {
@@ -352,14 +353,19 @@ ${input.reason}
     let m: RegExpExecArray | null
 
     while ((m = sectionRegex.exec(content)) !== null) {
-      sectionIndices.push({ title: m[1].trim(), index: m.index })
+      const title = m[1]
+      if (!title) continue
+      sectionIndices.push({ title: title.trim(), index: m.index })
     }
 
     const getSectionContent = (title: string): string | null => {
       const idx = sectionIndices.findIndex((s) => s.title === title)
       if (idx === -1) return null
-      const start = sectionIndices[idx].index + sectionIndices[idx].title.length + 3
-      const end = idx + 1 < sectionIndices.length ? sectionIndices[idx + 1].index : content.length
+      const current = sectionIndices[idx]
+      if (!current) return null
+      const next = sectionIndices[idx + 1]
+      const start = current.index + current.title.length + 3
+      const end = next ? next.index : content.length
       return content.slice(start, end).trim()
     }
 

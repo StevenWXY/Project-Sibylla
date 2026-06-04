@@ -52,7 +52,9 @@ export class SlashCommandLoader {
     if (!match) return null
 
     const frontmatterRaw = match[1]
-    const body = match[2].trim()
+    const bodyRaw = match[2]
+    if (frontmatterRaw === undefined || bodyRaw === undefined) return null
+    const body = bodyRaw.trim()
 
     const fm: Record<string, unknown> = {}
     for (const line of frontmatterRaw.split('\n')) {

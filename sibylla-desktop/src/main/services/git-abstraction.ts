@@ -2344,10 +2344,6 @@ export class GitAbstraction extends EventEmitter {
           dir: this.workspaceDir,
           ref: tagName,
           message,
-          author: {
-            name: this.authorName,
-            email: this.authorEmail,
-          },
         })
       } else {
         await git.tag({

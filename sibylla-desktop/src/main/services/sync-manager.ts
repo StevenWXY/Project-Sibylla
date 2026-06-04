@@ -59,10 +59,12 @@ const DEFAULT_SYNC_INTERVAL_MS = 30000
  * Provides compile-time type checking for event names and argument types
  * to prevent typos and incorrect event payloads.
  */
-interface TypedEventEmitter<Events extends Record<string, unknown[]>> {
-  on<E extends keyof Events & string>(event: E, listener: (...args: Events[E]) => void): this
-  off<E extends keyof Events & string>(event: E, listener: (...args: Events[E]) => void): this
-  emit<E extends keyof Events & string>(event: E, ...args: Events[E]): boolean
+type EventArgs<Events, E extends keyof Events> = Events[E] extends unknown[] ? Events[E] : never
+
+interface TypedEventEmitter<Events> {
+  on<E extends keyof Events & string>(event: E, listener: (...args: EventArgs<Events, E>) => void): this
+  off<E extends keyof Events & string>(event: E, listener: (...args: EventArgs<Events, E>) => void): this
+  emit<E extends keyof Events & string>(event: E, ...args: EventArgs<Events, E>): boolean
   removeAllListeners(event?: keyof Events & string): this
 }
 
@@ -122,7 +124,6 @@ export class ElectronNetworkProvider implements NetworkStatusProvider {
  */
 export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<SyncManagerEvents> & EventEmitter) {
   // ─── Dependencies ─────────────────────────────────────────────────────
-  private readonly fileManager: FileManager
   private readonly gitAbstraction: GitAbstraction
   private readonly networkMonitor: NetworkMonitor | null
 
@@ -174,7 +175,7 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
    */
   constructor(
     config: SyncManagerConfig,
-    fileManager: FileManager,
+    _fileManager: FileManager,
     gitAbstraction: GitAbstraction,
     networkProvider?: NetworkStatusProvider,
     networkMonitor?: NetworkMonitor,
@@ -187,7 +188,6 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
     this.syncIntervalMs = config.syncIntervalMs ?? DEFAULT_SYNC_INTERVAL_MS
     this.reconnectSyncDelayMs = config.reconnectSyncDelayMs ?? DEFAULT_RECONNECT_SYNC_DELAY_MS
     this.initialSyncDelayMs = config.initialSyncDelayMs ?? DEFAULT_INITIAL_SYNC_DELAY_MS
-    this.fileManager = fileManager
     this.gitAbstraction = gitAbstraction
     this.networkProvider = networkProvider ?? new ElectronNetworkProvider()
     this.networkMonitor = networkMonitor ?? null
@@ -555,9 +555,12 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
         this.updateStatus('conflict', undefined, conflicts)
 
         if (this.eventBus) {
-          const conflictsWithId = conflicts.map<ConflictInfo>((c: ConflictInfo) => ({
-            ...c,
-            conflictId: c.conflictId ?? ulid(),
+          const conflictsWithId = conflicts.map<ConflictInfo>((filePath: string) => ({
+            filePath,
+            localContent: '',
+            remoteContent: '',
+            baseContent: '',
+            conflictId: ulid(),
           }))
           this.eventBus.emitEvent({
             type: 'git.conflict-detected',
@@ -623,7 +626,7 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
   private autoSaveManagerRef: AutoSaveManager | null = null
 
   connectAutoSaveManager(autoSaveManager: AutoSaveManager): void {
-    if (this.autoSaveManagerRef) {
+    if (this.autoSaveManagerRef && this.boundAutoSaveCommitted) {
       this.autoSaveManagerRef.off('committed', this.boundAutoSaveCommitted)
     }
 

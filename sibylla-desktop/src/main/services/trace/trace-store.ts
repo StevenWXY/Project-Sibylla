@@ -46,11 +46,9 @@ interface SpanRow {
 export class TraceStore {
   private db!: Database.Database
   private readonly dbPath: string
-  private readonly workspaceRoot: string
   private cleanupIntervalRef: ReturnType<typeof setInterval> | null = null
 
   constructor(workspaceRoot: string) {
-    this.workspaceRoot = workspaceRoot
     this.dbPath = path.join(workspaceRoot, '.sibylla', 'trace', 'trace.db')
   }
 
@@ -66,7 +64,7 @@ export class TraceStore {
 
     this.db = new Database(this.dbPath, {
       verbose: process.env.NODE_ENV === 'development'
-        ? (msg: string) => {
+        ? (msg?: unknown) => {
             if (typeof msg === 'string' && !msg.startsWith('PRAGMA')) {
               logger.debug('trace-store.sql', { msg })
             }
@@ -413,7 +411,7 @@ export class TraceStore {
       const result = tempDb.pragma('integrity_check') as Array<{ integrity_check: string }>
       tempDb.close()
 
-      const isOk = result.length === 1 && result[0].integrity_check === 'ok'
+      const isOk = result.length === 1 && result[0]?.integrity_check === 'ok'
       if (!isOk) {
         const corruptedName = `trace.db.corrupted-${Date.now()}`
         const corruptedPath = path.join(path.dirname(this.dbPath), corruptedName)

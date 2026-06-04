@@ -453,7 +453,7 @@ export class WorkspaceManager {
    * @param workspacePath - Absolute path to workspace root
    * @param config - Workspace configuration
    */
-  private async writeConfig(workspacePath: string, config: WorkspaceConfig): Promise<void> {
+  private async writeConfig(_workspacePath: string, config: WorkspaceConfig): Promise<void> {
     // Use FileManager with SYSTEM context to write system config files
     const configJson = JSON.stringify(config, null, 2)
     await this.fileManager.writeFile(WORKSPACE_STRUCTURE.SYSTEM_CONFIG, configJson, {
@@ -468,7 +468,7 @@ export class WorkspaceManager {
    * @param membersConfig - Members configuration
    */
   private async writeMembersConfig(
-    workspacePath: string,
+    _workspacePath: string,
     membersConfig: MembersConfig
   ): Promise<void> {
     // Use FileManager with SYSTEM context to write system config files
@@ -485,7 +485,7 @@ export class WorkspaceManager {
    * @param pointsConfig - Points configuration
    */
   private async writePointsConfig(
-    workspacePath: string,
+    _workspacePath: string,
     pointsConfig: PointsConfig
   ): Promise<void> {
     // Use FileManager with SYSTEM context to write system config files
@@ -502,7 +502,7 @@ export class WorkspaceManager {
    * @param options - Workspace creation options
    */
   private async generateInitialDocuments(
-    workspacePath: string,
+    _workspacePath: string,
     options: CreateWorkspaceOptions
   ): Promise<void> {
     const documents = [

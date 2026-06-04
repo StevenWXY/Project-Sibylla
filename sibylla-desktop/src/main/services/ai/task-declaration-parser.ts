@@ -47,8 +47,11 @@ export class TaskDeclarationParser {
         continue
       }
 
-      const blockType = match[1] as 'declare' | 'update' | 'complete'
-      const jsonPayload = match[2].trim()
+      const rawBlockType = match[1]
+      const rawPayload = match[2]
+      if (!rawBlockType || !rawPayload) continue
+      const blockType = rawBlockType as 'declare' | 'update' | 'complete'
+      const jsonPayload = rawPayload.trim()
 
       try {
         const parsed = JSON.parse(jsonPayload) as unknown

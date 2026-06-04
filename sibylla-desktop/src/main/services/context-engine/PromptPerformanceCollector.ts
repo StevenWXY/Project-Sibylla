@@ -42,7 +42,6 @@ export class PromptPerformanceCollector {
   private filePath: string
   private enabled: boolean = false
   private static readonly ALERT_CONSECUTIVE_THRESHOLD = 5
-  private static readonly ALERT_FAILURE_RATE = 0.3
   private alertStates = new Map<string, AlertState>()
 
   constructor(baseDir: string) {

@@ -21,7 +21,9 @@ export class SlashCommandParser {
     const tokens = this.tokenize(trimmed)
     if (tokens.length === 0) return null
 
-    const commandPrefix = tokens[0].toLowerCase()
+    const commandToken = tokens[0]
+    if (!commandToken) return null
+    const commandPrefix = commandToken.toLowerCase()
     const command = this.resolveBySlash(commandPrefix)
     if (!command || !command.isSlashCommand) return null
 
@@ -46,7 +48,9 @@ export class SlashCommandParser {
     const tokens = this.tokenize(trimmed)
     if (tokens.length === 0) return null
 
-    const commandPrefix = tokens[0].toLowerCase()
+    const commandToken = tokens[0]
+    if (!commandToken) return null
+    const commandPrefix = commandToken.toLowerCase()
     const command = this.resolveBySlash(commandPrefix)
     if (!command || !command.isSlashCommand) return null
 
@@ -224,7 +228,10 @@ export class SlashCommandParser {
     )
 
     for (let i = 0; i < positionalArgs.length && i < requiredStringParams.length; i++) {
-      result[requiredStringParams[i].name] = positionalArgs[i]
+      const def = requiredStringParams[i]
+      const arg = positionalArgs[i]
+      if (!def || arg === undefined) continue
+      result[def.name] = arg
     }
 
     for (const def of paramDefs) {

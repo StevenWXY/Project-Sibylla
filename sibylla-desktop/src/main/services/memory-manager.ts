@@ -132,7 +132,6 @@ export class MemoryManager {
   private appendQueue: Promise<void> = Promise.resolve()
   private _v2Components?: V2Components
   private eventBus?: MemoryEventBus
-  private tracer?: Tracer
   private memoryWatcher: ReturnType<typeof setInterval> | null = null
   private lastMemoryMtime: number | null = null
 
@@ -156,8 +155,7 @@ export class MemoryManager {
     return this.eventBus
   }
 
-  setTracer(tracer: Tracer): void {
-    this.tracer = tracer
+  setTracer(_tracer: Tracer): void {
   }
 
   setWorkspacePath(workspacePath: string | null): void {
@@ -634,12 +632,17 @@ export class MemoryManager {
     if (entryIndex === -1) {
       throw new Error(`Entry not found: ${entryId}`)
     }
-    const before = { ...snapshot.entries[entryIndex] }
-    snapshot.entries[entryIndex] = {
-      ...snapshot.entries[entryIndex],
+    const existing = snapshot.entries[entryIndex]
+    if (!existing) {
+      throw new Error(`Entry not found: ${entryId}`)
+    }
+    const before = { ...existing }
+    const updated = {
+      ...existing,
       content,
       updatedAt: new Date().toISOString(),
     }
+    snapshot.entries[entryIndex] = updated
     snapshot.metadata.totalTokens = this.v2Components.fileManager.estimateTokens(
       this.v2Components.fileManager.serialize(snapshot),
     )
@@ -657,9 +660,9 @@ export class MemoryManager {
       rationale: 'User manually edited entry via memory panel',
     })
 
-    await this.v2Components.indexer?.upsert(snapshot.entries[entryIndex])
+    await this.v2Components.indexer?.upsert(updated)
 
-    this.eventBus?.emitEntryUpdated(snapshot.entries[entryIndex])
+    this.eventBus?.emitEntryUpdated(updated)
   }
 
   async deleteEntry(entryId: string): Promise<void> {
@@ -705,11 +708,16 @@ export class MemoryManager {
     if (entryIndex === -1) {
       throw new Error(`Entry not found: ${entryId}`)
     }
-    snapshot.entries[entryIndex] = {
-      ...snapshot.entries[entryIndex],
+    const existing = snapshot.entries[entryIndex]
+    if (!existing) {
+      throw new Error(`Entry not found: ${entryId}`)
+    }
+    const updated = {
+      ...existing,
       locked,
       updatedAt: new Date().toISOString(),
     }
+    snapshot.entries[entryIndex] = updated
     await this.v2Components.fileManager.save(snapshot)
 
     await this.v2Components.evolutionLog?.append({
@@ -717,14 +725,14 @@ export class MemoryManager {
       timestamp: new Date().toISOString(),
       type: locked ? 'lock' : 'unlock',
       entryId,
-      section: snapshot.entries[entryIndex].section,
+      section: updated.section,
       trigger: { source: 'manual' },
       rationale: locked ? 'User locked entry' : 'User unlocked entry',
     })
 
-    await this.v2Components.indexer?.upsert(snapshot.entries[entryIndex])
+    await this.v2Components.indexer?.upsert(updated)
 
-    this.eventBus?.emitEntryUpdated(snapshot.entries[entryIndex])
+    this.eventBus?.emitEntryUpdated(updated)
   }
 
   async applyExtractionReport(report: ExtractionReport): Promise<{ compressionNeeded: boolean }> {
@@ -757,7 +765,9 @@ export class MemoryManager {
       const existingIndex = snapshot.entries.findIndex((e) => e.id === mergeRecord.existing)
       if (existingIndex === -1) continue
 
-      const before = { ...snapshot.entries[existingIndex] }
+      const existing = snapshot.entries[existingIndex]
+      if (!existing) continue
+      const before = { ...existing }
 
       const afterEntry = report.added.find((e) => e.id === mergeRecord.merged)
       if (afterEntry) {
@@ -964,6 +974,7 @@ export class MemoryManager {
     const entryMap = new Map(currentEntries.map(e => [e.id, { ...e }]))
     for (let i = events.length - 1; i >= 0; i--) {
       const ev = events[i]
+      if (!ev) continue
       if (ev.type === 'delete' || ev.type === 'archive') {
         if (ev.before) {
           entryMap.set(ev.entryId, {

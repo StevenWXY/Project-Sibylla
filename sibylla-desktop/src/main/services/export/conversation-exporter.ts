@@ -11,7 +11,7 @@ import { isPathInsideRoot } from '../../utils/path-boundary'
 import { MarkdownRenderer } from './markdown-renderer'
 import { JsonRenderer } from './json-renderer'
 import { HtmlRenderer } from './html-renderer'
-import type { ConversationData, ConversationMessage, ExportOptions, ExportPreview, SensitiveField } from './types'
+import type { ConversationData, ConversationMessage, ExportFormat, ExportOptions, ExportPreview, SensitiveField } from './types'
 
 export class ConversationExporter {
   private readonly markdownRenderer = new MarkdownRenderer()
@@ -108,7 +108,7 @@ export class ConversationExporter {
     }, { kind: 'user-action' })
   }
 
-  async copyToClipboard(messageIds: string[], _format: 'markdown'): Promise<string> {
+  async copyToClipboard(messageIds: string[], _format: ExportFormat): Promise<string> {
     const conversation = await this.loadAllConversations()
     const messages = conversation.filter((m) => messageIds.includes(m.id))
 

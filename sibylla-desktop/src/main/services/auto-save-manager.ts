@@ -242,7 +242,9 @@ export class AutoSaveManager extends (EventEmitter as new () => TypedEventEmitte
    */
   private generateCommitMessage(files: string[]): string {
     if (files.length === 1) {
-      return `[${this.userName}] 更新 ${path.basename(files[0])}`
+      const file = files[0]
+      if (!file) return `[${this.userName}] 更新文件`
+      return `[${this.userName}] 更新 ${path.basename(file)}`
     }
     if (files.length <= 3) {
       const names = files.map(f => path.basename(f)).join(', ')

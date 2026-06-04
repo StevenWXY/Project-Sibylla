@@ -1845,6 +1845,7 @@ export interface AssembledContext {
   budgetTotal: number
   sources: ContextSource[]
   warnings: string[]
+  memoryTokens?: number
   /** Tool definitions available in the current scope (TASK020) */
   toolDefinitions?: readonly ToolDefinitionSummary[]
   /** Prompt composition parts for traceability (TASK035) */
@@ -2847,7 +2848,7 @@ export interface ModelSwitchedEventShared {
 // ─── Prompt Library Shared Types (TASK035) ───
 
 export type PromptScope = 'core' | 'mode' | 'tool' | 'agent' | 'hook' | 'context' | 'optimizer'
-export type PromptSource = 'builtin' | 'user-override'
+export type PromptSource = 'builtin' | 'user-override' | 'dynamic'
 
 export interface PromptMetadata {
   id: string

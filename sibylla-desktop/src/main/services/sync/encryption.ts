@@ -22,7 +22,7 @@ const SCRYPT_BLOCK_SIZE = 8
 const SCRYPT_PARALLELIZATION = 1
 
 export class DecryptionError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
+  constructor(message: string, override readonly cause?: unknown) {
     super(message)
     this.name = 'DecryptionError'
   }

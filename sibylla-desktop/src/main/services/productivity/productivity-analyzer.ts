@@ -47,7 +47,7 @@ export class ProductivityAnalyzer {
     private readonly eventLogStore: EventLogStore,
     private readonly wikiLinksStore: WikiLinksStore,
     private readonly memberDirectory: MemberDirectory,
-    private readonly privacyFilter: PrivacyFilter,
+    _privacyFilter: PrivacyFilter,
     private readonly workspaceRoot: string,
   ) {}
 
@@ -188,7 +188,7 @@ export class ProductivityAnalyzer {
       let totalWeight = 0
 
       for (const task of assignedTasks) {
-        const weight = PRIORITY_WEIGHTS[task.priority ?? 'P1'] ?? PRIORITY_WEIGHTS.P1
+        const weight = PRIORITY_WEIGHTS[task.priority ?? 'P1'] ?? PRIORITY_WEIGHTS.P1 ?? DEFAULT_DIMENSION_WEIGHT
         totalWeight += weight
         if (task.status === '已完成') {
           completedWeight += weight
@@ -290,7 +290,7 @@ export class ProductivityAnalyzer {
     }
   }
 
-  async calculateCollabResponsiveness(memberId: string | undefined, dateRange: DateRange): Promise<DimensionScore> {
+  async calculateCollabResponsiveness(_memberId: string | undefined, dateRange: DateRange): Promise<DimensionScore> {
     try {
       const sinceMonth = `${dateRange.since.getFullYear()}-${String(dateRange.since.getMonth() + 1).padStart(2, '0')}`
       const untilMonth = `${dateRange.until.getFullYear()}-${String(dateRange.until.getMonth() + 1).padStart(2, '0')}`
@@ -327,12 +327,15 @@ export class ProductivityAnalyzer {
 
       const delays: number[] = []
       for (let i = 1; i < commentEvents.length; i++) {
-        const delay = commentEvents[i].timestamp - commentEvents[i - 1].timestamp
+        const current = commentEvents[i]
+        const previous = commentEvents[i - 1]
+        if (!current || !previous) continue
+        const delay = current.timestamp - previous.timestamp
         delays.push(delay / (1000 * 60 * 60))
       }
 
       delays.sort((a, b) => a - b)
-      const medianDelayHours = delays[Math.floor(delays.length / 2)]
+      const medianDelayHours = delays[Math.floor(delays.length / 2)] ?? 0
       const raw = 1 / (1 + medianDelayHours)
       const normalized = raw
 
@@ -483,8 +486,13 @@ export class ProductivityAnalyzer {
 
   private getMonthsInRange(sinceMonth: string, untilMonth: string): string[] {
     const months: string[] = []
-    const [sinceY, sinceM] = sinceMonth.split('-').map(Number)
-    const [untilY, untilM] = untilMonth.split('-').map(Number)
+    const [sinceYRaw, sinceMRaw] = sinceMonth.split('-')
+    const [untilYRaw, untilMRaw] = untilMonth.split('-')
+    const sinceY = Number(sinceYRaw)
+    const sinceM = Number(sinceMRaw)
+    const untilY = Number(untilYRaw)
+    const untilM = Number(untilMRaw)
+    if (![sinceY, sinceM, untilY, untilM].every(Number.isFinite)) return []
 
     let y = sinceY
     let m = sinceM

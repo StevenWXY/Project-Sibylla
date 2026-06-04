@@ -175,6 +175,7 @@ export class WorkflowParser {
       const parts = path.split('.')
       if (parts.length < 2) return undefined
       const stepId = parts[0]
+      if (!stepId) return undefined
       const stepResult = context.steps[stepId]
       if (!stepResult) return undefined
       if (parts[1] === 'output') {
@@ -220,11 +221,11 @@ export class WorkflowParser {
               const rightExpr = trimmed.slice(idx + op.length).trim()
               const leftVal = this.resolveExpression(leftExpr, { params: {}, steps })
               const rightVal = this.resolveExpression(rightExpr, { params: {}, steps })
-              return this.compareValues(
+              return String(this.compareValues(
                 this.valueToString(leftVal),
                 this.valueToString(rightVal),
                 op,
-              )
+              ))
             }
           }
 
@@ -273,7 +274,8 @@ export class WorkflowParser {
 
     const lengthMatch = trimmed.match(/^(.+)\.length$/)
     if (lengthMatch) {
-      const arrStr = lengthMatch[1].trim()
+      const arrStr = lengthMatch[1]?.trim()
+      if (!arrStr) return false
       try {
         const parsed = JSON.parse(arrStr)
         return Array.isArray(parsed) && parsed.length > 0

@@ -36,9 +36,9 @@ export class ProgressLedger {
 
   constructor(
     private readonly taskStateMachine: TaskStateMachine,
-    private readonly workspaceRoot: string,
+    _workspaceRoot: string,
     private readonly fileManager: FileManager,
-    private readonly tracer: Tracer,
+    _tracer: Tracer,
     private readonly eventBus: AppEventBus,
     private readonly logger: typeof loggerType,
     taskTimeoutMs?: number,
@@ -48,7 +48,7 @@ export class ProgressLedger {
 
   async initialize(): Promise<void> {
     const progressPath = this.progressPath()
-    const exists = await this.fileManager.exists(progressPath, FileOperationContext.SYSTEM)
+    const exists = await this.fileManager.exists(progressPath)
     if (exists) {
       await this.load()
     } else {
@@ -255,7 +255,7 @@ export class ProgressLedger {
   async getArchive(month: string): Promise<string> {
     const archiveRelPath = path.join(ARCHIVE_BASE_DIR, `${month}.md`)
     try {
-      const exists = await this.fileManager.exists(archiveRelPath, FileOperationContext.SYSTEM)
+      const exists = await this.fileManager.exists(archiveRelPath)
       if (!exists) return ''
       const result = await this.fileManager.readFile(archiveRelPath, { encoding: 'utf-8', context: FileOperationContext.SYSTEM })
       return result.content ?? ''
@@ -277,7 +277,7 @@ export class ProgressLedger {
     await this.withRetry(async () => {
       let existingContent = ''
       try {
-        const exists = await this.fileManager.exists(progressPath, FileOperationContext.SYSTEM)
+        const exists = await this.fileManager.exists(progressPath)
         if (exists) {
           const raw = await this.fileManager.readFile(progressPath, { encoding: 'utf-8', context: FileOperationContext.SYSTEM })
           existingContent = raw.content ?? ''
@@ -477,6 +477,7 @@ export class ProgressLedger {
     while ((match = USER_NOTE_BLOCK_REGEX.exec(content)) !== null) {
       const taskId = match[1]
       const noteContent = match[2]
+      if (!taskId || noteContent === undefined) continue
       result.set(taskId, noteContent)
     }
     return result
@@ -531,7 +532,7 @@ export class ProgressLedger {
   private async appendFileSafe(filePath: string, content: string): Promise<void> {
     let existing = ''
     try {
-      const exists = await this.fileManager.exists(filePath, FileOperationContext.SYSTEM)
+      const exists = await this.fileManager.exists(filePath)
       if (exists) {
         const raw = await this.fileManager.readFile(filePath, { encoding: 'utf-8', context: FileOperationContext.SYSTEM })
         existing = raw.content ?? ''
@@ -606,8 +607,9 @@ export class ProgressLedger {
     if (!idMatch) return null
 
     const id = idMatch[1]
+    if (!id) return null
     const titleMatch = entry.match(/^\S*\]\s*(.*?)(?:\s*[✓❌]|$)/m)
-    const title = titleMatch ? titleMatch[1].trim() : entry.split('\n')[0]?.trim() ?? ''
+    const title = titleMatch?.[1]?.trim() ?? entry.split('\n')[0]?.trim() ?? ''
 
     let state: TaskState
     if (mode === 'running') state = 'running'
@@ -625,11 +627,11 @@ export class ProgressLedger {
     const modeMatch = entry.match(/模式[：:]\s*(.+)/)
     let taskMode: TaskRecord['mode']
     if (modeMatch) {
-      const modeStr = modeMatch[1].trim()
+      const modeStr = modeMatch[1]?.trim()
       const modeMap: Record<string, TaskRecord['mode']> = {
         '计划': 'plan', '分析': 'analyze', '审查': 'review', '自由': 'free',
       }
-      taskMode = modeMap[modeStr]
+      if (modeStr) taskMode = modeMap[modeStr]
     }
 
     const checklist: ChecklistItem[] = []
@@ -672,7 +674,9 @@ export class ProgressLedger {
         const started = new Date(startedAtMatch[1].trim()).getTime()
         if (isNaN(started)) return undefined
         if (durationMatch) {
-          return new Date(started + this.parseDuration(durationMatch[1].trim())).toISOString()
+          const durationValue = durationMatch[1]
+          if (!durationValue) return undefined
+          return new Date(started + this.parseDuration(durationValue.trim())).toISOString()
         }
         return undefined
       })(),
@@ -684,7 +688,8 @@ export class ProgressLedger {
     }
 
     if (durationMatch) {
-      const durationStr = durationMatch[1].trim()
+      const durationStr = durationMatch[1]?.trim()
+      if (!durationStr) return task
       task.durationMs = this.parseDuration(durationStr)
     }
 
@@ -713,8 +718,8 @@ export class ProgressLedger {
   private parseDuration(str: string): number {
     const minuteMatch = str.match(/(\d+)\s*m/)
     const secondMatch = str.match(/(\d+)\s*s/)
-    const minutes = minuteMatch ? parseInt(minuteMatch[1], 10) : 0
-    const seconds = secondMatch ? parseInt(secondMatch[1], 10) : 0
+    const minutes = parseInt(minuteMatch?.[1] ?? '0', 10)
+    const seconds = parseInt(secondMatch?.[1] ?? '0', 10)
     return (minutes * 60 + seconds) * 1000
   }
 

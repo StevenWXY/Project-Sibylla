@@ -35,7 +35,12 @@ function parseFrontmatterLines(content: string): IndexFrontmatter {
   }
 
   const result: Record<string, unknown> = {}
-  for (const line of match[1].split('\n')) {
+  const frontmatter = match[1]
+  if (frontmatter === undefined) {
+    throw new Error('Missing YAML frontmatter in _index.md')
+  }
+
+  for (const line of frontmatter.split('\n')) {
     const colonIdx = line.indexOf(':')
     if (colonIdx < 0) continue
     const key = line.slice(0, colonIdx).trim()

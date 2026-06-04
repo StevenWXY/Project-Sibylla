@@ -29,18 +29,16 @@ const EXCLUDED_PATHS = [
 export class LocalSearchEngine {
   private dbManager: DatabaseManager
   private fileManager: FileManager
-  private readonly workspacePath: string
   private sender: BrowserWindow | null = null
   private isInitialized = false
 
   constructor(
     dbManager: DatabaseManager,
     fileManager: FileManager,
-    workspacePath: string,
+    _workspacePath: string,
   ) {
     this.dbManager = dbManager
     this.fileManager = fileManager
-    this.workspacePath = workspacePath
   }
 
   async initialize(sender: BrowserWindow): Promise<void> {

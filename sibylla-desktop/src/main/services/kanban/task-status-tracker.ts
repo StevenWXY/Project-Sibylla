@@ -28,7 +28,7 @@ export class TaskStatusTracker {
   constructor(
     private readonly kanbanService: KanbanService,
     private readonly eventBus: AppEventBus,
-    private readonly gitAbstraction: GitAbstraction,
+    _gitAbstraction: GitAbstraction,
   ) {}
 
   start(): void {

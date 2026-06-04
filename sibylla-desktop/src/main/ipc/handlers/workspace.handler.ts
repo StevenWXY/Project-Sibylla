@@ -175,7 +175,7 @@ export class WorkspaceHandler extends IpcHandler {
    * @returns WorkspaceInfo for the newly created workspace
    */
   private async createWorkspace(
-    event: IpcMainInvokeEvent,
+    _event: IpcMainInvokeEvent,
     options: CreateWorkspaceOptions
   ): Promise<WorkspaceInfo> {
     const manager = this.ensureWorkspaceManager()
@@ -199,7 +199,7 @@ export class WorkspaceHandler extends IpcHandler {
    * @returns WorkspaceInfo for the opened workspace
    */
   private async openWorkspace(
-    event: IpcMainInvokeEvent,
+    _event: IpcMainInvokeEvent,
     path: string
   ): Promise<WorkspaceInfo> {
     const manager = this.ensureWorkspaceManager()
@@ -262,7 +262,7 @@ export class WorkspaceHandler extends IpcHandler {
    * @returns true if valid, false otherwise
    */
   private async validateWorkspace(
-    event: IpcMainInvokeEvent,
+    _event: IpcMainInvokeEvent,
     path: string
   ): Promise<boolean> {
     const manager = this.ensureWorkspaceManager()
@@ -297,7 +297,7 @@ export class WorkspaceHandler extends IpcHandler {
    * @param updates - Partial configuration updates
    */
   private async updateConfig(
-    event: IpcMainInvokeEvent,
+    _event: IpcMainInvokeEvent,
     updates: Partial<WorkspaceConfig>
   ): Promise<void> {
     const manager = this.ensureWorkspaceManager()
