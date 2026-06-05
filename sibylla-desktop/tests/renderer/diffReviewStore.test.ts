@@ -94,7 +94,7 @@ describe('diffReviewStore', () => {
       expect(mockWrite).toHaveBeenCalledWith(
         'test.md',
         proposal.fullNewContent,
-        { atomic: true, createDirs: true }
+        { atomic: true, createDirs: true, source: 'ai' }
       )
 
       const state = useDiffReviewStore.getState()
@@ -214,6 +214,7 @@ describe('diffReviewStore', () => {
       expect(mockWrite).toHaveBeenCalledWith('edit.md', 'edited content', {
         atomic: true,
         createDirs: true,
+        source: 'ai',
       })
 
       const state = useDiffReviewStore.getState()
@@ -234,8 +235,8 @@ describe('diffReviewStore', () => {
       await useDiffReviewStore.getState().rollbackApplied()
 
       expect(mockWrite).toHaveBeenCalledTimes(2)
-      expect(mockWrite).toHaveBeenCalledWith('a.md', 'old content for a.md', { atomic: true })
-      expect(mockWrite).toHaveBeenCalledWith('b.md', 'old content for b.md', { atomic: true })
+      expect(mockWrite).toHaveBeenCalledWith('a.md', 'old content for a.md', { atomic: true, source: 'ai' })
+      expect(mockWrite).toHaveBeenCalledWith('b.md', 'old content for b.md', { atomic: true, source: 'ai' })
 
       const state = useDiffReviewStore.getState()
       expect(state.appliedPaths).toEqual([])
