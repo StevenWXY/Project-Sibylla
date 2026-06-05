@@ -27,19 +27,11 @@ steps:
       mode: "weekly-team"
 
   - id: save-team-report
-    name: 保存团队周报
-    type: report_save
-    input:
-      reportType: weekly-team
-      content: ${{ steps.generate-team-report.output.markdown }}
-    requires_user_confirm: false
-
-  - id: notify-team-report
-    name: 通知管理员周报生成结果
+    name: 保存周报并通知管理员
     action: internal_notification
     input:
       title: "本周团队周报已生成"
-      body: ${{ steps.save-team-report.output.summary }}
+      body: ${{ steps.generate-team-report.output.summary }}
       channel: admin
     requires_user_confirm: false
 
