@@ -32,11 +32,20 @@ steps:
       data: ${{ steps.collect-data.output }}
 
   - id: save
-    name: 保存日报并通知
+    name: 保存日报
+    type: report_save
+    input:
+      reportType: daily-personal
+      date: ${{ params.date }}
+      content: ${{ steps.generate.output.markdown }}
+    requires_user_confirm: false
+
+  - id: notify
+    name: 通知日报生成结果
     action: internal_notification
     input:
       title: "今日日报已生成"
-      body: ${{ steps.generate.output.summary }}
+      body: ${{ steps.save.output.summary }}
       channel: personal
     requires_user_confirm: false
 

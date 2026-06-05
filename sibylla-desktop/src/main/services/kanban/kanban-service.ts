@@ -60,7 +60,7 @@ export class KanbanService {
       }
     })
 
-    const unsub3 = this.eventBus.subscribe<{ path: string; changes: string }>('file.updated', (event) => {
+    const unsub3 = this.eventBus.subscribe<{ path: string; changes?: string }>('file.updated', (event) => {
       const filePath = event.payload.path
       if (filePath.endsWith(`/${TASKS_MD_FILENAME}`) || filePath === TASKS_MD_FILENAME) {
         this.invalidateCache()
@@ -81,12 +81,12 @@ export class KanbanService {
     this.modelCache = null
   }
 
-  async parseTasksMd(workspacePath: string): Promise<KanbanModel> {
+  async parseTasksMd(_workspacePath: string): Promise<KanbanModel> {
     if (this.modelCache) return this.modelCache
 
     let rawContent: string
     try {
-      const result = await this.fileManager.readFile(`${workspacePath}/${TASKS_MD_FILENAME}`)
+      const result = await this.fileManager.readFile(TASKS_MD_FILENAME)
       rawContent = result.content
     } catch {
       const emptyModel = this.buildEmptyModel('')
@@ -479,11 +479,7 @@ export class KanbanService {
       payload: { taskId, ledgerTaskId: ledgerTask.id },
     })
 
-    this.eventBus.emitEvent({
-      type: 'kanban.task-status-changed',
-      source: 'kanban-service',
-      payload: { taskId, from: task.status, to: '进行中', trigger: 'dispatch' },
-    })
+    await this.updateTaskStatus(taskId, '进行中', 'dispatch')
 
     return ledgerTask.id
   }

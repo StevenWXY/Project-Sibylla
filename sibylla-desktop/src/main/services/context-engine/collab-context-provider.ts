@@ -179,7 +179,11 @@ export class CollabContextProvider {
         type === 'presence.user-editing' ? '正在编辑' :
         type === 'presence.user-online' ? '上线了' :
         type === 'collab.conflict-detected' ? '遇到协作冲突' : '操作了'
-      const target = (payload?.filePath as string) ?? (payload?.path as string) ?? ''
+      const conflicts = payload?.conflicts as Array<{ filePath?: string }> | undefined
+      const target = (payload?.filePath as string)
+        ?? (payload?.path as string)
+        ?? conflicts?.[0]?.filePath
+        ?? ''
       const time = this.formatRelativeTime(e.timestamp)
       return `- ${actor} ${action} ${target} (${time})`
     })

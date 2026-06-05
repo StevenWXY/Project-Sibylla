@@ -17,6 +17,7 @@ import * as path from 'path'
 import type { MCPClient } from './mcp-client'
 import type { MCPRegistry } from './mcp-registry'
 import type { FileManager } from '../file-manager'
+import type { AppEventBus } from '../event-bus'
 import type { SyncTaskConfig, SyncState, SyncProgress } from './types'
 import { SyncDataTransformer } from './sync-data-transformer'
 import { logger } from '../../utils/logger'
@@ -42,6 +43,7 @@ export class McpSyncManager {
     private readonly statePath: string,
     private readonly tasksPath: string,
     private readonly onProgress?: (progress: SyncProgress) => void,
+    private readonly eventBus?: AppEventBus,
   ) {}
 
   // ─── Lifecycle ───
@@ -360,6 +362,21 @@ export class McpSyncManager {
         timestamp: Date.now(),
       }
       this.onProgress?.(successProgress)
+      this.eventBus?.emitEvent({
+        type: 'mcp.sync-completed',
+        source: 'mcp-sync-manager',
+        payload: {
+          taskId,
+          taskName: task.name,
+          provider: task.serverName,
+          serverName: task.serverName,
+          toolName: task.toolName,
+          targetPath,
+          itemsSynced,
+          records: this.normalizeRecords(resultData),
+        },
+        persist: true,
+      })
       this.activeRuns.delete(taskId)
 
       logger.info('[McpSyncManager] Sync completed', {
@@ -503,6 +520,7 @@ export class McpSyncManager {
    * Count the number of synced items from result data.
    */
   private countItems(data: unknown): number {
+    if (Array.isArray(data)) return data.length
     if (typeof data !== 'object' || data === null) return 0
     const record = data as Record<string, unknown>
     if (Array.isArray(record.items)) return record.items.length
@@ -510,6 +528,28 @@ export class McpSyncManager {
     if (Array.isArray(record.data)) return record.data.length
     if (typeof record.text === 'string') return 1
     return 0
+  }
+
+  private normalizeRecords(data: unknown): Array<Record<string, unknown>> {
+    if (Array.isArray(data)) {
+      return data.filter((item): item is Record<string, unknown> => (
+        typeof item === 'object' && item !== null && !Array.isArray(item)
+      ))
+    }
+
+    if (typeof data !== 'object' || data === null) return []
+
+    const record = data as Record<string, unknown>
+    for (const key of ['items', 'messages', 'data', 'records']) {
+      const value = record[key]
+      if (Array.isArray(value)) {
+        return value.filter((item): item is Record<string, unknown> => (
+          typeof item === 'object' && item !== null && !Array.isArray(item)
+        ))
+      }
+    }
+
+    return [record]
   }
 
   // ─── State Persistence ───

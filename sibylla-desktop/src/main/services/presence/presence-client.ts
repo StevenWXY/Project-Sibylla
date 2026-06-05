@@ -43,6 +43,13 @@ export class PresenceClient {
   }
 
   async connect(workspaceId: string, userId: string, token: string): Promise<void> {
+    if (!this.config.serviceUrl) {
+      this._serviceAvailable = false
+      this.store.setServiceAvailable(false)
+      logger.info('[PresenceClient] Presence service URL not configured')
+      return
+    }
+
     this.connectArgs = { workspaceId, token }
     this._currentSelf = {
       userId,
@@ -389,10 +396,22 @@ export class PresenceClient {
   }
 
   protected createWebSocket(_url: string): WebSocketLike {
-    throw new Error('WebSocket not available in this environment')
+    const WebSocketCtor = (globalThis as typeof globalThis & {
+      WebSocket?: new (url: string) => WebSocketLike
+    }).WebSocket
+    if (!WebSocketCtor) {
+      throw new Error('WebSocket not available in this environment')
+    }
+    return new WebSocketCtor(_url) as unknown as WebSocketLike
   }
 
   protected createEventSource(_url: string): EventSource {
-    return new EventSource(_url)
+    const EventSourceCtor = (globalThis as typeof globalThis & {
+      EventSource?: new (url: string) => EventSource
+    }).EventSource
+    if (!EventSourceCtor) {
+      throw new Error('EventSource not available in this environment')
+    }
+    return new EventSourceCtor(_url)
   }
 }

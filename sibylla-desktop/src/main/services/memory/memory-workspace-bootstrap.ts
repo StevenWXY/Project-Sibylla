@@ -14,6 +14,7 @@ import { MemoryIndexer } from './memory-indexer'
 import { MemoryCompressor } from './memory-compressor'
 import { CheckpointScheduler } from './checkpoint-scheduler'
 import { createEmbeddingProvider } from './embedding-provider'
+import { DecisionProjectionProcessor } from './decision-projection-processor'
 
 export interface MemoryV2BootstrapOptions {
   memoryManager: MemoryManager
@@ -83,6 +84,9 @@ export async function initializeMemoryV2ForWorkspace(
     compressor,
     options.memoryEventBus,
     config,
+    logger,
+    undefined,
+    [new DecisionProjectionProcessor(options.workspacePath)],
   )
   scheduler.start()
 

@@ -84,7 +84,7 @@ export type EventHandler<T = unknown> = (event: SibyllaEvent<T>) => void | Promi
 
 export interface EventPayloadMap {
   'file.created': { path: string; size: number }
-  'file.updated': { path: string; changes: string }
+  'file.updated': { path: string; changes?: string }
   'file.deleted': { path: string }
   'file.renamed': { oldPath: string; newPath: string }
   'memory.entry-added': unknown
@@ -94,7 +94,16 @@ export interface EventPayloadMap {
   'memory.compression-completed': unknown
   'mcp.connected': { serverName: string }
   'mcp.disconnected': { serverName: string }
-  'mcp.sync-completed': { taskId: string }
+  'mcp.sync-completed': {
+    taskId: string
+    taskName: string
+    provider: string
+    serverName: string
+    toolName: string
+    targetPath: string
+    itemsSynced: number
+    records: Array<Record<string, unknown>>
+  }
   'mcp.tool-called': { serverName: string; toolName: string }
   'index.document-added': { path: string }
   'index.document-updated': { path: string }
@@ -125,10 +134,18 @@ export interface EventPayloadMap {
   'conversation.export': { format: string; conversationId: string }
   'model.switched': { conversationId: string; oldModel: string; newModel: string }
   'collab.conflict-detected': { path: string }
-  'git.conflict-detected': { path: string; conflictType?: string }
+  'git.conflict-detected': {
+    conflicts: Array<{
+      filePath: string
+      conflictId: string
+      localPreview?: string
+      remotePreview?: string
+      basePreview?: string
+    }>
+  }
   'task.created': { taskId: string }
   'task.completed': { taskId: string }
-  'notification.created': { notificationId: string }
+  'notification.created': { notificationId: string; notification?: unknown }
   'notification.clicked': { notificationId: string }
   'notification.dismissed': { notificationId: string }
   'aiMode.focused-changed': { conversationId: string; focused: boolean; focusUntil?: string }

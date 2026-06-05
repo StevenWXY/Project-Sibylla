@@ -34,9 +34,9 @@ export class TaskStatusTracker {
   start(): void {
     this.unsubscribeFn = this.eventBus.subscribe<{
       path: string
-      changes: string
+      changes?: string
     }>('file.updated', async (event) => {
-      await this.handleFileUpdated(event.payload.path, event.payload.changes)
+      await this.handleFileUpdated(event.payload.path, event.payload.changes ?? '')
     })
   }
 

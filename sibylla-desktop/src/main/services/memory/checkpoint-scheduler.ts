@@ -139,7 +139,7 @@ export class CheckpointScheduler {
     try {
       const logs = await this.memoryManager.getLogsSince(this.lastCheckpoint.toISOString())
 
-      if (logs.length === 0) {
+      if (logs.length === 0 && !this.postProcessors?.length) {
         record.status = 'success'
         record.completedAt = new Date().toISOString()
         this.loggerInstance.info('memory.checkpoint.no_logs', { trigger })
@@ -153,16 +153,23 @@ export class CheckpointScheduler {
       }
 
       const existingMemory = await this.memoryManager.getAllEntries()
-
       const workspaceContext = await this.memoryManager.getWorkspaceContext()
-      const report = await this.withRetry(
-        () => this.extractor.extract({
-          logs,
-          existingMemory,
-          workspaceContext,
-        }),
-        3,
-      )
+      const report = logs.length === 0
+        ? {
+            added: [],
+            merged: [],
+            discarded: [],
+            durationMs: 0,
+            tokenCost: { input: 0, output: 0 },
+          }
+        : await this.withRetry(
+            () => this.extractor.extract({
+              logs,
+              existingMemory,
+              workspaceContext,
+            }),
+            3,
+          )
 
       if (this.abortFlag) {
         record.status = 'aborted'

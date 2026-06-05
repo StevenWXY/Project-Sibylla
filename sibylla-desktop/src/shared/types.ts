@@ -3142,7 +3142,7 @@ export interface WorkflowParam {
 export interface WorkflowStep {
   id: string
   name: string
-  type?: 'skill' | 'sub_agent' | 'condition' | 'notify'
+  type?: 'skill' | 'sub_agent' | 'condition' | 'notify' | 'report_save'
   skill?: string
   sub_agent?: string
   expression?: string

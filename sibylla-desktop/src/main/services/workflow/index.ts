@@ -7,6 +7,7 @@ export { SkillStep } from './steps/SkillStep'
 export { SubAgentStep } from './steps/SubAgentStep'
 export { ConditionStep } from './steps/ConditionStep'
 export { NotifyStep } from './steps/NotifyStep'
+export { ReportSaveStep } from './steps/ReportSaveStep'
 export type {
   ParseResult,
   TemplateRenderContext,

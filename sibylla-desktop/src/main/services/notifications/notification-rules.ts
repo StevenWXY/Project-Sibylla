@@ -124,14 +124,21 @@ export function createBuiltinRules(deps: RuleDeps): NotificationRule[] {
       enabled: true,
       condition: () => true,
       build: (event: SibyllaEvent) => {
-        const payload = event.payload as { path: string }
-        const filePath = payload.path
+        const payload = event.payload as {
+          conflicts?: Array<{ filePath?: string }>
+          path?: string
+        }
+        const conflictCount = payload.conflicts?.length ?? 0
+        const filePath = payload.path ?? payload.conflicts?.[0]?.filePath ?? 'unknown file'
+        const suffix = conflictCount > 1 ? ` (+${conflictCount - 1} more)` : ''
         return {
           type: 'collab.conflict' as const,
           priority: 'urgent' as const,
           source: { provider: 'git' },
-          title: `Conflict: ${filePath}`,
-          body: `A conflict was detected in ${filePath}`,
+          title: `Conflict: ${filePath}${suffix}`,
+          body: conflictCount > 1
+            ? `${conflictCount} conflicts were detected during sync`
+            : `A conflict was detected in ${filePath}`,
           groupKey: `collab-conflict:${filePath}`,
           navigation: { kind: 'file' as const, path: filePath },
           metadata: {},

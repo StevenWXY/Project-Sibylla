@@ -569,6 +569,7 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
                 basePreview: c.baseContent?.slice(0, 500),
               })),
             },
+            persist: true,
           })
         }
       } else {

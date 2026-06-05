@@ -93,12 +93,17 @@ export const useNotificationStore = create<NotificationStore>()(
 
           if (!updatedUnsubscribe) {
             updatedUnsubscribe = window.electronAPI.notifications.onUpdated((data) => {
-              const update = data as { notificationId: string }
+              const update = data as Partial<Notification> & { notificationId?: string }
+              const id = update.id ?? update.notificationId
+              if (!id) return
               set(
                 (state) => ({
                   notifications: state.notifications.map(n =>
-                    n.id === update.notificationId ? { ...n, readAt: n.readAt ?? Date.now() } : n,
+                    n.id === id ? { ...n, ...update } : n,
                   ),
+                  unreadCount: state.notifications.filter(n =>
+                    n.id === id ? !((update.readAt ?? n.readAt) || update.dismissedAt) : !n.readAt,
+                  ).length,
                 }),
                 false,
                 'notifications/onUpdated',

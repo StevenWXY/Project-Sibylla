@@ -108,7 +108,7 @@ export class NotificationEngine {
       this.eventBus.emitEvent({
         type: 'notification.created',
         source: 'notification-engine',
-        payload: { notificationId: notification.id },
+        payload: { notificationId: notification.id, notification },
       })
 
       logger.debug('notification-engine.created', {

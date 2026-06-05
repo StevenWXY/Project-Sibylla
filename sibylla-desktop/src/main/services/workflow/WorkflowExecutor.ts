@@ -119,6 +119,9 @@ export class WorkflowExecutor {
       clearTimeout(timeoutTimer)
       this.activeRuns.delete(runId)
       result.endedAt = Date.now()
+      if (this.runStore) {
+        await this.runStore.persist(this.toWorkflowRun(result))
+      }
     }
 
     logger.info('[WorkflowExecutor] 运行结束', {

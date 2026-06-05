@@ -42,10 +42,11 @@ export class DecisionProjectionProcessor implements ExtractionPostProcessor {
 
         try {
           const fullPath = path.join(dir.absolute, fileName)
+          const relativePath = path.join(dir.relative, fileName)
           const stat = await fs.promises.stat(fullPath)
           const mtimeMs = stat.mtimeMs
 
-          const lastMtime = this.lastProcessedMtimes.get(fileName) ?? 0
+          const lastMtime = this.lastProcessedMtimes.get(relativePath) ?? 0
           if (mtimeMs <= lastMtime) continue
 
           const content = await fs.promises.readFile(fullPath, 'utf-8')
@@ -54,7 +55,6 @@ export class DecisionProjectionProcessor implements ExtractionPostProcessor {
 
           const confidence = this.calculateConfidence(data)
           const summary = this.buildSummary(data)
-          const relativePath = path.join(dir.relative, fileName)
 
           candidates.push({
             section: 'technical_decision',
@@ -62,9 +62,10 @@ export class DecisionProjectionProcessor implements ExtractionPostProcessor {
             confidence,
             reasoning: `DecisionProjectionProcessor: auto-projected from ${fileName}`,
             sourceLogIds: [],
+            metadata: { sourcePath: relativePath, mtimeMs },
           })
 
-          this.lastProcessedMtimes.set(fileName, mtimeMs)
+          this.lastProcessedMtimes.set(relativePath, mtimeMs)
         } catch (err) {
           logger.warn('decision-projection.file_failed', {
             file: fileName,

@@ -3,6 +3,7 @@ import type { NotificationEngine } from '../../services/notifications/notificati
 import type { NotificationStore } from '../../services/notifications/notification-store'
 import type { PreferenceLearner } from '../../services/notifications/preference-learner'
 import type { AppEventBus } from '../../services/event-bus'
+import type { SibyllaEvent } from '../../services/event-bus-types'
 import type { NotificationPreferences, MutedRule, ScheduledFocusConfig } from '../../services/notifications/types'
 import { logger } from '../../utils/logger'
 import { IPC_CHANNELS } from '../../../shared/types'
@@ -90,7 +91,12 @@ export function registerNotificationHandlers(
     }
   })
 
-  const onCreated = (data: unknown) => {
+  const onCreated = (event: SibyllaEvent) => {
+    const payload = event.payload as { notificationId?: string; notification?: unknown }
+    const data = payload.notification
+      ?? (payload.notificationId ? store.getById(payload.notificationId) : null)
+    if (!data) return
+
     const win = mainWindowGetter()
     if (win && !win.isDestroyed()) {
       win.webContents.send(IPC_CHANNELS.NOTIFICATION_CREATED, data)
@@ -102,7 +108,12 @@ export function registerNotificationHandlers(
     }
   }
 
-  const onUpdated = (data: unknown) => {
+  const onUpdated = (event: SibyllaEvent) => {
+    const payload = event.payload as { notificationId?: string }
+    const data = payload.notificationId
+      ? store.getById(payload.notificationId) ?? payload
+      : payload
+
     const win = mainWindowGetter()
     if (win && !win.isDestroyed()) {
       win.webContents.send(IPC_CHANNELS.NOTIFICATION_UPDATED, data)

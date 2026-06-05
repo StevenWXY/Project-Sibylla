@@ -113,6 +113,7 @@ let proactiveCleanup: (() => void) | null = null
 let presenceCleanup: (() => void) | null = null
 let focusModeCleanup: (() => void) | null = null
 let dashboardCleanups: Array<() => void> = []
+let sprint6Cleanups: Array<() => void> = []
 let workflowCleanup: (() => void) | null = null
 let promptPerformanceCleanup: (() => void) | null = null
 let mcpCleanup: (() => Promise<void>) | null = null
@@ -429,6 +430,28 @@ if (!gotTheLock) {
             // Only notify on file content changes (add/change/unlink), not directory events
             if (event.type === 'add' || event.type === 'change' || event.type === 'unlink') {
               currentSyncManager.notifyFileChanged(event.path)
+              if (event.type === 'add') {
+                appEventBus.emitEvent({
+                  type: 'file.created',
+                  source: 'file-watcher',
+                  payload: { path: event.path, size: event.stats?.size ?? 0 },
+                  persist: true,
+                })
+              } else if (event.type === 'change') {
+                appEventBus.emitEvent({
+                  type: 'file.updated',
+                  source: 'file-watcher',
+                  payload: { path: event.path, changes: 'modified' },
+                  persist: true,
+                })
+              } else {
+                appEventBus.emitEvent({
+                  type: 'file.deleted',
+                  source: 'file-watcher',
+                  payload: { path: event.path },
+                  persist: true,
+                })
+              }
             }
             // Notify SkillEngine about skill file changes
             aiHandler.handleFileChangeForSkills(event)
@@ -635,6 +658,7 @@ if (!gotTheLock) {
 
           // ── TASK039: Workflow engine + IPC ──
           let workflowExecutorForSubAgents: import('./services/workflow/WorkflowExecutor').WorkflowExecutor | null = null
+          let triggerWorkflowForReports: ((workflowId: string, params: Record<string, unknown>) => Promise<{ runId: string }>) | null = null
           try {
             const { WorkflowParser } = await import('./services/workflow/WorkflowParser')
             const {
@@ -645,7 +669,9 @@ if (!gotTheLock) {
               SkillStep,
               ConditionStep,
               NotifyStep,
+              ReportSaveStep,
             } = await import('./services/workflow')
+            const { ReportPostProcessor } = await import('./services/productivity/report-post-processor')
             const { WorkflowHandler } = await import('./ipc/handlers/workflow')
 
             const workflowResourcesDir = app.isPackaged
@@ -664,6 +690,14 @@ if (!gotTheLock) {
             const workflowExecutor = new WorkflowExecutor(workflowParser, workflowRunStore)
             workflowExecutor.registerStepExecutor('notify', new NotifyStep())
             workflowExecutor.registerStepExecutor('condition', new ConditionStep(workflowParser))
+            workflowExecutor.registerStepExecutor(
+              'report_save',
+              new ReportSaveStep(new ReportPostProcessor({
+                fileManager,
+                eventBus: appEventBus,
+                getCurrentUser: () => cachedUser?.id ?? workspaceInfo.config.workspaceId,
+              })),
+            )
 
             const skillWorkflowServices = aiHandler.getSkillWorkflowServices()
             if (skillWorkflowServices) {
@@ -683,6 +717,9 @@ if (!gotTheLock) {
               workspacePath,
               cachedUserForWorkflow?.id,
             )
+            triggerWorkflowForReports = async (workflowId, params) => ({
+              runId: await workflowScheduler.triggerManual(workflowId, params),
+            })
             if (mainWindow && !mainWindow.isDestroyed()) {
               workflowScheduler.setMainWindow(mainWindow)
             }
@@ -980,6 +1017,7 @@ if (!gotTheLock) {
                 }
               }
             },
+            appEventBus,
           )
           if (mcpEnabled) {
             await mcpSyncManager.initialize()
@@ -1242,6 +1280,8 @@ if (!gotTheLock) {
             )
           }
 
+          const privacyFilter = new PrivacyFilter()
+
           const memberDirectory = {
             getAllMembers: () => {
               try {
@@ -1286,20 +1326,70 @@ if (!gotTheLock) {
           }
 
           const { KanbanService } = await import('./services/kanban/kanban-service')
+          const { TaskStatusTracker } = await import('./services/kanban/task-status-tracker')
+          const { DecisionLogger } = await import('./services/decision/decision-logger')
+          const { ProductivityAnalyzer } = await import('./services/productivity/productivity-analyzer')
           const sharedKanbanService = new KanbanService(
             fileManager,
             progressLedger!,
             taskStateMachine!,
             appEventBus,
           )
+          const taskStatusTracker = new TaskStatusTracker(sharedKanbanService, appEventBus, gitAbstraction)
+          taskStatusTracker.start()
+          sprint6Cleanups.push(() => {
+            taskStatusTracker.stop()
+            sharedKanbanService.destroy()
+          })
+
+          const decisionLogger = new DecisionLogger(appEventBus, workspacePath)
+          const productivityAnalyzer = new ProductivityAnalyzer(
+            sharedKanbanService,
+            gitAbstraction,
+            eventLogStore!,
+            new WikiLinksStore(databaseManager!.database),
+            memberDirectory,
+            privacyFilter,
+            workspacePath,
+          )
+
+          try {
+            const { registerKanbanHandlers } = await import('./ipc/handlers/kanban')
+            const { registerDecisionHandlers } = await import('./ipc/handlers/decision')
+            const { registerReportHandlers } = await import('./ipc/handlers/report')
+            const { registerProductivityHandlers } = await import('./ipc/handlers/productivity')
+
+            sprint6Cleanups.push(
+              registerKanbanHandlers(
+                ipcMain,
+                sharedKanbanService,
+                taskStatusTracker,
+                progressLedger!,
+                workspacePath,
+              ),
+              registerDecisionHandlers(ipcMain, decisionLogger, subAgentExecutor),
+              registerReportHandlers(ipcMain, {
+                fileManager,
+                triggerWorkflow: async (workflowId, params) => {
+                  if (!triggerWorkflowForReports) {
+                    throw new Error('Workflow scheduler not available')
+                  }
+                  return triggerWorkflowForReports(workflowId, params)
+                },
+                getCurrentUser: () => cachedUser?.id ?? workspaceInfo.config.workspaceId,
+              }),
+              registerProductivityHandlers(ipcMain, productivityAnalyzer),
+            )
+          } catch (err) {
+            logger.warn('[Main] Sprint 6 handler registration failed', {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
 
           try {
             const { createRiskTaskDelayTrigger } = await import('./services/proactive-engine/triggers/risk-task-delay')
             const { createWorkloadImbalanceTrigger } = await import('./services/proactive-engine/triggers/workload-imbalance')
             const { createDecisionContradictionTrigger } = await import('./services/proactive-engine/triggers/decision-contradiction')
-
-            const { DecisionLogger } = await import('./services/decision/decision-logger')
-            const decisionLogger = new DecisionLogger(appEventBus, workspacePath)
 
             const riskTrigger = createRiskTaskDelayTrigger(sharedKanbanService, workspacePath)
             const workloadTrigger = createWorkloadImbalanceTrigger(gitAbstraction, memberDirectory)
@@ -1319,8 +1409,24 @@ if (!gotTheLock) {
 
           const presenceStore = new PresenceStore(appEventBus)
           presenceStore.initialize()
-          const privacyFilter = new PrivacyFilter()
-          const presenceConfig = { ...DEFAULT_PRESENCE_CONFIG }
+          const presenceConfig = {
+            ...DEFAULT_PRESENCE_CONFIG,
+            serviceUrl: process.env.SIBYLLA_PRESENCE_URL ?? DEFAULT_PRESENCE_CONFIG.serviceUrl,
+          }
+          try {
+            const rawConfig = fs.existsSync(mcpConfigPath)
+              ? JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8')) as { presence?: { serviceUrl?: unknown; enabled?: unknown } }
+              : null
+            const configuredUrl = rawConfig?.presence?.serviceUrl
+            if (typeof configuredUrl === 'string' && configuredUrl.length > 0) {
+              presenceConfig.serviceUrl = configuredUrl
+            }
+            if (rawConfig?.presence?.enabled === false) {
+              presenceConfig.serviceUrl = ''
+            }
+          } catch {
+            // Presence remains optional when workspace config is invalid or absent.
+          }
 
           const presenceClient = new PresenceClient(
             presenceConfig,
@@ -1329,7 +1435,7 @@ if (!gotTheLock) {
             privacyFilter,
           )
 
-          presenceCleanup = registerPresenceHandlers(
+          const presenceHandlerCleanup = registerPresenceHandlers(
             ipcMain,
             presenceStore,
             presenceClient,
@@ -1338,6 +1444,22 @@ if (!gotTheLock) {
             () => 'viewer',
             () => mainWindow,
           )
+          presenceCleanup = () => {
+            presenceHandlerCleanup()
+            presenceClient.shutdown()
+          }
+
+          if (presenceConfig.serviceUrl) {
+            void presenceClient.connect(
+              workspaceInfo.config.workspaceId,
+              cachedUser?.id ?? workspaceInfo.config.workspaceId,
+              tokenStorage.getAccessToken() ?? '',
+            ).catch((err: unknown) => {
+              logger.warn('[Main] Presence connection failed', {
+                error: err instanceof Error ? err.message : String(err),
+              })
+            })
+          }
 
           if (subAgentExecutor && subAgentRegistry && unifiedSearchEngine) {
             const mergeAssistant = new MergeAssistant({
@@ -1375,21 +1497,10 @@ if (!gotTheLock) {
               },
             })
 
-            const { ProductivityAnalyzer } = await import('./services/productivity/productivity-analyzer')
-            const { WikiLinksStore } = await import('./services/wiki-links/wiki-links-store')
-
             const dashboardCleanup = registerDashboardHandlers(ipcMain, {
               kanbanService: sharedKanbanService,
               presenceStore,
-              productivityAnalyzer: new ProductivityAnalyzer(
-                sharedKanbanService,
-                gitAbstraction,
-                eventLogStore!,
-                new WikiLinksStore(databaseManager!.database),
-                memberDirectory,
-                privacyFilter,
-                workspacePath,
-              ),
+              productivityAnalyzer,
               gitAbstraction,
               notificationStore,
               memberDirectory,
@@ -1438,6 +1549,10 @@ if (!gotTheLock) {
         appEventBus.removeAllListeners('presence.user-editing')
         appEventBus.removeAllListeners('presence.user-viewing')
         appEventBus.removeAllListeners('git.conflict-detected')
+        appEventBus.removeAllListeners('file.created')
+        appEventBus.removeAllListeners('file.updated')
+        appEventBus.removeAllListeners('file.deleted')
+        appEventBus.removeAllListeners('file.renamed')
 
         // Cleanup Sprint 5 services
         if (notificationCleanup) {
@@ -1460,6 +1575,10 @@ if (!gotTheLock) {
           cleanup()
         }
         dashboardCleanups = []
+        for (const cleanup of sprint6Cleanups) {
+          cleanup()
+        }
+        sprint6Cleanups = []
 
         // Cleanup PlanManager
         if (planManager) {

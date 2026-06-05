@@ -26,6 +26,7 @@ export class ReportPostProcessor {
         filePath,
         date,
       },
+      persist: true,
     })
 
     logger.info('report.daily.saved', { filePath, date })
@@ -46,6 +47,7 @@ export class ReportPostProcessor {
         filePath,
         date: yearWeek,
       },
+      persist: true,
     })
 
     logger.info('report.weekly.saved', { filePath, yearWeek })

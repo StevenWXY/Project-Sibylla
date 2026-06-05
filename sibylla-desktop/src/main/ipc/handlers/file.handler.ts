@@ -352,6 +352,12 @@ export class FileHandler extends IpcHandler {
     }
     
     await this.fileManager.moveFile(sourcePath, destPath)
+    this.eventBus?.emitEvent({
+      type: 'file.renamed',
+      source: 'file-handler',
+      payload: { oldPath: sourcePath, newPath: destPath },
+      persist: true,
+    })
     return { status: 'completed' }
   }
   
