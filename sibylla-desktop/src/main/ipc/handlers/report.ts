@@ -2,6 +2,10 @@ import type { FileManager } from '../../services/file-manager'
 import { logger } from '../../utils/logger'
 import { IPC_CHANNELS } from '../../../shared/types'
 
+type ReportFileManager = FileManager & {
+  list?: (relativePath: string) => Promise<Array<{ name: string }>>
+}
+
 export interface ReportListEntry {
   type: 'daily' | 'weekly'
   date: string
@@ -11,7 +15,7 @@ export interface ReportListEntry {
 export function registerReportHandlers(
   ipcMainInstance: Electron.IpcMain,
   services: {
-    fileManager: FileManager
+    fileManager: ReportFileManager
     triggerWorkflow: (workflowId: string, params: Record<string, unknown>) => Promise<{ runId: string }>
     getCurrentUser: () => string
   },
@@ -46,7 +50,7 @@ export function registerReportHandlers(
 
         const dailyPath = `personal/${currentUser}/reports/daily`
         try {
-          const files = await services.fileManager.listFiles(dailyPath)
+          const files = await listReportFiles(services.fileManager, dailyPath)
           for (const file of files) {
             if (file.name.endsWith('.md')) {
               const date = file.name.replace('.md', '')
@@ -63,7 +67,7 @@ export function registerReportHandlers(
 
         const weeklyPath = 'docs/reports/weekly'
         try {
-          const files = await services.fileManager.listFiles(weeklyPath)
+          const files = await listReportFiles(services.fileManager, weeklyPath)
           for (const file of files) {
             if (file.name.endsWith('.md')) {
               const date = file.name.replace('.md', '')
@@ -110,4 +114,16 @@ export function registerReportHandlers(
     ipcMainInstance.removeHandler(IPC_CHANNELS.REPORT_LIST)
     ipcMainInstance.removeHandler(IPC_CHANNELS.REPORT_GET)
   }
+}
+
+function listReportFiles(fileManager: ReportFileManager, relativePath: string): Promise<Array<{ name: string }>> {
+  if (typeof fileManager.listFiles === 'function') {
+    return fileManager.listFiles(relativePath)
+  }
+
+  if (typeof fileManager.list === 'function') {
+    return fileManager.list(relativePath)
+  }
+
+  return Promise.resolve([])
 }

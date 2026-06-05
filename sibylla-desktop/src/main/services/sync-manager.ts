@@ -550,18 +550,13 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
         this.emit('sync:success')
         this.updateStatus('synced')
       } else if (result.hasConflicts) {
-        const conflicts = result.conflicts ? [...result.conflicts] : []
-        this.emit('sync:conflict', conflicts)
-        this.updateStatus('conflict', undefined, conflicts)
+        const conflicts: readonly unknown[] = result.conflicts ? [...result.conflicts] : []
+        const conflictFilePaths = conflicts.map(getConflictFilePath)
+        this.emit('sync:conflict', conflictFilePaths)
+        this.updateStatus('conflict', undefined, conflictFilePaths)
 
         if (this.eventBus) {
-          const conflictsWithId = conflicts.map<ConflictInfo>((filePath: string) => ({
-            filePath,
-            localContent: '',
-            remoteContent: '',
-            baseContent: '',
-            conflictId: ulid(),
-          }))
+          const conflictsWithId = conflicts.map(toConflictInfo)
           this.eventBus.emitEvent({
             type: 'git.conflict-detected',
             source: 'sync-manager',
@@ -761,4 +756,45 @@ export class SyncManager extends (EventEmitter as new () => TypedEventEmitter<Sy
 
     logger.debug(`${LOG_PREFIX} Status changed`, { status, message })
   }
+}
+
+function getConflictFilePath(conflict: unknown): string {
+  if (typeof conflict === 'string') {
+    return conflict
+  }
+
+  if (isRecord(conflict) && typeof conflict.filePath === 'string') {
+    return conflict.filePath
+  }
+
+  return String(conflict)
+}
+
+function toConflictInfo(conflict: unknown): ConflictInfo {
+  if (!isRecord(conflict)) {
+    return {
+      filePath: String(conflict),
+      localContent: '',
+      remoteContent: '',
+      baseContent: '',
+      conflictId: ulid(),
+    }
+  }
+
+  return {
+    filePath: typeof conflict.filePath === 'string' ? conflict.filePath : String(conflict.filePath),
+    localContent: readStringField(conflict, 'localContent'),
+    remoteContent: readStringField(conflict, 'remoteContent'),
+    baseContent: readStringField(conflict, 'baseContent'),
+    conflictId: typeof conflict.conflictId === 'string' ? conflict.conflictId : ulid(),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function readStringField(record: Record<string, unknown>, field: string): string {
+  const value = record[field]
+  return typeof value === 'string' ? value : ''
 }
