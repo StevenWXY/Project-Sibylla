@@ -222,7 +222,12 @@ export function WorkspaceStudioPage() {
   const [warningTargetUser, setWarningTargetUser] = useState<string | null>(null)
 
   useEffect(() => {
-    const unsub = window.electronAPI.onAccessPersonalSpace((payload) => {
+    const onAccessPersonalSpace = window.electronAPI?.onAccessPersonalSpace
+    if (!onAccessPersonalSpace) {
+      return undefined
+    }
+
+    const unsub = onAccessPersonalSpace((payload) => {
       setWarningTargetUser(payload.targetUser)
     })
     return unsub

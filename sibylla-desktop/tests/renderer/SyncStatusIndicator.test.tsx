@@ -5,7 +5,31 @@ import { useAppStore } from '../../src/renderer/store/appStore'
 import { useSyncStatusStore } from '../../src/renderer/store/syncStatusStore'
 import type { SyncStatusData } from '../../src/shared/types'
 
+function openWorkspace(): void {
+  useAppStore.getState().setCurrentWorkspace({
+    config: {
+      workspaceId: 'ws-1',
+      name: 'Test',
+      description: '',
+      icon: 'brain',
+      defaultModel: 'claude-sonnet-4-20250514',
+      syncInterval: 30,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    metadata: {
+      path: '/tmp/ws',
+      fileCount: 0,
+      sizeBytes: 0,
+      lastModifiedAt: new Date().toISOString(),
+      isSyncing: false,
+      hasUncommittedChanges: false,
+    },
+  })
+}
+
 function setStatus(data: SyncStatusData): void {
+  openWorkspace()
   useSyncStatusStore.getState().setState(data)
 }
 
@@ -21,26 +45,7 @@ describe('SyncStatusIndicator', () => {
   })
 
   it('renders idle status with 等待同步 label when workspace is open', () => {
-    useAppStore.getState().setCurrentWorkspace({
-      config: {
-        workspaceId: 'ws-1',
-        name: 'Test',
-        description: '',
-        icon: '🧠',
-        defaultModel: 'claude-sonnet-4-20250514',
-        syncInterval: 30,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      metadata: {
-        path: '/tmp/ws',
-        fileCount: 0,
-        sizeBytes: 0,
-        lastModifiedAt: new Date().toISOString(),
-        isSyncing: false,
-        hasUncommittedChanges: false,
-      },
-    })
+    openWorkspace()
     render(<SyncStatusIndicator />)
     expect(screen.getByText('等待同步')).toBeInTheDocument()
   })

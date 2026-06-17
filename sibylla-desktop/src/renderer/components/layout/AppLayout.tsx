@@ -49,7 +49,9 @@ export function AppLayout({
       : undefined
 
   const handleDrop = React.useCallback(async (filePaths: string[]) => {
-    const result = await window.electronAPI.file.import(filePaths)
+    const importFile = window.electronAPI?.file?.import
+    if (!importFile) return
+    const result = await importFile(filePaths)
     if (result.success && result.data) {
       setImportResult(result.data)
     }
@@ -60,7 +62,12 @@ export function AppLayout({
   useSyncStatus()
 
   React.useEffect(() => {
-    const unsub = window.electronAPI.importPipeline.onClassification(
+    const onClassification = window.electronAPI?.importPipeline?.onClassification
+    if (!onClassification) {
+      return undefined
+    }
+
+    const unsub = onClassification(
       (data: ClassificationConfirmationPayload) => {
         setClassificationPayload(data)
       }
@@ -71,7 +78,7 @@ export function AppLayout({
   const handleClassificationConfirm = React.useCallback(
     (result: ClassificationResultShared) => {
       if (classificationPayload) {
-        window.electronAPI.importPipeline.confirmClassification(
+        window.electronAPI?.importPipeline?.confirmClassification(
           classificationPayload.importId,
           result
         )
@@ -83,7 +90,7 @@ export function AppLayout({
 
   const handleClassificationSkip = React.useCallback(() => {
     if (classificationPayload) {
-      window.electronAPI.importPipeline.confirmClassification(
+      window.electronAPI?.importPipeline?.confirmClassification(
         classificationPayload.importId,
         {
           category: classificationPayload.classification.category,

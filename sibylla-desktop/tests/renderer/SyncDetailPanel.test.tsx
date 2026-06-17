@@ -1,10 +1,35 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { SyncDetailPanel } from '../../src/renderer/components/statusbar/SyncDetailPanel'
+import { useAppStore } from '../../src/renderer/store/appStore'
 import { useSyncStatusStore } from '../../src/renderer/store/syncStatusStore'
 import type { SyncStatusData } from '../../src/shared/types'
 
+function openWorkspace(): void {
+  useAppStore.getState().setCurrentWorkspace({
+    config: {
+      workspaceId: 'ws-1',
+      name: 'Test',
+      description: '',
+      icon: 'brain',
+      defaultModel: 'claude-sonnet-4-20250514',
+      syncInterval: 30,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    metadata: {
+      path: '/tmp/ws',
+      fileCount: 0,
+      sizeBytes: 0,
+      lastModifiedAt: new Date().toISOString(),
+      isSyncing: false,
+      hasUncommittedChanges: false,
+    },
+  })
+}
+
 function setStatus(data: SyncStatusData): void {
+  openWorkspace()
   useSyncStatusStore.getState().setState(data)
 }
 
@@ -13,6 +38,7 @@ describe('SyncDetailPanel', () => {
 
   beforeEach(() => {
     useSyncStatusStore.getState().reset()
+    useAppStore.getState().setCurrentWorkspace(null)
     mockOnClose.mockClear()
     vi.mocked(window.electronAPI.sync.force).mockResolvedValue({ success: true, data: { success: true, hasConflicts: false, conflicts: [] }, error: null })
   })

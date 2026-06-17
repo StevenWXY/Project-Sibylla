@@ -5,9 +5,19 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.0.0 <25.0.0"
   },
   "scripts": {
+    "check:node": "SIBYLLA_MIN_NODE_MAJOR=20 node ../scripts/check-node-version.cjs",
+    "predev": "npm run check:node",
+    "prebuild": "npm run check:node",
+    "prestart": "npm run check:node",
+    "pretype-check": "npm run check:node",
+    "pretest": "npm run check:node",
+    "pretest:ci": "npm run check:node",
+    "pretest:watch": "npm run check:node",
+    "pretest:coverage": "npm run check:node",
+    "pretest:integration": "npm run check:node",
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",

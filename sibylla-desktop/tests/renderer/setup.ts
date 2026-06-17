@@ -4,6 +4,51 @@
  */
 
 import '@testing-library/jest-dom'
+import { cleanup } from '@testing-library/react'
+
+const jsdomWindow = window as typeof window & Record<string, unknown>
+const domGlobalNames = [
+  'Node',
+  'Element',
+  'HTMLElement',
+  'HTMLIFrameElement',
+  'SVGElement',
+  'ShadowRoot',
+  'Document',
+  'DocumentFragment',
+  'DOMParser',
+  'XMLSerializer',
+  'Event',
+  'CustomEvent',
+  'MouseEvent',
+  'KeyboardEvent',
+  'PointerEvent',
+  'MutationObserver',
+  'Range',
+] as const
+
+function restoreDomGlobals() {
+  if (globalThis.window !== jsdomWindow) {
+    Object.defineProperty(globalThis, 'window', {
+      value: jsdomWindow,
+      configurable: true,
+      writable: true,
+    })
+  }
+
+  for (const name of domGlobalNames) {
+    const value = jsdomWindow[name]
+    if (value) {
+      Object.defineProperty(globalThis, name, {
+        value,
+        configurable: true,
+        writable: true,
+      })
+    }
+  }
+}
+
+restoreDomGlobals()
 
 function createStorageMock() {
   const store = new Map<string, string>()
@@ -199,6 +244,7 @@ const mockElectronAPI = {
 
 Object.defineProperty(window, 'electronAPI', {
   value: mockElectronAPI,
+  configurable: true,
   writable: true,
 })
 
@@ -242,7 +288,12 @@ Object.defineProperty(window, 'matchMedia', {
 })
 
 // Reset all mocks between tests
+beforeEach(() => {
+  restoreDomGlobals()
+})
+
 afterEach(() => {
+  cleanup()
   vi.clearAllMocks()
   localStorageMock.clear()
   sessionStorageMock.clear()

@@ -32,15 +32,24 @@ const mockMemoryAPI = {
   queryDailyLog: vi.fn(),
 }
 
-// Set up global mock
-Object.defineProperty(globalThis, 'window', {
-  value: {
-    electronAPI: {
+function installMemoryApiMock() {
+  Object.defineProperty(window, 'electronAPI', {
+    value: {
+      ...window.electronAPI,
       memory: mockMemoryAPI,
       on: vi.fn(() => vi.fn()),
       off: vi.fn(),
     },
-  },
+    configurable: true,
+    writable: true,
+  })
+}
+
+installMemoryApiMock()
+
+Object.defineProperty(globalThis, 'electronAPI', {
+  value: window.electronAPI,
+  configurable: true,
   writable: true,
 })
 
@@ -59,6 +68,7 @@ const MOCK_ENTRY = {
 
 describe('memoryStore', () => {
   beforeEach(() => {
+    installMemoryApiMock()
     useMemoryStore.getState().reset()
     vi.clearAllMocks()
   })

@@ -14,6 +14,15 @@ export default defineConfig({
     include: ['tests/renderer/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist'],
     setupFiles: ['tests/renderer/setup.ts'],
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
+    fileParallelism: false,
+    maxWorkers: 1,
+    minWorkers: 1,
     testTimeout: 15000,
     hookTimeout: 15000,
     teardownTimeout: 15000,

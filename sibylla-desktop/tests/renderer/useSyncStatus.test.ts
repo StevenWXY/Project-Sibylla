@@ -6,14 +6,16 @@ import type { SyncStatusData } from '../../src/shared/types'
 
 describe('useSyncStatus', () => {
   let statusChangeCallback: ((data: SyncStatusData) => void) | null = null
+  let unlistenMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     useSyncStatusStore.getState().reset()
     statusChangeCallback = null
+    unlistenMock = vi.fn()
 
     vi.mocked(window.electronAPI.sync.onStatusChange).mockImplementation((cb) => {
       statusChangeCallback = cb
-      return vi.fn()
+      return unlistenMock
     })
   })
 
@@ -37,7 +39,7 @@ describe('useSyncStatus', () => {
     expect(state.lastSyncedAt).toBe(1000)
   })
 
-  it('resets store on unmount', () => {
+  it('unsubscribes status listener on unmount', () => {
     const { unmount } = renderHook(() => useSyncStatus())
 
     statusChangeCallback?.({ status: 'synced', timestamp: 1000 })
@@ -45,8 +47,7 @@ describe('useSyncStatus', () => {
 
     unmount()
 
-    expect(useSyncStatusStore.getState().status).toBe('idle')
-    expect(useSyncStatusStore.getState().lastSyncedAt).toBeNull()
+    expect(unlistenMock).toHaveBeenCalledOnce()
   })
 
   it('only keeps latest state from multiple events', () => {

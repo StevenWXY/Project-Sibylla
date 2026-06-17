@@ -40,6 +40,10 @@ const initialState: ProactiveState = {
 
 let suggestionUnsubscribe: (() => void) | null = null
 
+function getProactiveApi() {
+  return window.electronAPI?.proactive
+}
+
 export const useProactiveStore = create<ProactiveStore>()(
   devtools(
     (set, get) => ({
@@ -66,8 +70,8 @@ export const useProactiveStore = create<ProactiveStore>()(
         const { currentSuggestion, _shownAt } = get()
         if (!currentSuggestion || !_shownAt) return
         const dwellMs = Date.now() - _shownAt
-        window.electronAPI.proactive
-          .dismissSuggestion(currentSuggestion.id, dwellMs)
+        getProactiveApi()
+          ?.dismissSuggestion(currentSuggestion.id, dwellMs)
           .catch(() => {})
         get()._popNext()
       },
@@ -76,8 +80,8 @@ export const useProactiveStore = create<ProactiveStore>()(
         const { currentSuggestion, _shownAt } = get()
         if (!currentSuggestion || !_shownAt) return
         const dwellMs = Date.now() - _shownAt
-        window.electronAPI.proactive
-          .acceptSuggestion(currentSuggestion.id, dwellMs)
+        getProactiveApi()
+          ?.acceptSuggestion(currentSuggestion.id, dwellMs)
           .catch(() => {})
         get()._popNext()
       },
@@ -88,7 +92,9 @@ export const useProactiveStore = create<ProactiveStore>()(
 
       fetchConfig: async () => {
         try {
-          const response = await window.electronAPI.proactive.getConfig()
+          const proactiveApi = getProactiveApi()
+          if (!proactiveApi) return
+          const response = await proactiveApi.getConfig()
           if (response.success && response.data) {
             set({ config: response.data as Record<string, unknown> }, false, 'proactive/fetchConfig')
           }
@@ -99,7 +105,9 @@ export const useProactiveStore = create<ProactiveStore>()(
 
       updateConfig: async (updates: Record<string, unknown>) => {
         try {
-          await window.electronAPI.proactive.updateConfig(updates)
+          const proactiveApi = getProactiveApi()
+          if (!proactiveApi) return
+          await proactiveApi.updateConfig(updates)
           set(
             (state) => ({
               config: state.config ? { ...state.config, ...updates } : updates,
@@ -137,7 +145,12 @@ export function initProactiveListener(): () => void {
     suggestionUnsubscribe = null
   }
 
-  suggestionUnsubscribe = window.electronAPI.proactive.onSuggestionShown(
+  const proactiveApi = getProactiveApi()
+  if (!proactiveApi?.onSuggestionShown) {
+    return () => {}
+  }
+
+  suggestionUnsubscribe = proactiveApi.onSuggestionShown(
     (suggestion) => {
       useProactiveStore.getState().pushSuggestion(suggestion as unknown as Suggestion)
     },

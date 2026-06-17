@@ -16,7 +16,12 @@ export function McpPermissionDialog() {
   })
 
   useEffect(() => {
-    const unsub = window.electronAPI.mcp.onPermissionPrompt((prompt) => {
+    const onPermissionPrompt = window.electronAPI?.mcp?.onPermissionPrompt
+    if (!onPermissionPrompt) {
+      return undefined
+    }
+
+    const unsub = onPermissionPrompt((prompt) => {
       setState({ visible: true, prompt })
     })
     return unsub
@@ -25,7 +30,7 @@ export function McpPermissionDialog() {
   const handleGrant = useCallback(
     async (level: MCPPermissionLevelShared) => {
       if (!state.prompt) return
-      await window.electronAPI.mcp.grantPermission(state.prompt.requestId, level)
+      await window.electronAPI?.mcp?.grantPermission(state.prompt.requestId, level)
       setState({ visible: false, prompt: null })
     },
     [state.prompt]
@@ -33,7 +38,7 @@ export function McpPermissionDialog() {
 
   const handleDeny = useCallback(async () => {
     if (!state.prompt) return
-    await window.electronAPI.mcp.grantPermission(state.prompt.requestId, 'deny')
+    await window.electronAPI?.mcp?.grantPermission(state.prompt.requestId, 'deny')
     setState({ visible: false, prompt: null })
   }, [state.prompt])
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
+  FilePenLine,
   Link2,
   MoreVertical,
   Send,
@@ -12,6 +13,7 @@ import { FileAutocomplete } from './FileAutocomplete'
 import { SkillAutocomplete } from './SkillAutocomplete'
 import { ExecutionTrace } from '../conversation/ExecutionTrace'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { DraftIntentWorkbench } from './DraftIntentWorkbench'
 import { AiModeSwitcher } from '../mode/AiModeSwitcher'
 import { OptimizeButton } from '../input/OptimizeButton'
 import { useModeStore } from '../../store/modeStore'
@@ -68,13 +70,33 @@ interface DiffReviewPanelProps {
   onSetActiveIndex: (index: number) => void
 }
 
+interface DraftWorkbenchSession {
+  messageId: string
+  content: string
+}
+
+function isLikelyEditableDraft(content: string): boolean {
+  const normalized = content.trim()
+  if (normalized.length < 120) return false
+  return (
+    /^#{1,6}\s+/m.test(normalized) ||
+    /^\s*[-*]\s+\S/m.test(normalized) ||
+    /^\s*\d+\.\s+\S/m.test(normalized) ||
+    /\|.+\|/.test(normalized) ||
+    /```/.test(normalized) ||
+    /<\/?(html|body|main|section|article|div|table|h[1-6]|p|ul|ol|li)\b/i.test(normalized)
+  )
+}
+
 export function StudioAIPanel(props: StudioAIPanelProps) {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const autoOpenedDraftMessageIdRef = useRef<string | null>(null)
   const [autocompleteVisible, setAutocompleteVisible] = useState(false)
   const [autocompleteQuery, setAutocompleteQuery] = useState('')
   const [skillAutocompleteVisible, setSkillAutocompleteVisible] = useState(false)
   const [skillAutocompleteQuery, setSkillAutocompleteQuery] = useState('')
+  const [draftWorkbenchSession, setDraftWorkbenchSession] = useState<DraftWorkbenchSession | null>(null)
   const getActiveMode = useModeStore(s => s.getActiveMode)
   const activeMode = getActiveMode()
   const conversationId = useModeStore(s => s.currentConversationId)
@@ -189,6 +211,21 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
     )
   }, [props, extractFileReferences, extractSkillRefs])
 
+  const openDraftWorkbench = useCallback((messageId: string, content: string) => {
+    autoOpenedDraftMessageIdRef.current = messageId
+    setDraftWorkbenchSession({ messageId, content })
+  }, [])
+
+  const handleSendDraftRevisionToAgent = useCallback((prompt: string) => {
+    props.onChatInputChange(prompt)
+    setDraftWorkbenchSession(null)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      const cursorPos = prompt.length
+      inputRef.current?.setSelectionRange(cursorPos, cursorPos)
+    })
+  }, [props])
+
   useEffect(() => {
     if (props.focusComposerSignal === undefined) {
       return
@@ -201,6 +238,21 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
     const cursorPos = textarea.value.length
     textarea.setSelectionRange(cursorPos, cursorPos)
   }, [props.focusComposerSignal])
+
+  useEffect(() => {
+    const latestAssistantDraft = [...props.messages]
+      .reverse()
+      .find((message) =>
+        message.role === 'assistant' &&
+        !message.streaming &&
+        isLikelyEditableDraft(message.content)
+      )
+
+    if (!latestAssistantDraft) return
+    if (autoOpenedDraftMessageIdRef.current === latestAssistantDraft.id) return
+
+    openDraftWorkbench(latestAssistantDraft.id, latestAssistantDraft.content)
+  }, [props.messages, openDraftWorkbench])
 
   return (
     <aside className="relative flex w-[320px] min-h-0 flex-col border-l border-sys-darkBorder bg-[#0A0A0A]">
@@ -307,6 +359,17 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
                       <DiffReviewPanel {...props.diffReviewProps} />
                     )}
                   </div>
+
+                  {!message.streaming && isLikelyEditableDraft(message.content) && (
+                    <button
+                      type="button"
+                      onClick={() => openDraftWorkbench(message.id, message.content)}
+                      className="inline-flex items-center gap-1.5 self-start rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-gray-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
+                    >
+                      <FilePenLine className="h-3.5 w-3.5" />
+                      可视化编辑
+                    </button>
+                  )}
 
                   {!message.streaming && message.contextSources && message.contextSources.length > 0 && (
                     <div className="flex flex-wrap gap-1">
@@ -457,6 +520,15 @@ export function StudioAIPanel(props: StudioAIPanelProps) {
           <span className="font-mono text-[10px] text-gray-500">⌘ ↵ Send</span>
         </div>
       </div>
+
+      {draftWorkbenchSession && (
+        <DraftIntentWorkbench
+          key={draftWorkbenchSession.messageId}
+          initialMarkdown={draftWorkbenchSession.content}
+          onClose={() => setDraftWorkbenchSession(null)}
+          onSendToAgent={handleSendDraftRevisionToAgent}
+        />
+      )}
     </aside>
   )
 }
